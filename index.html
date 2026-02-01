@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Traffic Gravity Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
+        body { font-family: 'JetBrains+Mono', monospace; }
+        .glitch-low { text-shadow: 2px 0 10px rgba(16, 185, 129, 0.3); }
+    </style>
+</head>
+<body class="bg-[#050505] text-emerald-400 transition-colors duration-700">
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useMemo, useRef } from 'https://esm.sh/react@18.2.0';
+        import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client';
+
+        function App() {
+            const [isActive, setIsActive] = useState(false);
+            const [time, setTime] = useState(0);
+            const [logs, setLogs] = useState([]);
+            const [location, setLocation] = useState(null);
+            const [isDayMode, setIsDayMode] = useState(false);
+            
+            const wakeLockRef = useRef(null);
+            const watchId = useRef(null);
+            const timerRef = useRef(null);
+
+            // Persistence
+            useEffect(() => {
+                const saved = localStorage.getItem('tg-super-v1');
+                if (saved) setLogs(JSON.parse(saved));
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('tg-super-v1', JSON.stringify(logs));
+            }, [logs]);
+
+            // Stats Logic
+            const stats = useMemo(() => {
+                const totalSecs = logs.reduce((acc, curr) => acc + parseFloat(curr.duration), 0);
+                const fuel = (totalSecs / 3600) * 0.6; 
+                return {
+                    totalMins: (totalSecs / 60).toFixed(1),
+                    fuel: fuel.toFixed(3),
+                    history: logs.slice(0, 5)
+                };
+            }, [logs]);
+
+            const stopTimer = () => {
+                if (!isActive) return;
+                setIsActive(false);
+                clearInterval(timerRef.current);
+                
+                const entry = {
+                    id: Date.now(),
+                    duration: (time / 1000).toFixed(2),
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    coords: location ? `${location.lat.toFixed(3)}, ${location.lng.toFixed(3)}` : "City"
+                };
+                
+                setLogs(prev => [entry, ...prev]);
+                setTime(0);
+
+                if (wakeLockRef.current) wakeLockRef.current.release();
+                if (watchId.current) navigator.geolocation.clearWatch(watchId.current);
+                if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            };
+
+            const startTimer = async () => {
+                setIsActive(true);
+                timerRef.current = setInterval(() => setTime(t => t + 10), 10);
+
+                if ('wakeLock' in navigator) {
+                    try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } catch (e) {}
+                }
+
+                if ("geolocation" in navigator) {
+                    watchId.current = navigator.geolocation.watchPosition((p) => {
+                        setLocation({ lat: p.coords.latitude, lng: p.coords.longitude });
+                        if (p.coords.speed > 3) stopTimer(); 
+                    }, null, { enableHighAccuracy: true });
+                }
+            };
+
+            const clearLogs = () => {
+                if(confirm("Wipe all gravity data?")) setLogs([]);
+            };
+
+            return (
+                <div className={`min-h-screen p-8 flex flex-col ${isDayMode ? 'bg-zinc-100 text-zinc-900' : 'bg-[#050505] text-emerald-400'}`}>
+                    <div className="flex justify-between items-start mb-12">
+                        <div onClick={() => setIsDayMode(!isDayMode)} className="cursor-pointer">
+                            <p className="text-[10px] uppercase tracking-widest opacity-40">Mode</p>
+                            <p className="text-xs font-bold">{isDayMode ? 'DAY_SHIFT' : 'NIGHT_SHIFT'}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-[10px] uppercase tracking-widest opacity-40">Fuel Idle</p>
+                            <p className="text-xl font-bold">{stats.fuel}L</p>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col items-center justify-center">
+                        <div className="text-[18vw] font-black tracking-tighter mb-8 tabular-nums glitch-low">
+                            {(time / 1000).toFixed(1)}
+                        </div>
+                        
+                        <button 
+                            onClick={isActive ? stopTimer : startTimer}
+                            className={`w-64 h-64 rounded-full border-2 transition-all duration-500 flex flex-col items-center justify-center
+                                ${isActive ? 'border-red-500 text-red-500 shadow-[0_0_50px_rgba(239,68,68,0.2)]' : 'border-emerald-500'}`}
+                        >
+                            <span className="text-2xl font-black">{isActive ? 'IDLING' : 'ENGAGE'}</span>
+                            <span className="text-[9px] tracking-widest opacity-50 mt-2">{isActive ? 'GPS_WATCH_ACTIVE' : 'READY_TO_LOCK'}</span>
+                        </button>
+                    </div>
+
+                    <div className="mt-12">
+                        <div className="flex justify-between items-center mb-4">
+                            <p className="text-[10px] uppercase tracking-widest opacity-30 italic">Recent Impact</p>
+                            <button onClick={clearLogs} className="text-[10px] opacity-30 hover:opacity-100 text-red-500">RESET</button>
+                        </div>
+                        <div className="space-y-3">
+                            {stats.history.map(log => (
+                                <div key={log.id} className="flex justify-between text-xs border-b border-current border-opacity-5 pb-2">
+                                    <span className="opacity-60">{log.timestamp} • {log.coords}</span>
+                                    <span className="font-bold">{log.duration}s</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
