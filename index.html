@@ -42,13 +42,24 @@
     <script>
         let isArmed = false;
         let isIdling = false;
-        let startTime, timerInterval;
+        let startTime, timerInterval, wakeLock = null;
         let sessionFuel = 0;
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
         const ignitionBtn = document.getElementById('ignition-btn');
         const timerDisplay = document.getElementById('timer-display');
         const statusText = document.getElementById('status-text');
+
+        // NEW: Wake Lock Function
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) {
+                console.log("Wake Lock failed: ", err.message);
+            }
+        }
 
         function playSound(freq1, freq2) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -61,15 +72,17 @@
             osc.start(); osc.stop(audioCtx.currentTime + 0.1);
         }
 
-        ignitionBtn.addEventListener('click', () => {
+        ignitionBtn.addEventListener('click', async () => {
             isArmed = !isArmed;
             if (isArmed) {
+                await requestWakeLock(); // Lock screen on
                 ignitionBtn.innerText = "SYSTEM ARMED";
                 ignitionBtn.classList.add('armed-border', 'text-emerald-500');
                 timerDisplay.classList.remove('opacity-20');
                 statusText.innerText = "ACTIVE_SCANNING";
                 playSound(440, 880);
             } else {
+                if (wakeLock) { wakeLock.release(); wakeLock = null; } // Allow sleep
                 if (isIdling) stopIdle();
                 ignitionBtn.innerText = "ARM SYSTEM";
                 ignitionBtn.classList.remove('armed-border', 'text-emerald-500');
