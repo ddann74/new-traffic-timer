@@ -5,10 +5,11 @@
     {
       "src": "https://cdn-icons-png.flaticon.com/512/714/714041.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
-  "start_url": "./index.html",
+  "start_url": ".",
   "display": "standalone",
   "theme_color": "#050505",
   "background_color": "#050505"
