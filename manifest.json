@@ -1,0 +1,15 @@
+{
+  "short_name": "Gravity",
+  "name": "Traffic Gravity Pro",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/714/714041.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "./index.html",
+  "display": "standalone",
+  "theme_color": "#050505",
+  "background_color": "#050505"
+}
