@@ -3,10 +3,10 @@
   "name": "Traffic Gravity Pro",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/714/714041.png",
+      "src": "icon.png",
       "type": "image/png",
-      "sizes": "512x512",
-      "purpose": "any maskable"
+      "sizes": "1024x1024",
+      "purpose": "any"
     }
   ],
   "start_url": ".",
