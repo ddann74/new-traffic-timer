@@ -3,118 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gravity Auto-Pilot + Audio</title>
+    <title>Gravity: Mission Report</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="manifest" href="manifest.json">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: #10b981; transition: background-color 0.5s; }
+        body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: #10b981; transition: all 0.5s; }
         .emerald-glow { text-shadow: 0 0 30px rgba(16, 185, 129, 0.5); }
-        .red-glow { text-shadow: 0 0 30px rgba(239, 68, 68, 0.5); }
-        .pulse { animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+        .report-card { background: rgba(20, 20, 20, 0.95); backdrop-filter: blur(10px); }
     </style>
 </head>
 <body class="min-h-screen p-8 flex flex-col justify-between overflow-hidden">
 
     <div class="flex justify-between items-start">
         <div class="flex flex-col">
-            <p class="text-[10px] uppercase tracking-[0.3em] opacity-40">Auto-Pilot</p>
-            <div class="flex items-center gap-2">
-                <div id="status-dot" class="w-2 h-2 rounded-full bg-emerald-500 pulse"></div>
-                <p id="status-text" class="text-xs font-bold uppercase tracking-tighter">Scanning_Motion</p>
-            </div>
+            <p class="text-[10px] uppercase tracking-[0.3em] opacity-40">Active Session</p>
+            <p id="status-text" class="text-xs font-bold uppercase tracking-tighter">WAITING_FOR_DRIVE</p>
         </div>
         <div class="text-right">
-            <p class="text-[10px] uppercase tracking-[0.3em] opacity-40">Fuel Lost</p>
-            <p id="fuel-display" class="text-xl font-bold italic">0.000L</p>
+            <p class="text-[10px] uppercase tracking-[0.3em] opacity-40">Today's Loss</p>
+            <p id="daily-total" class="text-xl font-bold italic text-emerald-400">0.00L</p>
         </div>
     </div>
 
     <div class="flex-1 flex flex-col items-center justify-center">
-        <p id="speed-indicator" class="text-[10px] uppercase tracking-[0.5em] mb-4 opacity-30">Speed: 0.0 m/s</p>
         <div id="timer-display" class="text-[28vw] font-black tracking-tighter tabular-nums emerald-glow transition-all">
             0.0
         </div>
+        <p id="speed-indicator" class="text-[10px] uppercase tracking-[0.5em] opacity-30 mt-4">SPD: 0.0 m/s</p>
     </div>
 
-    <div class="border-t border-white/10 pt-6">
-        <p class="text-[10px] uppercase tracking-widest opacity-30 mb-4">Live Session Logs</p>
-        <div id="log-container" class="space-y-2 h-24 overflow-y-auto pr-2 font-bold italic"></div>
+    <div id="report-overlay" class="hidden fixed inset-0 z-50 flex items-center justify-center p-6 report-card">
+        <div class="w-full max-w-sm border border-emerald-500/30 p-8 rounded-2xl">
+            <p class="text-[10px] uppercase tracking-[0.4em] text-emerald-500 mb-6">Commute Summary</p>
+            <div class="space-y-6 mb-8">
+                <div><p class="text-[10px] opacity-40 uppercase">Total Idling</p><p id="summary-time" class="text-3xl font-bold">0m 0s</p></div>
+                <div><p class="text-[10px] opacity-40 uppercase">Fuel Wasted</p><p id="summary-fuel" class="text-3xl font-bold">0.000L</p></div>
+                <div><p class="text-[10px] opacity-40 uppercase">Total Stops</p><p id="summary-stops" class="text-3xl font-bold">0</p></div>
+            </div>
+            <button onclick="closeReport()" class="w-full py-4 border border-emerald-500 text-emerald-500 font-bold uppercase tracking-widest hover:bg-emerald-500 hover:text-black transition-all">Dismiss</button>
+        </div>
     </div>
 
     <script>
-        let isIdling = false;
-        let startTime, timerInterval, totalFuel = 0;
+        let isIdling = false, startTime, timerInterval;
+        let sessionStops = 0, sessionTime = 0, sessionFuel = 0;
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-        // High-tech sound synthesizer
         function playSound(type) {
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            
-            if (type === 'start') {
-                osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.1);
-            } else {
-                osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
-            }
-            
-            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.1);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.frequency.setValueAtTime(type === 'start' ? 880 : 440, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(type === 'start' ? 440 : 880, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.1);
         }
 
         function startIdle() {
             if (isIdling) return;
-            isIdling = true;
-            startTime = Date.now();
+            isIdling = true; startTime = Date.now();
             playSound('start');
             document.body.style.backgroundColor = "#1a0505";
-            document.getElementById('timer-display').className = "text-[28vw] font-black tracking-tighter tabular-nums red-glow text-red-500";
-            
             timerInterval = setInterval(() => {
-                document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
+                const diff = (Date.now() - startTime) / 1000;
+                document.getElementById('timer-display').innerText = diff.toFixed(1);
             }, 100);
         }
 
         function stopIdle() {
             if (!isIdling) return;
-            isIdling = false;
-            clearInterval(timerInterval);
+            isIdling = false; clearInterval(timerInterval);
             playSound('stop');
-            
-            const dur = document.getElementById('timer-display').innerText;
-            if (parseFloat(dur) > 1.5) saveLog(dur);
-
+            const dur = parseFloat(document.getElementById('timer-display').innerText);
+            if (dur > 2) {
+                sessionStops++;
+                sessionTime += dur;
+                sessionFuel += (dur / 3600) * 0.6;
+                updateDaily(sessionFuel);
+            }
             document.body.style.backgroundColor = "#050505";
-            document.getElementById('timer-display').className = "text-[28vw] font-black tracking-tighter tabular-nums emerald-glow text-emerald-400";
             document.getElementById('timer-display').innerText = "0.0";
         }
 
-        function saveLog(dur) {
-            totalFuel += (parseFloat(dur) / 3600) * 0.6;
-            document.getElementById('fuel-display').innerText = totalFuel.toFixed(3) + 'L';
-            const div = document.createElement('div');
-            div.className = "flex justify-between text-[11px] text-emerald-500/80 border-b border-white/5 pb-1";
-            div.innerHTML = `<span>${new Date().toLocaleTimeString()}</span><span>+${dur}s</span>`;
-            document.getElementById('log-container').prepend(div);
+        function updateDaily(fuel) {
+            let daily = parseFloat(localStorage.getItem('tg_daily') || 0);
+            daily += fuel;
+            localStorage.setItem('tg_daily', daily);
+            document.getElementById('daily-total').innerText = daily.toFixed(2) + 'L';
+        }
+
+        function showReport() {
+            if (sessionStops === 0) return;
+            document.getElementById('summary-time').innerText = `${Math.floor(sessionTime / 60)}m ${Math.round(sessionTime % 60)}s`;
+            document.getElementById('summary-fuel').innerText = sessionFuel.toFixed(3) + 'L';
+            document.getElementById('summary-stops').innerText = sessionStops;
+            document.getElementById('report-overlay').classList.remove('hidden');
+        }
+
+        function closeReport() {
+            document.getElementById('report-overlay').classList.add('hidden');
+            sessionStops = 0; sessionTime = 0; sessionFuel = 0;
+        }
+
+        function handleMotion(p) {
+            const speed = p.coords.speed || 0;
+            document.getElementById('speed-indicator').innerText = `SPD: ${speed.toFixed(1)} m/s`;
+            if (speed <= 0.2) startIdle();
+            else if (speed > 1.5) stopIdle();
         }
 
         window.onload = () => {
-            navigator.geolocation.watchPosition((p) => {
-                const speed = p.coords.speed || 0;
-                document.getElementById('speed-indicator').innerText = `Speed: ${speed.toFixed(1)} m/s`;
-                if (speed <= 0.3) startIdle(); 
-                else if (speed > 1.2) stopIdle();
-            }, null, { enableHighAccuracy: true });
+            document.getElementById('daily-total').innerText = parseFloat(localStorage.getItem('tg_daily') || 0).toFixed(2) + 'L';
+            navigator.geolocation.watchPosition(handleMotion, null, { enableHighAccuracy: true });
         };
 
-        // Initialize Audio on first touch
+        // Long-press Timer to manually trigger Report
+        document.getElementById('timer-display').addEventListener('click', showReport);
         document.body.addEventListener('click', () => { if (audioCtx.state === 'suspended') audioCtx.resume(); }, { once: true });
     </script>
 </body>
