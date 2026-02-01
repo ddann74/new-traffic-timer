@@ -3,121 +3,128 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Traffic Gravity Pro</title>
+    <title>Gravity Auto-Pilot</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="manifest" href="manifest.json">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
         body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: #10b981; }
-        .emerald-glow { text-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
+        .emerald-glow { text-shadow: 0 0 30px rgba(16, 185, 129, 0.5); }
+        .pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
     </style>
 </head>
-<body class="min-h-screen p-8 flex flex-col overflow-hidden">
+<body class="min-h-screen p-8 flex flex-col justify-between overflow-hidden">
 
-    <div class="flex justify-between items-start mb-12">
-        <div>
-            <p class="text-[10px] uppercase tracking-widest opacity-40">System</p>
-            <p id="status-text" class="text-xs font-bold text-emerald-500">READY_</p>
+    <div class="flex justify-between items-start">
+        <div class="flex flex-col">
+            <p class="text-[10px] uppercase tracking-[0.3em] opacity-40">System State</p>
+            <div class="flex items-center gap-2">
+                <div id="status-dot" class="w-2 h-2 rounded-full bg-emerald-500 pulse"></div>
+                <p id="status-text" class="text-xs font-bold uppercase">Scanning_Movement</p>
+            </div>
         </div>
         <div class="text-right">
-            <p class="text-[10px] uppercase tracking-widest opacity-40">Fuel Lost</p>
+            <p class="text-[10px] uppercase tracking-[0.3em] opacity-40">Session Fuel</p>
             <p id="fuel-display" class="text-xl font-bold">0.000L</p>
         </div>
     </div>
 
     <div class="flex-1 flex flex-col items-center justify-center">
-        <div id="timer-display" class="text-[20vw] font-black tracking-tighter mb-8 tabular-nums emerald-glow">
+        <p id="speed-indicator" class="text-[10px] uppercase tracking-[0.5em] mb-4 opacity-30">Speed: 0.0 m/s</p>
+        <div id="timer-display" class="text-[25vw] font-black tracking-tighter tabular-nums emerald-glow transition-all duration-500">
             0.0
         </div>
-        
-        <button id="main-btn" class="w-64 h-64 rounded-full border-2 border-emerald-500 transition-all duration-300 flex flex-col items-center justify-center active:scale-95 bg-emerald-500/5">
-            <span id="btn-text" class="text-2xl font-black">ENGAGE</span>
-            <span class="text-[9px] tracking-widest opacity-50 mt-2">SENSORS_READY</span>
-        </button>
+        <p id="instruction" class="mt-8 text-[10px] uppercase tracking-widest opacity-20 text-center">
+            Fully Automated. <br/> Timer triggers on complete stop.
+        </p>
     </div>
 
-    <div class="mt-8">
-        <p class="text-[10px] uppercase tracking-widest opacity-30 mb-4 italic">Recent Logs</p>
-        <div id="log-container" class="space-y-3">
-            </div>
+    <div class="border-t border-white/10 pt-6">
+        <div class="flex justify-between items-center mb-4">
+            <p class="text-[10px] uppercase tracking-widest opacity-30">Recent Idles</p>
+            <button onclick="if(confirm('Clear data?')) {localStorage.clear(); location.reload();}" class="text-[10px] text-red-900 font-bold uppercase tracking-tighter">Wipe_History</button>
+        </div>
+        <div id="log-container" class="space-y-2 h-24 overflow-y-auto pr-2"></div>
     </div>
 
     <script>
-        // --- Variables ---
-        let isActive = false;
+        let isIdling = false;
         let startTime;
         let timerInterval;
-        let watchId;
         let totalFuel = 0;
 
         const timerDisplay = document.getElementById('timer-display');
-        const mainBtn = document.getElementById('main-btn');
-        const btnText = document.getElementById('btn-text');
-        const fuelDisplay = document.getElementById('fuel-display');
-        const logContainer = document.getElementById('log-container');
         const statusText = document.getElementById('status-text');
+        const statusDot = document.getElementById('status-dot');
+        const speedIndicator = document.getElementById('speed-indicator');
+        const logContainer = document.getElementById('log-container');
 
-        // --- Core Functions ---
-        function updateTimer() {
-            const now = Date.now();
-            const diff = (now - startTime) / 1000;
-            timerDisplay.innerText = diff.toFixed(1);
+        function startIdle() {
+            if (isIdling) return;
+            isIdling = true;
+            startTime = Date.now();
+            timerInterval = setInterval(() => {
+                const diff = (Date.now() - startTime) / 1000;
+                timerDisplay.innerText = diff.toFixed(1);
+            }, 100);
+
+            statusText.innerText = "Stopped_Idling";
+            statusText.classList.add('text-red-500');
+            statusDot.classList.replace('bg-emerald-500', 'bg-red-500');
+            timerDisplay.classList.replace('text-emerald-400', 'text-red-500');
         }
 
-        function stopTimer() {
-            isActive = false;
+        function stopIdle() {
+            if (!isIdling) return;
+            isIdling = false;
             clearInterval(timerInterval);
-            navigator.geolocation.clearWatch(watchId);
             
             const duration = timerDisplay.innerText;
+            if (parseFloat(duration) > 2) { // Ignore micro-stops under 2s
+                saveLog(duration);
+            }
+
+            timerDisplay.innerText = "0.0";
+            statusText.innerText = "Scanning_Movement";
+            statusText.classList.remove('text-red-500');
+            statusDot.classList.replace('bg-red-500', 'bg-emerald-500');
+            timerDisplay.classList.replace('text-red-500', 'text-emerald-400');
+        }
+
+        function saveLog(duration) {
             const fuel = (parseFloat(duration) / 3600) * 0.6;
             totalFuel += fuel;
-            
-            // UI Reset
-            fuelDisplay.innerText = totalFuel.toFixed(3) + 'L';
-            mainBtn.classList.replace('border-red-500', 'border-emerald-500');
-            mainBtn.classList.remove('bg-red-500/10');
-            btnText.innerText = 'ENGAGE';
-            btnText.classList.remove('text-red-500');
-            statusText.innerText = 'SAVED_';
-            statusText.classList.replace('text-red-500', 'text-emerald-500');
+            document.getElementById('fuel-display').innerText = totalFuel.toFixed(3) + 'L';
 
-            addLog(duration);
-            timerDisplay.innerText = '0.0';
-        }
-
-        function startTimer() {
-            isActive = true;
-            startTime = Date.now();
-            timerInterval = setInterval(updateTimer, 100);
-
-            // UI Active State
-            mainBtn.classList.replace('border-emerald-500', 'border-red-500');
-            mainBtn.classList.add('bg-red-500/10');
-            btnText.innerText = 'IDLING';
-            btnText.classList.add('text-red-500');
-            statusText.innerText = 'WATCHING_';
-            statusText.classList.replace('text-emerald-500', 'text-red-500');
-
-            // GPS Auto-Stop
-            if ("geolocation" in navigator) {
-                watchId = navigator.geolocation.watchPosition((p) => {
-                    if (p.coords.speed > 3) stopTimer(); 
-                }, null, { enableHighAccuracy: true });
-            }
-        }
-
-        function addLog(duration) {
             const div = document.createElement('div');
-            div.className = "flex justify-between text-xs border-b border-white/5 pb-2 animate-pulse";
+            div.className = "flex justify-between text-[11px] opacity-60 border-b border-white/5 pb-1";
             div.innerHTML = `<span>${new Date().toLocaleTimeString()}</span><span class="font-bold">${duration}s</span>`;
             logContainer.prepend(div);
         }
 
-        mainBtn.addEventListener('click', () => {
-            if (isActive) stopTimer();
-            else startTimer();
-        });
+        function handleMotion(position) {
+            const speed = position.coords.speed || 0; // Speed in m/s
+            speedIndicator.innerText = `Speed: ${speed.toFixed(1)} m/s`;
+
+            if (speed <= 0.2) { // Threshold for stopping
+                startIdle();
+            } else if (speed > 1.5) { // Threshold for moving
+                stopIdle();
+            }
+        }
+
+        window.onload = () => {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.watchPosition(handleMotion, null, { 
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 5000 
+                });
+            } else {
+                alert("GPS Sensors Required for Auto-Pilot");
+            }
+        };
     </script>
 </body>
 </html>
