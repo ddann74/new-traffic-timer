@@ -3,128 +3,209 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gravity: Mission Armed</title>
+    <title>Gravity Intelligence</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: #10b981; transition: all 0.5s; }
-        .emerald-glow { text-shadow: 0 0 30px rgba(16, 185, 129, 0.5); }
-        .red-glow { text-shadow: 0 0 30px rgba(239, 68, 68, 0.5); }
-        .armed-border { border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.2); }
+        body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: #10b981; overflow: hidden; }
+        .page { display: none; height: 100vh; width: 100vw; position: absolute; padding: 20px; }
+        .active-page { display: flex; flex-direction: column; }
+        .emerald-glow { text-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
+        #map { height: 250px; border-radius: 12px; filter: invert(100%) hue-rotate(180deg) brightness(95%); }
+        .btn-nav { border: 1px solid #10b981; padding: 10px; text-align: center; font-size: 10px; cursor: pointer; }
     </style>
 </head>
-<body class="min-h-screen p-8 flex flex-col justify-between overflow-hidden">
+<body>
 
-    <div class="flex justify-between items-start">
-        <div class="flex flex-col">
-            <p class="text-[10px] uppercase tracking-[0.3em] opacity-40">System State</p>
-            <p id="status-text" class="text-xs font-bold uppercase tracking-tighter">Standby_</p>
+    <div id="page-dash" class="page active-page">
+        <div class="flex justify-between items-start mb-4">
+            <button onclick="showPage('page-menu')" class="text-xs border border-emerald-500/30 px-3 py-1">MENU</button>
+            <div class="text-right">
+                <p id="prediction-msg" class="text-[10px] text-orange-500 animate-pulse"></p>
+                <p id="status-text" class="text-xs font-bold uppercase tracking-widest">Scanning_</p>
+            </div>
         </div>
-        <div class="text-right">
-            <p class="text-[10px] uppercase tracking-[0.3em] opacity-40">Total Session Loss</p>
-            <p id="daily-total" class="text-xl font-bold italic text-emerald-400">0.00L</p>
+
+        <div class="flex-1 flex flex-col items-center justify-center">
+            <div id="timer-display" class="text-[25vw] font-black tracking-tighter emerald-glow transition-colors duration-700">0.0</div>
+            <button id="ignition-btn" class="mt-4 px-10 py-3 border-2 border-emerald-500 rounded-full font-bold text-xs tracking-widest uppercase">Arm System</button>
+            <p id="speed-display" class="text-[10px] opacity-40 mt-4 uppercase tracking-[0.3em]">Spd: 0.0 m/s</p>
         </div>
     </div>
 
-    <div class="flex-1 flex flex-col items-center justify-center">
-        <div id="timer-display" class="text-[28vw] font-black tracking-tighter tabular-nums emerald-glow opacity-20 transition-all">
-            0.0
+    <div id="page-menu" class="page">
+        <div class="flex justify-between mb-8">
+            <h1 class="text-xl font-black italic">DATABASE_NAV</h1>
+            <button onclick="showPage('page-dash')" class="text-xs">BACK</button>
         </div>
-        
-        <button id="ignition-btn" class="mt-8 px-8 py-4 border-2 border-emerald-500/30 rounded-full font-black text-sm tracking-[0.3em] hover:bg-emerald-500/10 transition-all">
-            ARM SYSTEM
-        </button>
-        
-        <p id="speed-indicator" class="text-[10px] uppercase tracking-[0.5em] opacity-30 mt-6">SPD: 0.0 m/s</p>
+        <div class="grid grid-cols-2 gap-4 mb-8">
+            <div onclick="showPage('page-stats')" class="btn-nav py-6">STATISTICS</div>
+            <div onclick="showPage('page-map')" class="btn-nav py-6">LOCATION MAP</div>
+            <div onclick="exportData()" class="btn-nav py-6">EXPORT CSV</div>
+            <div onclick="shareApp()" class="btn-nav py-6">SHARE</div>
+        </div>
+        <div class="mt-4">
+            <p class="text-[10px] opacity-30 mb-2 uppercase">Last 24h Log</p>
+            <div id="mini-log" class="text-[10px] space-y-1 h-48 overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <div id="page-stats" class="page overflow-y-auto">
+        <button onclick="showPage('page-menu')" class="text-xs mb-4">BACK</button>
+        <h2 class="text-sm font-bold border-b border-emerald-500/20 pb-2 mb-4">TIME-BASED METRICS</h2>
+        <div class="space-y-4 mb-8">
+            <div class="flex justify-between"><span>Today</span><span id="stat-day">0s</span></div>
+            <div class="flex justify-between"><span>This Week</span><span id="stat-week">0s</span></div>
+            <div class="flex justify-between"><span>This Month</span><span id="stat-month">0s</span></div>
+        </div>
+        <h2 class="text-sm font-bold border-b border-emerald-500/20 pb-2 mb-4">TOP 5 HOTSPOTS</h2>
+        <div id="top-locations" class="text-[10px] space-y-2"></div>
+    </div>
+
+    <div id="page-map" class="page">
+        <button onclick="showPage('page-menu')" class="text-xs mb-4">BACK</button>
+        <div id="map"></div>
     </div>
 
     <script>
-        let isArmed = false;
-        let isIdling = false;
-        let startTime, timerInterval, wakeLock = null;
-        let sessionFuel = 0;
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let db = JSON.parse(localStorage.getItem('gravity_db') || '[]');
+        let isArmed = false, isIdling = false, startTime, timerInterval, currentPos = null;
+        let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-        const ignitionBtn = document.getElementById('ignition-btn');
-        const timerDisplay = document.getElementById('timer-display');
-        const statusText = document.getElementById('status-text');
-
-        // NEW: Wake Lock Function
-        async function requestWakeLock() {
-            try {
-                if ('wakeLock' in navigator) {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                }
-            } catch (err) {
-                console.log("Wake Lock failed: ", err.message);
-            }
+        // UI NAVIGATION
+        function showPage(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+            document.getElementById(id).classList.add('active-page');
+            if(id === 'page-map') renderMap();
+            if(id === 'page-stats') renderStats();
+            if(id === 'page-menu') renderMiniLog();
         }
 
-        function playSound(freq1, freq2) {
+        // AUDIO ENGINE
+        function playTone(freq, dur) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.frequency.setValueAtTime(freq1, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(freq2, audioCtx.currentTime + 0.1);
+            osc.frequency.value = freq;
             gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-            osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            osc.start(); osc.stop(audioCtx.currentTime + dur);
         }
 
-        ignitionBtn.addEventListener('click', async () => {
-            isArmed = !isArmed;
-            if (isArmed) {
-                await requestWakeLock(); // Lock screen on
-                ignitionBtn.innerText = "SYSTEM ARMED";
-                ignitionBtn.classList.add('armed-border', 'text-emerald-500');
-                timerDisplay.classList.remove('opacity-20');
-                statusText.innerText = "ACTIVE_SCANNING";
-                playSound(440, 880);
-            } else {
-                if (wakeLock) { wakeLock.release(); wakeLock = null; } // Allow sleep
-                if (isIdling) stopIdle();
-                ignitionBtn.innerText = "ARM SYSTEM";
-                ignitionBtn.classList.remove('armed-border', 'text-emerald-500');
-                timerDisplay.classList.add('opacity-20');
-                statusText.innerText = "STANDBY_";
-                playSound(880, 440);
-            }
-        });
+        // LOGIC: GEOFENCING & PREDICTION
+        function findNearbyLogs(lat, lng, radiusM) {
+            return db.filter(log => {
+                const dist = Math.sqrt(Math.pow(log.lat - lat, 2) + Math.pow(log.lng - lng, 2)) * 111320;
+                return dist < radiusM;
+            });
+        }
 
+        function getPrediction(lat, lng) {
+            const nearby = findNearbyLogs(lat, lng, 100);
+            const hour = new Date().getHours();
+            const similarTime = nearby.filter(l => Math.abs(new Date(l.ts).getHours() - hour) <= 1);
+            if (similarTime.length >= 3) {
+                const avg = similarTime.reduce((a, b) => a + b.dur, 0) / similarTime.length;
+                return avg;
+            }
+            return null;
+        }
+
+        // MAIN FUNCTIONS
         function startIdle() {
             if (isIdling || !isArmed) return;
             isIdling = true; startTime = Date.now();
-            playSound(880, 440);
-            document.body.style.backgroundColor = "#1a0505";
-            timerDisplay.className = "text-[28vw] font-black tracking-tighter tabular-nums red-glow text-red-500";
+            playTone(880, 0.1);
+            const pred = getPrediction(currentPos.lat, currentPos.lng);
+            if(pred) document.getElementById('prediction-msg').innerText = `PREDICTED: ${pred.toFixed(0)}s`;
+            
             timerInterval = setInterval(() => {
-                timerDisplay.innerText = ((Date.now() - startTime) / 1000).toFixed(1);
+                const dur = (Date.now() - startTime) / 1000;
+                document.getElementById('timer-display').innerText = dur.toFixed(1);
+                
+                // Color Shift Logic
+                if(pred) {
+                    if(dur > pred * 1.2) document.getElementById('timer-display').className = "text-[25vw] font-black tracking-tighter text-red-600";
+                    else if(dur > pred * 0.8) document.getElementById('timer-display').className = "text-[25vw] font-black tracking-tighter text-orange-500";
+                }
             }, 100);
         }
 
         function stopIdle() {
             if (!isIdling) return;
             isIdling = false; clearInterval(timerInterval);
-            playSound(440, 880);
-            const dur = parseFloat(timerDisplay.innerText);
+            const dur = parseFloat(document.getElementById('timer-display').innerText);
             if (dur > 2) {
-                sessionFuel += (dur / 3600) * 0.6;
-                document.getElementById('daily-total').innerText = sessionFuel.toFixed(3) + 'L';
+                db.push({ ts: Date.now(), dur, lat: currentPos.lat, lng: currentPos.lng });
+                localStorage.setItem('gravity_db', JSON.stringify(db));
+                playTone(440, 0.1);
             }
-            document.body.style.backgroundColor = "#050505";
-            timerDisplay.className = "text-[28vw] font-black tracking-tighter tabular-nums emerald-glow text-emerald-400";
-            timerDisplay.innerText = "0.0";
+            document.getElementById('timer-display').innerText = "0.0";
+            document.getElementById('timer-display').className = "text-[25vw] font-black tracking-tighter emerald-glow";
+            document.getElementById('prediction-msg').innerText = "";
         }
 
-        navigator.geolocation.watchPosition((p) => {
-            const speed = p.coords.speed || 0;
-            document.getElementById('speed-indicator').innerText = `SPD: ${speed.toFixed(1)} m/s`;
+        // STATS & MAP RENDERING
+        function renderStats() {
+            const now = Date.now();
+            const day = db.filter(l => now - l.ts < 86400000).reduce((a,b) => a+b.dur, 0);
+            const week = db.filter(l => now - l.ts < 604800000).reduce((a,b) => a+b.dur, 0);
+            document.getElementById('stat-day').innerText = day.toFixed(0) + 's';
+            document.getElementById('stat-week').innerText = (week/60).toFixed(1) + 'm';
+
+            // Top 5 locations (Simplified by rounding coords)
+            const clusters = {};
+            db.forEach(l => {
+                const key = l.lat.toFixed(3) + ',' + l.lng.toFixed(3);
+                clusters[key] = (clusters[key] || 0) + 1;
+            });
+            const top = Object.entries(clusters).sort((a,b) => b[1]-a[1]).slice(0,5);
+            document.getElementById('top-locations').innerHTML = top.map(t => `<div>LOC: ${t[0]} - ${t[1]} STOPS</div>`).join('');
+        }
+
+        function renderMap() {
+            const map = L.map('map').setView([currentPos.lat, currentPos.lng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            db.forEach(l => L.circle([l.lat, l.lng], {radius: 50, color: '#10b981'}).addTo(map));
+        }
+
+        function renderMiniLog() {
+            const last24 = db.filter(l => Date.now() - l.ts < 86400000).reverse();
+            document.getElementById('mini-log').innerHTML = last24.map(l => 
+                `<div class="flex justify-between opacity-60"><span>${new Date(l.ts).toLocaleTimeString()}</span><span>${l.dur}s</span></div>`
+            ).join('');
+        }
+
+        function exportData() {
+            const blob = new Blob([JSON.stringify(db)], {type: 'text/csv'});
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'gravity_logs.csv';
+            a.click();
+        }
+
+        function shareApp() {
+            if (navigator.share) navigator.share({ title: 'Gravity App', url: window.location.href });
+        }
+
+        // IGNITION
+        document.getElementById('ignition-btn').addEventListener('click', () => {
+            isArmed = !isArmed;
+            document.getElementById('ignition-btn').innerText = isArmed ? "SYSTEM ARMED" : "ARM SYSTEM";
+            document.getElementById('ignition-btn').style.borderColor = isArmed ? "#10b981" : "#333";
+        });
+
+        navigator.geolocation.watchPosition(p => {
+            currentPos = { lat: p.coords.latitude, lng: p.coords.longitude };
+            const spd = p.coords.speed || 0;
+            document.getElementById('speed-display').innerText = `Spd: ${spd.toFixed(1)} m/s`;
             if (isArmed) {
-                if (speed <= 0.3) startIdle();
-                else if (speed > 1.2) stopIdle();
+                if (spd < 0.3) startIdle();
+                else if (spd > 1.5) stopIdle();
             }
-        }, null, { enableHighAccuracy: true });
+        }, null, {enableHighAccuracy: true});
     </script>
 </body>
 </html>
