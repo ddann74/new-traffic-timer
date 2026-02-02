@@ -37,9 +37,14 @@
             
             <button id="ignition-btn" class="mt-4 px-10 py-3 border-2 border-emerald-500 rounded-full font-bold text-xs tracking-widest uppercase">Arm System</button>
             
-            <button onclick="isIdling ? stopIdle() : startIdle()" class="mt-6 text-[10px] text-emerald-500/50 underline uppercase tracking-widest">
-                Simulate Stop/Start
-            </button>
+            <div class="mt-8 flex flex-col items-center gap-2">
+                <button onclick="isIdling ? stopIdle() : startIdle()" class="text-[10px] text-emerald-500/50 underline uppercase tracking-widest">
+                    Manual Stop/Start
+                </button>
+                <button onclick="toggleGhostDrive()" class="text-[10px] text-orange-500/50 underline uppercase tracking-widest">
+                    Toggle Ghost Drive
+                </button>
+            </div>
 
             <p id="speed-display" class="text-[10px] opacity-40 mt-6 uppercase tracking-[0.3em]">Spd: 0.0 m/s</p>
         </div>
@@ -60,7 +65,7 @@
             <div onclick="exportData()" class="btn-nav py-6">EXPORT CSV</div>
             <div onclick="shareApp()" class="btn-nav py-6">SHARE</div>
         </div>
-        <p class="text-[10px] opacity-30 mb-2 uppercase">24h History</p>
+        <p class="text-[10px] opacity-30 mb-2 uppercase">Recent History</p>
         <div id="mini-log" class="text-[10px] space-y-1 h-48 overflow-y-auto border border-emerald-500/10 p-2"></div>
     </div>
 
@@ -70,8 +75,6 @@
         <div class="space-y-4 mb-8">
             <div class="flex justify-between"><span>Today</span><span id="stat-day">0s</span></div>
         </div>
-        <h2 class="text-sm font-bold border-b border-emerald-500/20 pb-2 mb-4 uppercase">Top 5 Hotspots</h2>
-        <div id="top-locations" class="text-[10px] space-y-2 opacity-60"></div>
     </div>
 
     <div id="page-map" class="page bg-black">
@@ -183,8 +186,8 @@
         }
 
         function renderMiniLog() {
-            const last24 = db.slice(-10).reverse();
-            document.getElementById('mini-log').innerHTML = last24.map(l => `<div class="flex justify-between border-b border-white/5 pb-1"><span>${new Date(l.ts).toLocaleTimeString()}</span><span>${l.dur}s</span></div>`).join('');
+            const last10 = db.slice(-10).reverse();
+            document.getElementById('mini-log').innerHTML = last10.map(l => `<div class="flex justify-between border-b border-white/5 pb-1"><span>${new Date(l.ts).toLocaleTimeString()}</span><span>${l.dur}s</span></div>`).join('');
         }
 
         function exportData() { window.open("data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db))); }
@@ -202,6 +205,20 @@
         }, (err) => {
             document.getElementById('debug-coords').innerText = "GPS_ERROR: " + err.message;
         }, {enableHighAccuracy: true});
+
+        function toggleGhostDrive() {
+            let driving = false;
+            alert("Ghost Drive Initialized: Cycling speed every 10s. Keep 'Arm System' ON.");
+            setInterval(() => {
+                driving = !driving;
+                const mockSpeed = driving ? 12.5 : 0.0;
+                document.getElementById('speed-display').innerText = `Spd: ${mockSpeed.toFixed(1)} m/s (GHOST)`;
+                if (isArmed) {
+                    if (mockSpeed < 0.3) startIdle();
+                    else stopIdle();
+                }
+            }, 10000);
+        }
     </script>
 </body>
 </html>
