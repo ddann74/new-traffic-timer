@@ -3,78 +3,118 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gravity Intel Pro</title>
+    <title>Gravity Intelligence Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        :root { --accent: #00f2ff; }
+        :root { --accent: #00f2ff; --glow: rgba(0, 242, 255, 0.5); }
         body { font-family: 'JetBrains+Mono', monospace; background: #000; color: var(--accent); overflow: hidden; height: 100vh; margin: 0; }
-        .page { display: flex; flex-direction: column; height: 100vh; padding: 25px; box-sizing: border-box; background: radial-gradient(circle at center, #001a1a 0%, #000 100%); }
+        .page { display: none; flex-direction: column; height: 100vh; width: 100vw; position: absolute; padding: 25px; box-sizing: border-box; background: radial-gradient(circle at center, #001a1a 0%, #000 100%); }
+        .active-page { display: flex; z-index: 50; }
         .glow-text { text-shadow: 0 0 15px var(--accent); color: #fff; }
-        .btn-armed { background: var(--accent) !important; color: #000 !important; font-weight: 900; }
-        .debug-panel { font-size: 8px; color: #fff; opacity: 0.5; margin-top: 10px; border-top: 1px solid #333; padding-top: 10px; }
+        .glass-panel { background: rgba(0, 242, 255, 0.05); border: 1px solid rgba(0, 242, 255, 0.2); border-radius: 12px; }
+        #map { flex-grow: 1; border-radius: 15px; filter: invert(100%) hue-rotate(170deg) brightness(1.1); border: 1px solid var(--accent); }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--accent); }
     </style>
 </head>
 <body>
 
-    <div class="page">
+    <div id="page-dash" class="page active-page">
         <div class="flex justify-between items-start">
             <div>
-                <p class="text-[10px] font-black uppercase">Gravity_Intelligence</p>
-                <p id="build-time" class="text-[8px] opacity-60">Build: 02/04/2026 09:44 AM</p>
+                <button onclick="showPage('page-map')" class="border border-cyan-500/50 px-3 py-1 text-[10px] uppercase font-bold mr-2">Map</button>
+                <button onclick="showPage('page-history')" class="border border-cyan-500/50 px-3 py-1 text-[10px] uppercase font-bold">History</button>
+                <p id="build-time" class="text-[8px] opacity-60 mt-2 uppercase"></p>
             </div>
             <div class="text-right">
-                <p id="status-text" class="text-xs font-black uppercase tracking-widest">Standby_</p>
-                <p id="gps-status" class="text-[8px] text-red-500 font-bold uppercase">GPS: Offline</p>
+                <p id="status-text" class="text-xs font-black uppercase tracking-widest">Ready_</p>
+                <p id="gps-status" class="text-[8px] opacity-40 uppercase">GPS: Standby</p>
             </div>
         </div>
 
         <div class="flex-1 flex flex-col items-center justify-center">
-            <div id="timer-display" class="text-[28vw] font-black tracking-tighter glow-text">0.0</div>
-            
-            <button id="ignition-btn" class="mt-8 px-14 py-5 border-2 border-cyan-400 rounded-full font-black text-sm uppercase transition-all">
-                Arm System
-            </button>
-
-            <button onclick="simulateMovement()" class="mt-4 text-[9px] opacity-40 border border-white/20 px-4 py-1 rounded uppercase">
-                Simulate Signal (Test)
-            </button>
-            
-            <div class="mt-10 flex flex-col items-center">
-                <p id="speed-display" class="text-xs font-black uppercase tracking-[0.4em]">SPD: 0.0 M/S</p>
-            </div>
-        </div>
-
-        <div class="debug-panel">
-            <p id="debug-log">System Initialized. Waiting for Arm command...</p>
+            <div id="timer-display" class="text-[25vw] font-black tracking-tighter glow-text">0.0</div>
+            <button id="ignition-btn" class="mt-6 px-12 py-5 border-2 border-cyan-400 rounded-full font-black text-sm uppercase transition-all active:scale-95 bg-transparent">Arm System</button>
+            <p id="speed-display" class="text-[10px] font-bold uppercase tracking-[0.4em] mt-8">SPD: 0.0 M/S</p>
         </div>
     </div>
 
+    <div id="page-map" class="page">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xs font-black uppercase">Navigation_Matrix</h2>
+            <button onclick="showPage('page-dash')" class="bg-cyan-500 text-black px-4 py-1 text-[10px] font-black rounded">Back</button>
+        </div>
+        <div id="map"></div>
+    </div>
+
+    <div id="page-history" class="page">
+        <div class="flex justify-between items-center mb-4 border-b border-cyan-900 pb-2">
+            <h2 class="text-xs font-black uppercase">Stop_Logs</h2>
+            <button onclick="showPage('page-dash')" class="text-white border border-white/20 px-4 py-1 text-[10px] uppercase">Back</button>
+        </div>
+        <div id="history-list" class="flex-1 overflow-y-auto space-y-2">
+            </div>
+        <button onclick="clearLogs()" class="mt-4 w-full py-3 border border-red-500/50 text-red-500 text-[10px] font-bold uppercase">Clear All Data</button>
+    </div>
+
     <script>
+        // Set Build Time
+        const bTime = new Date();
+        document.getElementById('build-time').innerText = `Build: ${bTime.toLocaleDateString()} ${bTime.toLocaleTimeString()}`;
+
+        let db = JSON.parse(localStorage.getItem('gravity_db') || '[]');
         let isArmed = false, isIdling = false, startTime, timerInterval;
-        let db = [];
+        let currentPos = {lat: 0, lng: 0}, mainMap = null;
 
-        function updateLog(msg) {
-            document.getElementById('debug-log').innerText = `LOG: ${msg}`;
+        function showPage(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+            document.getElementById(id).classList.add('active-page');
+            if (id === 'page-map') setTimeout(initMap, 200);
+            if (id === 'page-history') renderHistory();
         }
 
-        // SIMULATE FUNCTION: Forces the timer to start/stop without GPS
-        function simulateMovement() {
-            if (!isArmed) {
-                alert("Please click 'ARM SYSTEM' first.");
-                return;
+        function renderHistory() {
+            const container = document.getElementById('history-list');
+            container.innerHTML = db.length === 0 ? '<p class="text-[10px] opacity-30 text-center mt-10">NO DATA LOGGED</p>' : '';
+            db.slice().reverse().forEach((log, index) => {
+                const date = new Date(log.ts).toLocaleTimeString();
+                container.innerHTML += `
+                    <div class="glass-panel p-3 flex justify-between items-center">
+                        <div>
+                            <p class="text-[10px] font-bold text-white">${date}</p>
+                            <p class="text-[8px] opacity-40">${log.lat.toFixed(4)}, ${log.lng.toFixed(4)}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-lg font-black">${log.dur}s</p>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        function clearLogs() {
+            if(confirm("Wipe all history?")) {
+                db = [];
+                localStorage.setItem('gravity_db', '[]');
+                renderHistory();
             }
-            // Toggle between 0 speed (Starts timer) and 1.0 speed (Stops/Saves timer)
-            const fakeSpeed = isIdling ? 1.0 : 0.0;
-            updateLog(`Simulating speed: ${fakeSpeed} m/s`);
-            processSpeed(fakeSpeed, 0, 0);
         }
 
-        function processSpeed(spd, lat, lng) {
+        function initMap() {
+            if (mainMap) mainMap.remove();
+            mainMap = L.map('map', {zoomControl: false}).setView([currentPos.lat, currentPos.lng], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mainMap);
+            db.forEach(log => {
+                L.circle([log.lat, log.lng], {radius: 15, color: '#00f2ff', fillOpacity: 0.8}).addTo(mainMap);
+            });
+        }
+
+        function processLogic(lat, lng, spd) {
+            currentPos = {lat, lng};
             document.getElementById('speed-display').innerText = `SPD: ${spd.toFixed(1)} M/S`;
-            
             if (isArmed) {
-                // If speed is 0 (Stationary), start timer
                 if (spd < 0.3 && !isIdling) {
                     isIdling = true;
                     startTime = Date.now();
@@ -82,14 +122,14 @@
                     timerInterval = setInterval(() => {
                         document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
                     }, 100);
-                    updateLog("Stationary detected. Timer started.");
-                } 
-                // If speed is > 0.8 (Moving), stop and reset
-                else if (spd > 0.8 && isIdling) {
+                } else if (spd > 0.8 && isIdling) {
                     isIdling = false;
                     clearInterval(timerInterval);
-                    const dur = document.getElementById('timer-display').innerText;
-                    updateLog(`Movement detected. Stop saved: ${dur}s`);
+                    const dur = parseFloat(document.getElementById('timer-display').innerText);
+                    if (dur > 2) {
+                        db.push({ts: Date.now(), dur, lat, lng});
+                        localStorage.setItem('gravity_db', JSON.stringify(db));
+                    }
                     document.getElementById('timer-display').innerText = "0.0";
                     document.getElementById('status-text').innerText = "ARMED_";
                 }
@@ -98,28 +138,16 @@
 
         document.getElementById('ignition-btn').addEventListener('click', function() {
             isArmed = !isArmed;
-            this.innerText = isArmed ? "SYSTEM ONLINE" : "ARM SYSTEM";
-            this.classList.toggle('btn-armed', isArmed);
-            document.getElementById('status-text').innerText = isArmed ? "Armed_" : "Standby_";
-            updateLog(isArmed ? "System Armed. Awaiting speed data..." : "System Disarmed.");
-
-            if (isArmed) {
-                if ("geolocation" in navigator) {
-                    navigator.geolocation.watchPosition(pos => {
-                        document.getElementById('gps-status').innerText = "GPS: Online";
-                        document.getElementById('gps-status').classList.replace('text-red-500', 'text-cyan-400');
-                        processSpeed(pos.coords.speed || 0, pos.coords.latitude, pos.coords.longitude);
-                    }, err => {
-                        updateLog("GPS Error: Access Denied. Check Permissions.");
-                        document.getElementById('gps-status').innerText = "GPS: Blocked";
-                    }, { enableHighAccuracy: true });
-                }
-            } else {
-                if (isIdling) {
-                    clearInterval(timerInterval);
-                    isIdling = false;
-                    document.getElementById('timer-display').innerText = "0.0";
-                }
+            this.innerText = isArmed ? "System Online" : "Arm System";
+            this.style.background = isArmed ? "var(--accent)" : "transparent";
+            this.style.color = isArmed ? "#000" : "var(--accent)";
+            document.getElementById('status-text').innerText = isArmed ? "Armed_" : "Ready_";
+            
+            if (isArmed && "geolocation" in navigator) {
+                navigator.geolocation.watchPosition(pos => {
+                    document.getElementById('gps-status').innerText = "GPS: Active";
+                    processLogic(pos.coords.latitude, pos.coords.longitude, pos.coords.speed || 0);
+                }, null, { enableHighAccuracy: true });
             }
         });
     </script>
