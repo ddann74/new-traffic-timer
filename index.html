@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gravity Intelligence Pro</title>
+    <title>Gravity Intel Pro</title>
+    <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
         body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: #10b981; overflow: hidden; height: 100vh; }
-        .page { display: none; height: 100vh; width: 100vw; position: absolute; top: 0; left: 0; padding: 20px; box-sizing: border-box; }
-        .active-page { display: flex; flex-direction: column; z-index: 50; background: #050505; }
+        .page { display: none; height: 100vh; width: 100vw; position: absolute; top: 0; left: 0; padding: 20px; box-sizing: border-box; background: #050505; }
+        .active-page { display: flex; flex-direction: column; z-index: 50; }
         .emerald-glow { text-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
         #map, #snapshot-map { 
             flex-grow: 1; 
@@ -22,91 +23,93 @@
             border: 1px solid #10b98133;
             background: #111;
         }
+        .btn-ui { border: 1px solid rgba(16, 185, 129, 0.3); padding: 8px 16px; text-transform: uppercase; font-size: 10px; cursor: pointer; }
+        .btn-ui:active { background: #10b981; color: #000; }
     </style>
 </head>
 <body>
 
     <div id="page-dash" class="page active-page">
         <div class="flex justify-between items-start mb-4">
-            <button onclick="showPage('page-menu')" class="text-xs border border-emerald-500/30 px-3 py-1 uppercase">Database</button>
+            <button onclick="showPage('page-menu')" class="btn-ui">Menu</button>
             <div class="text-right">
-                <button onclick="takeSnapshot()" id="snap-btn" class="hidden text-[10px] bg-emerald-500 text-black px-2 py-1 font-bold rounded mb-2 uppercase">Snapshot</button>
-                <p id="status-text" class="text-xs font-bold uppercase tracking-widest">Scanning_</p>
+                <button onclick="takeSnapshot()" id="snap-btn" class="hidden bg-emerald-500 text-black px-2 py-1 font-bold text-[10px] rounded mb-2 uppercase">Snapshot</button>
+                <p id="status-text" class="text-xs font-bold uppercase tracking-widest">Standby_</p>
             </div>
         </div>
         <div class="flex-1 flex flex-col items-center justify-center">
-            <div id="timer-display" class="text-[22vw] font-black tracking-tighter emerald-glow">0.0</div>
-            <button id="ignition-btn" class="mt-4 px-10 py-3 border-2 border-emerald-500 rounded-full font-bold text-xs tracking-widest uppercase active:bg-emerald-500 active:text-black transition-all">Arm System</button>
+            <div id="timer-display" class="text-[20vw] font-black tracking-tighter emerald-glow">0.0</div>
+            <button id="ignition-btn" class="mt-4 px-10 py-4 border-2 border-emerald-500 rounded-full font-bold text-xs tracking-widest uppercase active:bg-emerald-500 active:text-black transition-all">Arm System</button>
             <p id="speed-display" class="text-[10px] opacity-40 mt-6 uppercase tracking-[0.3em]">Spd: 0.0 m/s</p>
         </div>
         <div class="mt-4 p-2 bg-white/5 rounded text-[8px] opacity-30 font-mono">
-            GPS_LOG: <span id="debug-coords">WAITING_FOR_SIGNAL...</span>
+            SYS_LOG: <span id="debug-coords">GPS_OFFLINE</span>
         </div>
     </div>
 
     <div id="page-menu" class="page">
         <div class="flex justify-between mb-8">
-            <h1 class="text-xl font-black italic text-emerald-500">DATABASE_NAV</h1>
-            <button onclick="showPage('page-dash')" class="text-xs border border-white/20 px-3 py-1">BACK</button>
+            <h1 class="text-xl font-black italic text-emerald-500 underline">DATABASE</h1>
+            <button onclick="showPage('page-dash')" class="btn-ui">Back</button>
         </div>
         <div class="grid grid-cols-2 gap-4">
             <div onclick="showPage('page-map')" class="border border-emerald-500/50 p-6 text-center text-[10px] cursor-pointer hover:bg-emerald-500/10 uppercase">Global Heatmap</div>
             <div onclick="exportData()" class="border border-emerald-500/50 p-6 text-center text-[10px] cursor-pointer hover:bg-emerald-500/10 uppercase">Export JSON</div>
         </div>
-        <div id="mini-log" class="mt-8 text-[9px] space-y-1 overflow-y-auto max-h-48 border-t border-white/10 pt-4"></div>
+        <div id="mini-log" class="mt-8 text-[9px] space-y-1 overflow-y-auto max-h-64 border-t border-white/10 pt-4"></div>
     </div>
 
     <div id="page-map" class="page">
         <div class="flex justify-between items-center mb-2">
-            <h2 class="text-xs font-bold">ALL-TIME_STOPS</h2>
-            <button onclick="showPage('page-menu')" class="text-[10px] border border-white/20 px-4 py-1">CLOSE</button>
+            <h2 class="text-xs font-bold uppercase">Tactical_Map</h2>
+            <button onclick="showPage('page-menu')" class="btn-ui">Close</button>
         </div>
         <div id="map"></div>
     </div>
 
     <div id="page-snap" class="page">
         <div class="flex justify-between items-center mb-2">
-            <h2 class="text-xs font-bold">SESSION_SUMMARY</h2>
-            <button onclick="showPage('page-dash')" class="text-[10px] border border-white/20 px-4 py-1 text-emerald-500 border-emerald-500">RETURN</button>
+            <h2 class="text-xs font-bold">SESSION_DATA</h2>
+            <button onclick="showPage('page-dash')" class="btn-ui text-emerald-500 border-emerald-500">Return</button>
         </div>
         <div id="snapshot-map"></div>
         <div class="p-4 border border-emerald-500/20 rounded-lg text-center bg-emerald-500/5">
-            <p id="snap-stats" class="text-lg font-bold italic tracking-tighter uppercase">Analyzing Session...</p>
+            <p id="snap-stats" class="text-lg font-bold italic tracking-tighter uppercase">Analyzing...</p>
         </div>
     </div>
 
     <script>
+        // --- DATA & CONFIG ---
         let db = JSON.parse(localStorage.getItem('gravity_db') || '[]');
         let isArmed = false, isIdling = false, startTime, timerInterval;
         let currentPos = {lat: 0, lng: 0};
-        let sessionStartTime = null, snapMapInstance = null, mainMapInstance = null;
+        let sessionStartTime = null;
+        let mainMapInstance = null, snapMapInstance = null;
         
-        // Setup Audio Context for sonar pings
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
+        // --- AUDIO ENGINE ---
         function playPing(freq = 440, duration = 0.1) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
+            osc.connect(gain); gain.connect(audioCtx.destination);
             osc.frequency.value = freq;
             gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-            osc.start();
-            osc.stop(audioCtx.currentTime + duration);
+            osc.start(); osc.stop(audioCtx.currentTime + duration);
         }
 
-        // INITIALIZE GPS HOOK
+        // --- CORE LOGIC ---
         function initSensors() {
             if (audioCtx.state === 'suspended') audioCtx.resume();
-            
             if ("geolocation" in navigator) {
                 navigator.geolocation.watchPosition(
                     (pos) => {
                         const { latitude, longitude, speed } = pos.coords;
                         updateSystem(latitude, longitude, speed || 0);
                     },
-                    (err) => { document.getElementById('debug-coords').innerText = "GPS_DENIED: " + err.message; },
+                    (err) => { document.getElementById('debug-coords').innerText = "ERR: " + err.message; },
                     { enableHighAccuracy: true, maximumAge: 0 }
                 );
             }
@@ -124,7 +127,6 @@
         }
 
         function startIdle() {
-            if (isIdling) return;
             isIdling = true;
             startTime = Date.now();
             playPing(600, 0.2);
@@ -147,36 +149,30 @@
             }
             
             document.getElementById('timer-display').innerText = "0.0";
-            document.getElementById('status-text').innerText = "SCANNING_";
+            document.getElementById('status-text').innerText = "ARMED_";
             renderMiniLog();
         }
 
-        // FIX: Re-render maps on page show
+        // --- NAVIGATION & MAPS ---
         function showPage(id) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.getElementById(id).classList.add('active-page');
             
             if (id === 'page-map') {
-                setTimeout(() => { renderMainMap(); }, 100);
+                setTimeout(renderMainMap, 100);
             }
         }
 
-        document.getElementById('ignition-btn').addEventListener('click', function() {
-            initSensors();
-            isArmed = !isArmed;
-            sessionStartTime = isArmed ? Date.now() : null;
-            this.innerText = isArmed ? "SYSTEM ARMED" : "ARM SYSTEM";
-            document.getElementById('snap-btn').classList.toggle('hidden', !isArmed);
-            if (!isArmed) stopIdle();
-        });
-
         function renderMainMap() {
             if (mainMapInstance) mainMapInstance.remove();
-            mainMapInstance = L.map('map').setView([currentPos.lat, currentPos.lng], 15);
+            mainMapInstance = L.map('map').setView([currentPos.lat || 0, currentPos.lng || 0], 15);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mainMapInstance);
+            
             db.forEach(log => {
-                L.circle([log.lat, log.lng], {radius: 20, color: '#10b981'}).addTo(mainMapInstance);
+                L.circle([log.lat, log.lng], {radius: 20, color: '#10b981', fillOpacity: 0.4}).addTo(mainMapInstance);
             });
+
+            // CRITICAL: Refresh map size calculation
             setTimeout(() => mainMapInstance.invalidateSize(), 200);
         }
 
@@ -195,15 +191,16 @@
                     L.circle([l.lat, l.lng], {radius: 30, color: '#ef4444'}).addTo(snapMapInstance);
                 });
                 
-                document.getElementById('snap-stats').innerText = `${sessionData.length} STOPS | ${Math.round(total)} SEC TOTAL`;
+                document.getElementById('snap-stats').innerText = `${sessionData.length} STOPS | ${Math.round(total)}s TOTAL`;
                 snapMapInstance.invalidateSize();
             }, 300);
         }
 
+        // --- UTILS ---
         function renderMiniLog() {
             const logs = db.slice(-10).reverse();
             document.getElementById('mini-log').innerHTML = logs.map(l => 
-                `<div class="flex justify-between border-b border-white/5 pb-1">
+                `<div class="flex justify-between border-b border-white/5 pb-1 uppercase">
                     <span>${new Date(l.ts).toLocaleTimeString()}</span>
                     <span class="text-emerald-500">${l.dur}s</span>
                 </div>`
@@ -213,10 +210,20 @@
         function exportData() {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
             const a = document.createElement('a');
-            a.href = dataStr;
-            a.download = "gravity_intel.json";
-            a.click();
+            a.href = dataStr; a.download = "gravity_data.json"; a.click();
         }
+
+        // --- LISTENERS ---
+        document.getElementById('ignition-btn').addEventListener('click', function() {
+            initSensors();
+            isArmed = !isArmed;
+            sessionStartTime = isArmed ? Date.now() : null;
+            this.innerText = isArmed ? "System Armed" : "Arm System";
+            this.style.borderColor = isArmed ? "#ef4444" : "#10b981";
+            document.getElementById('status-text').innerText = isArmed ? "Armed_" : "Standby_";
+            document.getElementById('snap-btn').classList.toggle('hidden', !isArmed);
+            if (!isArmed) stopIdle();
+        });
 
         renderMiniLog();
     </script>
