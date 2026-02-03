@@ -220,3 +220,69 @@ function updateSystem(lat, lng, spd) {
         else if (currentSpeed > 0.8 && isIdling) stopIdle();
     }
 }
+<script>
+    let db = JSON.parse(localStorage.getItem('gravity_db') || '[]');
+    let isArmed = false, isIdling = false, startTime, timerInterval;
+    let currentPos = {lat: 0, lng: 0};
+    let sessionStartTime = null, snapMapInstance = null, mainMapInstance = null;
+    let ghostMode = false;
+    let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // 1. ACTUALLY START THE GPS SENSOR
+    if ("geolocation" in navigator) {
+        navigator.geolocation.watchPosition(
+            (position) => {
+                if (ghostMode) return; // Don't override ghost data
+                updateSystem(
+                    position.coords.latitude, 
+                    position.coords.longitude, 
+                    position.coords.speed || 0
+                );
+            },
+            (error) => {
+                document.getElementById('debug-coords').innerText = "ERROR: " + error.message;
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        );
+    }
+
+    function updateSystem(lat, lng, spd) {
+        currentPos = { lat, lng };
+        document.getElementById('speed-display').innerText = `Spd: ${spd.toFixed(1)} m/s`;
+        document.getElementById('debug-coords').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        
+        if (isArmed) {
+            // Speed threshold for idling (approx 1.0 km/h)
+            if (spd < 0.3 && !isIdling) startIdle();
+            else if (spd > 0.8 && isIdling) stopIdle();
+        }
+    }
+
+    // 2. FIX MAP RENDERING
+    function showPage(id) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+        document.getElementById(id).classList.add('active-page');
+        
+        // Leaflet needs a "nudge" to realize the container size has changed
+        if(id === 'page-map') {
+            setTimeout(() => {
+                renderMainMap();
+                if(mainMapInstance) mainMapInstance.invalidateSize();
+            }, 200);
+        }
+    }
+
+    function toggleGhostDrive() {
+        ghostMode = !ghostMode;
+        const btn = document.getElementById('ghost-btn');
+        if(ghostMode) {
+            btn.innerText = "DEACTIVATE GHOST";
+            // Simulate sitting still at a specific coordinate
+            updateSystem(40.7128, -74.0060, 0); 
+        } else {
+            btn.innerText = "TOGGLE GHOST DRIVE";
+        }
+    }
+
+    // ... (Keep your startIdle, stopIdle, and Ignition logic) ...
+</script>
