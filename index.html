@@ -52,7 +52,6 @@
         <div class="grid grid-cols-2 gap-4">
             <div onclick="showPage('page-map')" class="border border-emerald-500/50 p-6 text-center text-[10px] cursor-pointer hover:bg-emerald-500/10 uppercase">Global Heatmap</div>
             <div onclick="exportData()" class="border border-emerald-500/50 p-6 text-center text-[10px] cursor-pointer hover:bg-emerald-500/10 uppercase">Export JSON</div>
-            <div onclick="clearData()" class="border border-red-500/30 p-6 text-center text-[10px] cursor-pointer text-red-400 uppercase">Clear Logs</div>
         </div>
         <div id="mini-log" class="mt-8 text-[9px] space-y-1 overflow-y-auto max-h-48 border-t border-white/10 pt-4"></div>
     </div>
@@ -81,9 +80,26 @@
         let isArmed = false, isIdling = false, startTime, timerInterval;
         let currentPos = {lat: 0, lng: 0};
         let sessionStartTime = null, snapMapInstance = null, mainMapInstance = null;
+        
+        // Setup Audio Context for sonar pings
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playPing(freq = 440, duration = 0.1) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
 
         // INITIALIZE GPS HOOK
-        function initGPS() {
+        function initSensors() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
             if ("geolocation" in navigator) {
                 navigator.geolocation.watchPosition(
                     (pos) => {
@@ -111,8 +127,8 @@
             if (isIdling) return;
             isIdling = true;
             startTime = Date.now();
+            playPing(600, 0.2);
             document.getElementById('status-text').innerText = "IDLING_";
-            document.getElementById('timer-display').classList.add('text-emerald-400');
             timerInterval = setInterval(() => {
                 document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
             }, 100);
@@ -127,42 +143,39 @@
             if (duration > 2) {
                 db.push({ ts: Date.now(), dur: duration, lat: currentPos.lat, lng: currentPos.lng });
                 localStorage.setItem('gravity_db', JSON.stringify(db));
+                playPing(300, 0.3);
             }
             
             document.getElementById('timer-display').innerText = "0.0";
-            document.getElementById('timer-display').classList.remove('text-emerald-400');
             document.getElementById('status-text').innerText = "SCANNING_";
-            updateMiniLog();
+            renderMiniLog();
         }
 
+        // FIX: Re-render maps on page show
         function showPage(id) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.getElementById(id).classList.add('active-page');
             
-            // FIX: Refresh map layout whenever a map page is shown
             if (id === 'page-map') {
-                setTimeout(() => {
-                    renderMainMap();
-                }, 100);
+                setTimeout(() => { renderMainMap(); }, 100);
             }
         }
 
         document.getElementById('ignition-btn').addEventListener('click', function() {
-            initGPS(); // Request permissions on click
+            initSensors();
             isArmed = !isArmed;
             sessionStartTime = isArmed ? Date.now() : null;
             this.innerText = isArmed ? "SYSTEM ARMED" : "ARM SYSTEM";
-            this.style.borderColor = isArmed ? "#ef4444" : "#10b981";
             document.getElementById('snap-btn').classList.toggle('hidden', !isArmed);
             if (!isArmed) stopIdle();
         });
 
         function renderMainMap() {
             if (mainMapInstance) mainMapInstance.remove();
-            mainMapInstance = L.map('map').setView([currentPos.lat || 0, currentPos.lng || 0], 15);
+            mainMapInstance = L.map('map').setView([currentPos.lat, currentPos.lng], 15);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mainMapInstance);
             db.forEach(log => {
-                L.circle([log.lat, log.lng], {radius: 20, color: '#10b981', fillOpacity: 0.5}).addTo(mainMapInstance);
+                L.circle([log.lat, log.lng], {radius: 20, color: '#10b981'}).addTo(mainMapInstance);
             });
             setTimeout(() => mainMapInstance.invalidateSize(), 200);
         }
@@ -187,8 +200,8 @@
             }, 300);
         }
 
-        function updateMiniLog() {
-            const logs = db.slice(-5).reverse();
+        function renderMiniLog() {
+            const logs = db.slice(-10).reverse();
             document.getElementById('mini-log').innerHTML = logs.map(l => 
                 `<div class="flex justify-between border-b border-white/5 pb-1">
                     <span>${new Date(l.ts).toLocaleTimeString()}</span>
@@ -198,23 +211,14 @@
         }
 
         function exportData() {
-            const blob = new Blob([JSON.stringify(db)], {type: "application/json"});
-            const url = URL.createObjectURL(blob);
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
             const a = document.createElement('a');
-            a.href = url;
+            a.href = dataStr;
             a.download = "gravity_intel.json";
             a.click();
         }
 
-        function clearData() {
-            if(confirm("Wipe all intelligence logs?")) {
-                db = [];
-                localStorage.removeItem('gravity_db');
-                updateMiniLog();
-            }
-        }
-
-        updateMiniLog();
+        renderMiniLog();
     </script>
 </body>
 </html>
