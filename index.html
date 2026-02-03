@@ -11,21 +11,21 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
         
-        /* THEME COLOR: VIVID AMBER */
-        :root { --theme: #fbbf24; --theme-dim: rgba(251, 191, 36, 0.2); }
+        /* THEME: ELECTRIC CYAN */
+        :root { --accent: #00f2ff; --glow: rgba(0, 242, 255, 0.5); }
 
-        body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: var(--theme); overflow: hidden; height: 100vh; }
-        .page { display: none; height: 100vh; width: 100vw; position: absolute; padding: 25px; box-sizing: border-box; background: #050505; }
-        .active-page { display: flex; flex-direction: column; z-index: 50; }
+        body { font-family: 'JetBrains+Mono', monospace; background: #000; color: var(--accent); overflow: hidden; height: 100vh; }
+        .page { display: none; height: 100vh; width: 100vw; position: absolute; padding: 25px; box-sizing: border-box; }
+        .active-page { display: flex; flex-direction: column; z-index: 50; background: radial-gradient(circle at center, #001a1a 0%, #000 100%); }
         
-        /* BRIGHTER GLOW EFFECT */
-        .glow-text { text-shadow: 0 0 15px var(--theme), 0 0 30px var(--theme-dim); color: #fff; }
-        .glow-border { border-color: var(--theme); box-shadow: 0 0 15px var(--theme-dim); }
+        /* ULTRA BRIGHT GLOW */
+        .glow-text { text-shadow: 0 0 10px var(--accent), 0 0 30px var(--glow); color: #fff; }
+        .btn-active { background: var(--accent) !important; color: #000 !important; box-shadow: 0 0 20px var(--accent); }
 
         #map { 
-            flex-grow: 1; width: 100%; border-radius: 15px; 
-            filter: invert(100%) hue-rotate(200deg) brightness(1.2); 
-            margin-top: 20px; border: 1px solid var(--theme-dim);
+            flex-grow: 1; width: 100%; border-radius: 20px; 
+            filter: invert(100%) hue-rotate(170deg) brightness(1.1) contrast(1.2); 
+            margin-top: 20px; border: 2px solid var(--accent);
         }
     </style>
 </head>
@@ -34,38 +34,42 @@
     <div id="page-dash" class="page active-page">
         <div class="flex justify-between items-start">
             <div>
-                <button onclick="showPage('page-map')" class="border border-amber-500/50 px-4 py-1 text-[10px] uppercase font-bold">Tactical Map</button>
-                <p class="text-[9px] opacity-60 mt-2 uppercase tracking-widest">Build: 2024-05-22_v3</p>
+                <button onclick="showPage('page-map')" class="border-2 border-cyan-400 px-4 py-1 text-[10px] font-black uppercase tracking-tighter">Tactical Map</button>
+                <p id="build-time" class="text-[9px] mt-2 font-bold opacity-80 uppercase tracking-widest"></p>
             </div>
             <div class="text-right">
-                <p id="status-text" class="text-xs font-black uppercase tracking-widest">System_Ready</p>
-                <p class="text-[8px] opacity-40">STABLE_LINK_ACTIVE</p>
+                <p id="status-text" class="text-xs font-black uppercase tracking-[0.2em]">Ready_</p>
+                <div class="h-1 w-full bg-cyan-900 mt-1"><div id="signal-bar" class="h-full bg-cyan-400 w-0 transition-all"></div></div>
             </div>
         </div>
 
         <div class="flex-1 flex flex-col items-center justify-center">
-            <div id="timer-display" class="text-[25vw] font-black tracking-tighter glow-text">0.0</div>
+            <div id="timer-display" class="text-[28vw] font-black tracking-tighter glow-text">0.0</div>
             
-            <button id="ignition-btn" class="mt-6 px-12 py-5 border-2 glow-border rounded-xl font-black text-sm uppercase transition-all active:scale-95 bg-transparent">
+            <button id="ignition-btn" class="mt-8 px-14 py-5 border-2 border-cyan-400 rounded-full font-black text-sm uppercase transition-all active:scale-90">
                 Arm System
             </button>
             
-            <div class="mt-8 flex gap-8">
-                <p id="speed-display" class="text-[10px] font-bold uppercase tracking-widest opacity-70">Spd: 0.0 m/s</p>
-                <p id="lat-display" class="text-[10px] font-bold uppercase tracking-widest opacity-30">0.0000, 0.0000</p>
+            <div class="mt-10 flex flex-col items-center">
+                <p id="speed-display" class="text-xs font-black uppercase tracking-[0.4em]">SPD: 0.0 M/S</p>
+                <p id="lat-display" class="text-[8px] opacity-40 mt-2 font-bold tracking-widest">0.000000 | 0.000000</p>
             </div>
         </div>
     </div>
 
     <div id="page-map" class="page">
         <div class="flex justify-between items-center mb-2">
-            <h2 class="text-xs font-black uppercase">Navigation_Matrix</h2>
-            <button onclick="showPage('page-dash')" class="bg-amber-500 text-black px-4 py-1 text-[10px] font-bold rounded">Exit</button>
+            <h2 class="text-xs font-black uppercase tracking-widest">Global_Matrix</h2>
+            <button onclick="showPage('page-dash')" class="bg-white text-black px-6 py-1 text-[10px] font-black rounded-full">Return</button>
         </div>
         <div id="map"></div>
     </div>
 
     <script>
+        // Set Build Time immediately
+        const now = new Date();
+        document.getElementById('build-time').innerText = `Build: ${now.toLocaleDateString()} @ ${now.toLocaleTimeString()}`;
+
         let db = JSON.parse(localStorage.getItem('gravity_db') || '[]');
         let isArmed = false, isIdling = false, startTime, timerInterval;
         let currentPos = {lat: 0, lng: 0}, mainMapInstance = null;
@@ -75,31 +79,32 @@
         function showPage(id) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.getElementById(id).classList.add('active-page');
-            if (id === 'page-map') setTimeout(initMap, 150);
+            if (id === 'page-map') setTimeout(initMap, 200);
         }
 
         function initMap() {
             if (mainMapInstance) mainMapInstance.remove();
-            mainMapInstance = L.map('map').setView([currentPos.lat, currentPos.lng], 16);
+            mainMapInstance = L.map('map', {zoomControl: false}).setView([currentPos.lat, currentPos.lng], 16);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mainMapInstance);
             
-            // Render logs as bright amber circles
             db.forEach(log => {
-                L.circle([log.lat, log.lng], {radius: 15, color: '#fbbf24', fillOpacity: 0.8}).addTo(mainMapInstance);
+                L.circle([log.lat, log.lng], {radius: 12, color: '#00f2ff', fillColor: '#00f2ff', fillOpacity: 0.9}).addTo(mainMapInstance);
             });
-            setTimeout(() => mainMapInstance.invalidateSize(), 200);
+            setTimeout(() => mainMapInstance.invalidateSize(), 300);
         }
 
         function updateSystem(lat, lng, spd) {
             currentPos = { lat, lng };
-            document.getElementById('speed-display').innerText = `Spd: ${spd.toFixed(1)} m/s`;
-            document.getElementById('lat-display').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-            
+            document.getElementById('speed-display').innerText = `SPD: ${spd.toFixed(1)} M/S`;
+            document.getElementById('lat-display').innerText = `${lat.toFixed(6)} | ${lng.toFixed(6)}`;
+            document.getElementById('signal-bar').style.width = "100%"; // Visual ping
+
             if (isArmed) {
                 if (spd < 0.3 && !isIdling) {
                     isIdling = true;
                     startTime = Date.now();
-                    document.getElementById('status-text').innerText = "IDLING_STATIONARY";
+                    document.getElementById('status-text').innerText = "IDLING_";
+                    document.getElementById('status-text').style.color = "#fff";
                     timerInterval = setInterval(() => {
                         document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
                     }, 100);
@@ -110,31 +115,24 @@
                     if (dur > 2) db.push({ts: Date.now(), dur, lat, lng});
                     localStorage.setItem('gravity_db', JSON.stringify(db));
                     document.getElementById('timer-display').innerText = "0.0";
-                    document.getElementById('status-text').innerText = "SYSTEM_ARMED";
+                    document.getElementById('status-text').innerText = "ARMED_";
+                    document.getElementById('status-text').style.color = "var(--accent)";
                 }
             }
         }
 
-        // START SYSTEM ON BUTTON CLICK
         document.getElementById('ignition-btn').addEventListener('click', function() {
             if (audioCtx.state === 'suspended') audioCtx.resume();
             
             isArmed = !isArmed;
-            this.innerText = isArmed ? "System Online" : "Arm System";
-            this.style.backgroundColor = isArmed ? "#fbbf24" : "transparent";
-            this.style.color = isArmed ? "#000" : "#fbbf24";
-            document.getElementById('status-text').innerText = isArmed ? "System_Armed" : "System_Ready";
+            this.innerText = isArmed ? "SYSTEM ONLINE" : "ARM SYSTEM";
+            this.classList.toggle('btn-active', isArmed);
+            document.getElementById('status-text').innerText = isArmed ? "Armed_" : "Ready_";
 
             if (isArmed && "geolocation" in navigator) {
                 navigator.geolocation.watchPosition(pos => {
                     updateSystem(pos.coords.latitude, pos.coords.longitude, pos.coords.speed || 0);
                 }, err => console.error(err), { enableHighAccuracy: true });
-            }
-            
-            if (!isArmed && isIdling) {
-                clearInterval(timerInterval);
-                isIdling = false;
-                document.getElementById('timer-display').innerText = "0.0";
             }
         });
     </script>
