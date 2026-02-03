@@ -33,11 +33,11 @@
         <div class="flex justify-between items-start z-[100]">
             <div>
                 <p class="text-[10px] font-black tracking-widest uppercase">System_Core</p>
-                <p class="text-[8px] opacity-60 uppercase font-bold">Build: 02/04/2026_V3.6_R</p>
+                <p class="text-[8px] opacity-60 uppercase font-bold">Build: 02/04/2026_V3.7</p>
             </div>
             
             <div class="relative text-right">
-                <button onclick="toggleMenu()" class="bg-cyan-950/50 border border-cyan-400/50 px-4 py-1 text-[10px] font-black uppercase">Options ▾</button>
+                <button id="menu-trigger" onclick="toggleMenu()" class="bg-cyan-950/50 border border-cyan-400/50 px-4 py-1 text-[10px] font-black uppercase">Options ▾</button>
                 <div id="options-menu" class="absolute right-0 mt-2 w-52 bg-black border border-cyan-400 p-1 rounded shadow-2xl text-left">
                     <button onclick="showPage('page-history')" class="w-full px-3 py-3 text-[9px] uppercase hover:bg-cyan-900">Event History</button>
                     <button onclick="launchMap()" class="w-full px-3 py-3 text-[9px] uppercase hover:bg-cyan-900 border-t border-cyan-900/50">Tactical Mapping</button>
@@ -55,7 +55,7 @@
 
         <div id="main-container" class="flex-1 flex flex-col items-center justify-center">
             <div id="timer-display" class="text-[25vw] font-black tracking-tighter glow-text">0.0</div>
-            <button id="arm-btn" class="mt-8 px-14 py-6 border-2 border-cyan-400 rounded-full font-black text-sm uppercase transition-all">Arm System</button>
+            <button id="arm-btn" class="mt-8 px-14 py-6 border-2 border-cyan-400 rounded-full font-black text-sm uppercase transition-all active:scale-95">Arm System</button>
             <p id="speed-display" class="text-[10px] font-bold uppercase tracking-[0.4em] mt-10 opacity-40">Velocity: 0.0 M/S</p>
         </div>
     </div>
@@ -73,7 +73,7 @@
             <h2 class="text-xs font-black uppercase">History_Matrix</h2>
             <button onclick="showPage('page-dash')" class="border border-cyan-400 px-4 py-1 text-[10px]">Back</button>
         </div>
-        <div id="log-list" class="flex-1 overflow-y-auto pr-2"></div>
+        <div id="log-list" class="flex-1 overflow-y-auto pr-2 space-y-2"></div>
     </div>
 
     <script>
@@ -83,13 +83,26 @@
         let lastPos = { lat: 0, lng: 0 };
 
         function toggleMenu() { document.getElementById('options-menu').classList.toggle('open'); }
+        
         function showPage(id) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.getElementById(id).classList.add('active-page');
             if(id === 'page-map') initMap();
+            if(id === 'page-history') renderHistory();
         }
 
         function launchMap() { toggleMenu(); showPage('page-map'); }
+
+        function renderHistory() {
+            const list = document.getElementById('log-list');
+            list.innerHTML = db.length ? '' : '<p class="text-[10px] opacity-30 uppercase">No Data Recorded_</p>';
+            db.slice().reverse().forEach(entry => {
+                const item = document.createElement('div');
+                item.className = "p-3 border border-cyan-900 bg-cyan-950/20 rounded flex justify-between items-center";
+                item.innerHTML = `<span class="text-[10px] font-bold">${entry.dur} SEC</span><span class="text-[8px] opacity-50">${new Date(entry.ts).toLocaleTimeString()}</span>`;
+                list.appendChild(item);
+            });
+        }
 
         function updateGPSSignal(status) {
             const icon = document.getElementById('gps-indicator');
@@ -113,10 +126,13 @@
             lastPos = { lat, lng };
             updateGPSSignal('locked');
             if (mapObj && userMarker) { userMarker.setLatLng([lat, lng]); mapObj.panTo([lat, lng]); }
-            const currentSpeed = spd < 0.3 ? 0 : spd;
+            
+            // Clean velocity noise
+            const currentSpeed = (spd === null || spd < 0.4) ? 0 : spd;
             document.getElementById('speed-display').innerText = `Velocity: ${currentSpeed.toFixed(1)} M/S`;
 
             if (isArmed) {
+                // Timer Logic: Start if speed is zero
                 if (currentSpeed === 0 && !isIdling) {
                     isIdling = true;
                     startTime = Date.now();
@@ -124,7 +140,9 @@
                     timerInterval = setInterval(() => {
                         document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
                     }, 100);
-                } else if (currentSpeed > 0.7 && isIdling) {
+                } 
+                // Timer Logic: Stop if speed > threshold
+                else if (currentSpeed > 0.8 && isIdling) {
                     isIdling = false;
                     clearInterval(timerInterval);
                     const dur = document.getElementById('timer-display').innerText;
@@ -136,27 +154,39 @@
             }
         }
 
+        // IMPROVED ARM BUTTON LOGIC
         document.getElementById('arm-btn').addEventListener('click', function() {
             isArmed = !isArmed;
+            
+            // UI Feedback
             this.innerText = isArmed ? "STANDBY" : "ARM SYSTEM";
-            this.style.background = isArmed ? "var(--accent)" : "transparent";
+            this.style.backgroundColor = isArmed ? "var(--accent)" : "transparent";
             this.style.color = isArmed ? "#000" : "var(--accent)";
             document.getElementById('status-dot').classList.toggle('pulse-active', isArmed);
+            document.getElementById('status-text').innerText = isArmed ? "Armed_" : "Idle_";
             
             if (isArmed) {
                 updateGPSSignal('searching');
                 gpsWatch = navigator.geolocation.watchPosition(
-                    pos => processLogic(pos.coords.latitude, pos.coords.longitude, pos.coords.speed || 0),
-                    err => updateGPSSignal('error'),
-                    { enableHighAccuracy: true }
+                    pos => {
+                        processLogic(pos.coords.latitude, pos.coords.longitude, pos.coords.speed);
+                    },
+                    err => {
+                        console.error("GPS Error:", err);
+                        updateGPSSignal('error');
+                    },
+                    { 
+                        enableHighAccuracy: true, 
+                        maximumAge: 0, 
+                        timeout: 10000 
+                    }
                 );
             } else {
-                if(gpsWatch) navigator.geolocation.clearWatch(gpsWatch);
+                if(gpsWatch !== null) navigator.geolocation.clearWatch(gpsWatch);
                 updateGPSSignal('idle');
-                clearInterval(timerInterval);
+                if(timerInterval) clearInterval(timerInterval);
                 isIdling = false;
                 document.getElementById('timer-display').innerText = "0.0";
-                document.getElementById('status-text').innerText = "Idle_";
             }
         });
     </script>
