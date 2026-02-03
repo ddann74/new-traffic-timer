@@ -9,60 +9,70 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: #10b981; overflow: hidden; }
-        .page { display: none; height: 100vh; width: 100vw; position: absolute; padding: 20px; z-index: 10; }
-        .active-page { display: flex; flex-direction: column; }
+        body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: #10b981; overflow: hidden; height: 100vh; }
+        .page { display: none; height: 100vh; width: 100vw; position: absolute; top: 0; left: 0; padding: 20px; box-sizing: border-box; }
+        .active-page { display: flex; flex-direction: column; z-index: 50; background: #050505; }
         .emerald-glow { text-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
-        #map, #snapshot-map { height: 350px; border-radius: 12px; filter: invert(100%) hue-rotate(180deg) brightness(95%); margin-top: 20px; border: 1px solid #10b98133; background: #111; }
+        #map, #snapshot-map { 
+            flex-grow: 1; 
+            width: 100%; 
+            border-radius: 12px; 
+            filter: invert(100%) hue-rotate(180deg) brightness(95%); 
+            margin: 15px 0; 
+            border: 1px solid #10b98133;
+            background: #111;
+        }
     </style>
 </head>
 <body>
 
     <div id="page-dash" class="page active-page">
         <div class="flex justify-between items-start mb-4">
-            <button onclick="showPage('page-menu')" class="text-xs border border-emerald-500/30 px-3 py-1">DATABASE</button>
+            <button onclick="showPage('page-menu')" class="text-xs border border-emerald-500/30 px-3 py-1 uppercase">Database</button>
             <div class="text-right">
                 <button onclick="takeSnapshot()" id="snap-btn" class="hidden text-[10px] bg-emerald-500 text-black px-2 py-1 font-bold rounded mb-2 uppercase">Snapshot</button>
                 <p id="status-text" class="text-xs font-bold uppercase tracking-widest">Scanning_</p>
             </div>
         </div>
-
         <div class="flex-1 flex flex-col items-center justify-center">
-            <div id="timer-display" class="text-[25vw] font-black tracking-tighter emerald-glow">0.0</div>
-            <button id="ignition-btn" class="mt-4 px-10 py-3 border-2 border-emerald-500 rounded-full font-bold text-xs tracking-widest uppercase">Arm System</button>
+            <div id="timer-display" class="text-[22vw] font-black tracking-tighter emerald-glow">0.0</div>
+            <button id="ignition-btn" class="mt-4 px-10 py-3 border-2 border-emerald-500 rounded-full font-bold text-xs tracking-widest uppercase active:bg-emerald-500 active:text-black transition-all">Arm System</button>
             <p id="speed-display" class="text-[10px] opacity-40 mt-6 uppercase tracking-[0.3em]">Spd: 0.0 m/s</p>
         </div>
-        
         <div class="mt-4 p-2 bg-white/5 rounded text-[8px] opacity-30 font-mono">
             GPS_LOG: <span id="debug-coords">WAITING_FOR_SIGNAL...</span>
         </div>
     </div>
 
-    <div id="page-menu" class="page bg-black">
+    <div id="page-menu" class="page">
         <div class="flex justify-between mb-8">
-            <h1 class="text-xl font-black italic">DATABASE</h1>
+            <h1 class="text-xl font-black italic text-emerald-500">DATABASE_NAV</h1>
             <button onclick="showPage('page-dash')" class="text-xs border border-white/20 px-3 py-1">BACK</button>
         </div>
-        <div class="grid grid-cols-2 gap-4 mb-4">
-            <div onclick="showPage('page-map')" class="border border-emerald-500 p-4 text-center text-xs cursor-pointer">VIEW ALL-TIME MAP</div>
-            <div onclick="exportData()" class="border border-emerald-500 p-4 text-center text-xs cursor-pointer">EXPORT DATA</div>
+        <div class="grid grid-cols-2 gap-4">
+            <div onclick="showPage('page-map')" class="border border-emerald-500/50 p-6 text-center text-[10px] cursor-pointer hover:bg-emerald-500/10 uppercase">Global Heatmap</div>
+            <div onclick="exportData()" class="border border-emerald-500/50 p-6 text-center text-[10px] cursor-pointer hover:bg-emerald-500/10 uppercase">Export JSON</div>
+            <div onclick="clearData()" class="border border-red-500/30 p-6 text-center text-[10px] cursor-pointer text-red-400 uppercase">Clear Logs</div>
         </div>
-        <div id="mini-log" class="text-[10px] space-y-2 h-64 overflow-y-auto border border-white/5 p-2"></div>
+        <div id="mini-log" class="mt-8 text-[9px] space-y-1 overflow-y-auto max-h-48 border-t border-white/10 pt-4"></div>
     </div>
 
-    <div id="page-map" class="page bg-black">
-        <button onclick="showPage('page-menu')" class="text-xs mb-4 border border-white/20 px-4 py-1">BACK</button>
+    <div id="page-map" class="page">
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="text-xs font-bold">ALL-TIME_STOPS</h2>
+            <button onclick="showPage('page-menu')" class="text-[10px] border border-white/20 px-4 py-1">CLOSE</button>
+        </div>
         <div id="map"></div>
     </div>
 
-    <div id="page-snap" class="page bg-black/95">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-lg font-black italic text-emerald-500">SESSION_HEATMAP</h2>
-            <button onclick="showPage('page-dash')" class="text-xs border border-white/20 px-4 py-2">CLOSE</button>
+    <div id="page-snap" class="page">
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="text-xs font-bold">SESSION_SUMMARY</h2>
+            <button onclick="showPage('page-dash')" class="text-[10px] border border-white/20 px-4 py-1 text-emerald-500 border-emerald-500">RETURN</button>
         </div>
         <div id="snapshot-map"></div>
-        <div class="mt-6 p-4 border border-emerald-500/20 rounded-lg text-center">
-            <p id="snap-stats" class="text-xl font-bold italic">ANALYZING...</p>
+        <div class="p-4 border border-emerald-500/20 rounded-lg text-center bg-emerald-500/5">
+            <p id="snap-stats" class="text-lg font-bold italic tracking-tighter uppercase">Analyzing Session...</p>
         </div>
     </div>
 
@@ -72,19 +82,18 @@
         let currentPos = {lat: 0, lng: 0};
         let sessionStartTime = null, snapMapInstance = null, mainMapInstance = null;
 
-        // 1. GPS TRACKING INITIALIZATION
-        if ("geolocation" in navigator) {
-            navigator.geolocation.watchPosition(
-                (position) => {
-                    updateSystem(
-                        position.coords.latitude, 
-                        position.coords.longitude, 
-                        position.coords.speed || 0
-                    );
-                },
-                (err) => { document.getElementById('debug-coords').innerText = "ERR: " + err.message; },
-                { enableHighAccuracy: true }
-            );
+        // INITIALIZE GPS HOOK
+        function initGPS() {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.watchPosition(
+                    (pos) => {
+                        const { latitude, longitude, speed } = pos.coords;
+                        updateSystem(latitude, longitude, speed || 0);
+                    },
+                    (err) => { document.getElementById('debug-coords').innerText = "GPS_DENIED: " + err.message; },
+                    { enableHighAccuracy: true, maximumAge: 0 }
+                );
+            }
         }
 
         function updateSystem(lat, lng, spd) {
@@ -93,7 +102,6 @@
             document.getElementById('debug-coords').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
             
             if (isArmed) {
-                // Thresholds: < 0.3 m/s is idle, > 0.8 m/s is moving
                 if (spd < 0.3 && !isIdling) startIdle();
                 else if (spd > 0.8 && isIdling) stopIdle();
             }
@@ -101,9 +109,10 @@
 
         function startIdle() {
             if (isIdling) return;
-            isIdling = true; 
+            isIdling = true;
             startTime = Date.now();
             document.getElementById('status-text').innerText = "IDLING_";
+            document.getElementById('timer-display').classList.add('text-emerald-400');
             timerInterval = setInterval(() => {
                 document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
             }, 100);
@@ -111,70 +120,76 @@
 
         function stopIdle() {
             if (!isIdling) return;
-            isIdling = false; 
+            isIdling = false;
             clearInterval(timerInterval);
             const duration = parseFloat(document.getElementById('timer-display').innerText);
             
-            if (duration > 2) { // Only log stops longer than 2 seconds
+            if (duration > 2) {
                 db.push({ ts: Date.now(), dur: duration, lat: currentPos.lat, lng: currentPos.lng });
                 localStorage.setItem('gravity_db', JSON.stringify(db));
-                renderMiniLog();
             }
+            
             document.getElementById('timer-display').innerText = "0.0";
+            document.getElementById('timer-display').classList.remove('text-emerald-400');
             document.getElementById('status-text').innerText = "SCANNING_";
+            updateMiniLog();
         }
 
         function showPage(id) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.getElementById(id).classList.add('active-page');
             
-            // Map Fix: Invalidate size after transition
-            if(id === 'page-map') {
+            // FIX: Refresh map layout whenever a map page is shown
+            if (id === 'page-map') {
                 setTimeout(() => {
                     renderMainMap();
-                    if(mainMapInstance) mainMapInstance.invalidateSize();
-                }, 200);
+                }, 100);
             }
         }
 
-        document.getElementById('ignition-btn').addEventListener('click', () => {
+        document.getElementById('ignition-btn').addEventListener('click', function() {
+            initGPS(); // Request permissions on click
             isArmed = !isArmed;
             sessionStartTime = isArmed ? Date.now() : null;
-            document.getElementById('ignition-btn').innerText = isArmed ? "SYSTEM ARMED" : "ARM SYSTEM";
+            this.innerText = isArmed ? "SYSTEM ARMED" : "ARM SYSTEM";
+            this.style.borderColor = isArmed ? "#ef4444" : "#10b981";
             document.getElementById('snap-btn').classList.toggle('hidden', !isArmed);
-            if(!isArmed) stopIdle();
+            if (!isArmed) stopIdle();
         });
 
         function renderMainMap() {
             if (mainMapInstance) mainMapInstance.remove();
-            mainMapInstance = L.map('map').setView([currentPos.lat, currentPos.lng], 13);
+            mainMapInstance = L.map('map').setView([currentPos.lat || 0, currentPos.lng || 0], 15);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mainMapInstance);
             db.forEach(log => {
-                L.circle([log.lat, log.lng], {radius: 20, color: '#10b981'}).addTo(mainMapInstance);
+                L.circle([log.lat, log.lng], {radius: 20, color: '#10b981', fillOpacity: 0.5}).addTo(mainMapInstance);
             });
+            setTimeout(() => mainMapInstance.invalidateSize(), 200);
         }
 
         function takeSnapshot() {
             showPage('page-snap');
             const sessionData = db.filter(l => l.ts >= sessionStartTime);
+            
             setTimeout(() => {
                 if (snapMapInstance) snapMapInstance.remove();
-                snapMapInstance = L.map('snapshot-map').setView([currentPos.lat, currentPos.lng], 15);
+                snapMapInstance = L.map('snapshot-map').setView([currentPos.lat, currentPos.lng], 16);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(snapMapInstance);
-                snapMapInstance.invalidateSize();
                 
-                let totalSeconds = 0;
+                let total = 0;
                 sessionData.forEach(l => {
-                    totalSeconds += l.dur;
+                    total += l.dur;
                     L.circle([l.lat, l.lng], {radius: 30, color: '#ef4444'}).addTo(snapMapInstance);
                 });
-                document.getElementById('snap-stats').innerText = `${sessionData.length} STOPS | ${Math.round(totalSeconds/60)}m WASTED`;
+                
+                document.getElementById('snap-stats').innerText = `${sessionData.length} STOPS | ${Math.round(total)} SEC TOTAL`;
+                snapMapInstance.invalidateSize();
             }, 300);
         }
 
-        function renderMiniLog() {
-            const list = db.slice(-10).reverse();
-            document.getElementById('mini-log').innerHTML = list.map(l => 
+        function updateMiniLog() {
+            const logs = db.slice(-5).reverse();
+            document.getElementById('mini-log').innerHTML = logs.map(l => 
                 `<div class="flex justify-between border-b border-white/5 pb-1">
                     <span>${new Date(l.ts).toLocaleTimeString()}</span>
                     <span class="text-emerald-500">${l.dur}s</span>
@@ -183,14 +198,23 @@
         }
 
         function exportData() {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
-            const dlAnchor = document.createElement('a');
-            dlAnchor.setAttribute("href", dataStr);
-            dlAnchor.setAttribute("download", "gravity_logs.json");
-            dlAnchor.click();
+            const blob = new Blob([JSON.stringify(db)], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "gravity_intel.json";
+            a.click();
         }
 
-        renderMiniLog();
+        function clearData() {
+            if(confirm("Wipe all intelligence logs?")) {
+                db = [];
+                localStorage.removeItem('gravity_db');
+                updateMiniLog();
+            }
+        }
+
+        updateMiniLog();
     </script>
 </body>
 </html>
