@@ -222,3 +222,434 @@
     </script>
 </body>
 </html>
+function takeSnapshot() {
+    showPage('page-snap');
+    
+    // 1. Filter data for ONLY this session
+    const sessionData = db.filter(l => l.ts >= sessionStartTime);
+    
+    // 2. Small delay to ensure the HTML container is visible before Leaflet loads
+    setTimeout(() => {
+        if (snapMapInstance) {
+            snapMapInstance.remove();
+        }
+
+        // 3. Center on current position if no stops exist, otherwise center on the first stop
+        const mapCenter = sessionData.length > 0 
+            ? [sessionData[0].lat, sessionData[0].lng] 
+            : [currentPos.lat, currentPos.lng];
+
+        snapMapInstance = L.map('snapshot-map').setView(mapCenter, 15);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(snapMapInstance);
+
+        // 4. THE FIX: Force the map to fill the container
+        snapMapInstance.invalidateSize();
+
+        let total = 0;
+        sessionData.forEach(l => {
+            total += l.dur;
+            const c = l.dur > 60 ? '#ef4444' : '#10b981';
+            L.circle([l.lat, l.lng], {
+                radius: 30, 
+                color: c, 
+                fillColor: c, 
+                fillOpacity: 0.6
+            }).addTo(snapMapInstance);
+        });
+
+        document.getElementById('snap-stats').innerText = 
+            `${sessionData.length} STOPS | ${Math.round(total/60)}m WASTED`;
+            
+    }, 300); // 300ms is the "sweet spot" for mobile transitions
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Gravity Intelligence Pro</title>
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
+        body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: #10b981; overflow: hidden; }
+        .page { display: none; height: 100vh; width: 100vw; position: absolute; padding: 20px; z-index: 10; }
+        .active-page { display: flex; flex-direction: column; }
+        .emerald-glow { text-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
+        #map, #snapshot-map { height: 350px; border-radius: 12px; filter: invert(100%) hue-rotate(180deg) brightness(95%); margin-top: 20px; border: 1px solid #10b98133; }
+        .btn-nav { border: 1px solid #10b981; padding: 10px; text-align: center; font-size: 10px; cursor: pointer; border-radius: 8px; }
+    </style>
+</head>
+<body>
+
+    <div id="page-dash" class="page active-page">
+        <div class="flex justify-between items-start mb-4">
+            <button onclick="showPage('page-menu')" class="text-xs border border-emerald-500/30 px-3 py-1">MENU</button>
+            <div class="text-right">
+                <button onclick="takeSnapshot()" id="snap-btn" class="hidden text-[10px] bg-emerald-500 text-black px-2 py-1 font-bold rounded mb-2 uppercase">Snapshot</button>
+                <p id="status-text" class="text-xs font-bold uppercase tracking-widest">Scanning_</p>
+            </div>
+        </div>
+
+        <div class="flex-1 flex flex-col items-center justify-center">
+            <p id="prediction-msg" class="text-[10px] text-orange-500 h-4 uppercase"></p>
+            <div id="timer-display" class="text-[25vw] font-black tracking-tighter emerald-glow transition-colors duration-700">0.0</div>
+            
+            <button id="ignition-btn" class="mt-4 px-10 py-3 border-2 border-emerald-500 rounded-full font-bold text-xs tracking-widest uppercase">Arm System</button>
+            
+            <div class="mt-8 flex flex-col items-center gap-2">
+                <button onclick="isIdling ? stopIdle() : startIdle()" class="text-[10px] text-emerald-500/50 underline uppercase tracking-widest">
+                    Manual Stop/Start
+                </button>
+                <button onclick="toggleGhostDrive()" class="text-[10px] text-orange-500/50 underline uppercase tracking-widest">
+                    Toggle Ghost Drive
+                </button>
+            </div>
+
+            <p id="speed-display" class="text-[10px] opacity-40 mt-6 uppercase tracking-[0.3em]">Spd: 0.0 m/s</p>
+        </div>
+
+        <div class="mt-4 p-2 bg-white/5 rounded text-[8px] opacity-30 font-mono">
+            GPS_LOG: <span id="debug-coords">WAITING_FOR_SIGNAL...</span>
+        </div>
+    </div>
+
+    <div id="page-menu" class="page bg-black">
+        <div class="flex justify-between mb-8">
+            <h1 class="text-xl font-black italic">DATABASE_NAV</h1>
+            <button onclick="showPage('page-dash')" class="text-xs border border-white/20 px-3 py-1">BACK</button>
+        </div>
+        <div class="grid grid-cols-2 gap-4 mb-8">
+            <div onclick="showPage('page-stats')" class="btn-nav py-6">STATISTICS</div>
+            <div onclick="showPage('page-map')" class="btn-nav py-6">ALL-TIME MAP</div>
+            <div onclick="exportData()" class="btn-nav py-6">EXPORT CSV</div>
+            <div onclick="shareApp()" class="btn-nav py-6">SHARE</div>
+        </div>
+        <p class="text-[10px] opacity-30 mb-2 uppercase">Recent History</p>
+        <div id="mini-log" class="text-[10px] space-y-1 h-48 overflow-y-auto border border-emerald-500/10 p-2"></div>
+    </div>
+
+    <div id="page-stats" class="page bg-black overflow-y-auto">
+        <button onclick="showPage('page-menu')" class="text-xs mb-4 border border-white/20 px-2 py-1 inline-block">BACK</button>
+        <h2 class="text-sm font-bold border-b border-emerald-500/20 pb-2 mb-4 uppercase">Time Lost</h2>
+        <div class="space-y-4 mb-8">
+            <div class="flex justify-between"><span>Today</span><span id="stat-day">0s</span></div>
+        </div>
+    </div>
+
+    <div id="page-map" class="page bg-black">
+        <button onclick="showPage('page-menu')" class="text-xs mb-4 border border-white/20 px-2 py-1 inline-block">BACK</button>
+        <div id="map"></div>
+    </div>
+
+    <div id="page-snap" class="page bg-black/95">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-black italic text-emerald-500">SESSION_HEATMAP</h2>
+            <button onclick="showPage('page-dash')" class="text-xs border border-white/20 px-4 py-2">CLOSE</button>
+        </div>
+        <div id="snapshot-map"></div>
+        <div class="mt-6 p-4 border border-emerald-500/20 rounded-lg">
+            <p id="snap-stats" class="text-xl font-bold italic text-center">ANALYZING DRIVE...</p>
+        </div>
+    </div>
+
+    <script>
+        let db = JSON.parse(localStorage.getItem('gravity_db') || '[]');
+        let isArmed = false, isIdling = false, startTime, timerInterval;
+        let currentPos = {lat: 0, lng: 0};
+        let sessionStartTime = null, snapMapInstance = null, mainMapInstance = null;
+        let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function showPage(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+            document.getElementById(id).classList.add('active-page');
+            if(id === 'page-map') renderMainMap();
+            if(id === 'page-stats') renderStats();
+            if(id === 'page-menu') renderMiniLog();
+        }
+
+        function playSound(f1, f2) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.connect(g); g.connect(audioCtx.destination);
+            o.frequency.setValueAtTime(f1, audioCtx.currentTime);
+            o.frequency.exponentialRampToValueAtTime(f2, audioCtx.currentTime + 0.1);
+            g.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            o.start(); o.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function startIdle() {
+            if (isIdling || !isArmed) return;
+            isIdling = true; startTime = Date.now();
+            playSound(880, 440);
+            timerInterval = setInterval(() => {
+                const dur = (Date.now() - startTime) / 1000;
+                document.getElementById('timer-display').innerText = dur.toFixed(1);
+            }, 100);
+        }
+
+        function stopIdle() {
+            if (!isIdling) return;
+            isIdling = false; clearInterval(timerInterval);
+            const dur = parseFloat(document.getElementById('timer-display').innerText);
+            if (dur > 1) {
+                db.push({ ts: Date.now(), dur, lat: currentPos.lat, lng: currentPos.lng });
+                localStorage.setItem('gravity_db', JSON.stringify(db));
+                playSound(440, 880);
+            }
+            document.getElementById('timer-display').innerText = "0.0";
+        }
+
+        document.getElementById('ignition-btn').addEventListener('click', () => {
+            isArmed = !isArmed;
+            const btn = document.getElementById('ignition-btn');
+            if (isArmed) {
+                sessionStartTime = Date.now();
+                btn.innerText = "SYSTEM ARMED";
+                btn.style.borderColor = "#10b981";
+                document.getElementById('snap-btn').classList.remove('hidden');
+            } else {
+                btn.innerText = "ARM SYSTEM";
+                btn.style.borderColor = "#333";
+                stopIdle();
+            }
+        });
+
+        function takeSnapshot() {
+            showPage('page-snap');
+            const sessionData = db.filter(l => l.ts >= sessionStartTime);
+            setTimeout(() => {
+                if (snapMapInstance) snapMapInstance.remove();
+                snapMapInstance = L.map('snapshot-map').setView([currentPos.lat, currentPos.lng], 15);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(snapMapInstance);
+                let total = 0;
+                sessionData.forEach(l => {
+                    total += l.dur;
+                    const c = l.dur > 60 ? '#ef4444' : '#10b981';
+                    L.circle([l.lat, l.lng], {radius: 30, color: c, fillOpacity: 0.6}).addTo(snapMapInstance);
+                });
+                document.getElementById('snap-stats').innerText = `${sessionData.length} STOPS | ${Math.round(total/60)}m WASTED`;
+            }, 100);
+        }
+
+        function renderMainMap() {
+            if (mainMapInstance) mainMapInstance.remove();
+            mainMapInstance = L.map('map').setView([currentPos.lat, currentPos.lng], 12);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mainMapInstance);
+            db.forEach(l => L.circle([l.lat, l.lng], {radius: 20, color: '#10b981'}).addTo(mainMapInstance));
+        }
+
+        function renderStats() {
+            const day = db.filter(l => Date.now() - l.ts < 86400000).reduce((a,b) => a+b.dur, 0);
+            document.getElementById('stat-day').innerText = (day/60).toFixed(1) + 'm';
+        }
+
+        function renderMiniLog() {
+            const last10 = db.slice(-10).reverse();
+            document.getElementById('mini-log').innerHTML = last10.map(l => `<div class="flex justify-between border-b border-white/5 pb-1"><span>${new Date(l.ts).toLocaleTimeString()}</span><span>${l.dur}s</span></div>`).join('');
+        }
+
+        function exportData() { window.open("data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db))); }
+        function shareApp() { if(navigator.share) navigator.share({title: 'Gravity', url: window.location.href}); }
+
+        navigator.geolocation.watchPosition(p => {
+            currentPos = { lat: p.coords.latitude, lng: p.coords.longitude };
+            const spd = p.coords.speed || 0;
+            document.getElementById('speed-display').innerText = `Spd: ${spd.toFixed(1)} m/s`;
+            document.getElementById('debug-coords').innerText = `${currentPos.lat.toFixed(4)}, ${currentPos.lng.toFixed(4)}`;
+            if (isArmed) {
+                if (spd < 0.3) startIdle();
+                else if (spd > 1.0) stopIdle();
+            }
+        }, (err) => {
+            document.getElementById('debug-coords').innerText = "GPS_ERROR: " + err.message;
+        }, {enableHighAccuracy: true});
+
+        function toggleGhostDrive() {
+            let driving = false;
+            alert("Ghost Drive Initialized: Cycling speed every 10s. Keep 'Arm System' ON.");
+            setInterval(() => {
+                driving = !driving;
+                const mockSpeed = driving ? 12.5 : 0.0;
+                document.getElementById('speed-display').innerText = `Spd: ${mockSpeed.toFixed(1)} m/s (GHOST)`;
+                if (isArmed) {
+                    if (mockSpeed < 0.3) startIdle();
+                    else stopIdle();
+                }
+            }, 10000);
+        }
+    </script>
+</body>
+</html>
+function takeSnapshot() {
+    showPage('page-snap');
+    
+    // 1. Filter data for ONLY this session
+    const sessionData = db.filter(l => l.ts >= sessionStartTime);
+    
+    // 2. Small delay to ensure the HTML container is visible before Leaflet loads
+    setTimeout(() => {
+        if (snapMapInstance) {
+            snapMapInstance.remove();
+        }
+
+        // 3. Center on current position if no stops exist, otherwise center on the first stop
+        const mapCenter = sessionData.length > 0 
+            ? [sessionData[0].lat, sessionData[0].lng] 
+            : [currentPos.lat, currentPos.lng];
+
+        snapMapInstance = L.map('snapshot-map').setView(mapCenter, 15);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(snapMapInstance);
+
+        // 4. THE FIX: Force the map to fill the container
+        snapMapInstance.invalidateSize();
+
+        let total = 0;
+        sessionData.forEach(l => {
+            total += l.dur;
+            const c = l.dur > 60 ? '#ef4444' : '#10b981';
+            L.circle([l.lat, l.lng], {
+                radius: 30, 
+                color: c, 
+                fillColor: c, 
+                fillOpacity: 0.6
+            }).addTo(snapMapInstance);
+        });
+
+        document.getElementById('snap-stats').innerText = 
+            `${sessionData.length} STOPS | ${Math.round(total/60)}m WASTED`;
+            
+    }, 300); // 300ms is the "sweet spot" for mobile transitions
+}
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-
+
+        /* Update this in your <style> section */
+#map, #snapshot-map { 
+    height: 350px; 
+    background: #111; /* Add this line */
+    border-radius: 12px; 
+    filter: invert(100%) hue-rotate(180deg) brightness(95%); 
+    margin-top: 20px; 
+    border: 1px solid #10b98133; 
+}
+        /* Update this in your <style> section */
+#map, #snapshot-map { 
+    height: 350px; 
+    background: #111; /* Add this line */
+    border-radius: 12px; 
+    filter: invert(100%) hue-rotate(180deg) brightness(95%); 
+    margin-top: 20px; 
+    border: 1px solid #10b98133; 
+}
+        function takeSnapshot() {
+    showPage('page-snap');
+    
+    // Fallback if system isn't armed yet
+    const startTime = sessionStartTime || Date.now();
+    const sessionData = db.filter(l => l.ts >= startTime);
+    
+    // Show a loading state immediately
+    document.getElementById('snap-stats').innerText = "GENERATING TACTICAL VIEW...";
+
+    setTimeout(() => {
+        if (snapMapInstance) {
+            snapMapInstance.remove();
+        }
+
+        // Check if we have a valid current position
+        const center = (currentPos.lat !== 0) ? [currentPos.lat, currentPos.lng] : [0,0];
+
+        snapMapInstance = L.map('snapshot-map').setView(center, 15);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(snapMapInstance);
+
+        // FORCE RENDER
+        snapMapInstance.invalidateSize();
+
+        let total = 0;
+        sessionData.forEach(l => {
+            total += l.dur;
+            const c = l.dur > 60 ? '#ef4444' : '#10b981';
+            L.circle([l.lat, l.lng], {
+                radius: 30, 
+                color: c, 
+                fillColor: c, 
+                fillOpacity: 0.6
+            }).addTo(snapMapInstance);
+        });
+
+        document.getElementById('snap-stats').innerText = 
+            `${sessionData.length} STOPS | ${Math.round(total/60)}m WASTED`;
+            
+    }, 400); // Increased slightly for slower mobile processors
+}
+    /* Update this in your <style> section */
+#map, #snapshot-map { 
+    height: 350px; 
+    background: #111; /* Add this line */
+    border-radius: 12px; 
+    filter: invert(100%) hue-rotate(180deg) brightness(95%); 
+    margin-top: 20px; 
+    border: 1px solid #10b98133; 
+}
+        function takeSnapshot() {
+    showPage('page-snap');
+    
+    // Fallback if system isn't armed yet
+    const startTime = sessionStartTime || Date.now();
+    const sessionData = db.filter(l => l.ts >= startTime);
+    
+    // Show a loading state immediately
+    document.getElementById('snap-stats').innerText = "GENERATING TACTICAL VIEW...";
+
+    setTimeout(() => {
+        if (snapMapInstance) {
+            snapMapInstance.remove();
+        }
+
+        // Check if we have a valid current position
+        const center = (currentPos.lat !== 0) ? [currentPos.lat, currentPos.lng] : [0,0];
+
+        snapMapInstance = L.map('snapshot-map').setView(center, 15);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(snapMapInstance);
+
+        // FORCE RENDER
+        snapMapInstance.invalidateSize();
+
+        let total = 0;
+        sessionData.forEach(l => {
+            total += l.dur;
+            const c = l.dur > 60 ? '#ef4444' : '#10b981';
+            L.circle([l.lat, l.lng], {
+                radius: 30, 
+                color: c, 
+                fillColor: c, 
+                fillOpacity: 0.6
+            }).addTo(snapMapInstance);
+        });
+
+        document.getElementById('snap-stats').innerText = 
+            `${sessionData.length} STOPS | ${Math.round(total/60)}m WASTED`;
+            
+    }, 400); // Increased slightly for slower mobile processors
+}
