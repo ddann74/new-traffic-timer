@@ -3,18 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gravity Intelligence Pro</title>
+    <title>Gravity Intel Pro</title>
     <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: #10b981; overflow: hidden; height: 100vh; }
-        .page { display: none; height: 100vh; width: 100vw; position: absolute; padding: 20px; box-sizing: border-box; }
-        .active-page { display: flex; flex-direction: column; z-index: 10; }
-        .emerald-glow { text-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
-        #map { height: 400px; width: 100%; border-radius: 12px; filter: invert(100%) hue-rotate(180deg); margin-top: 20px; border: 1px solid #10b98133; }
+        
+        /* THEME COLOR: VIVID AMBER */
+        :root { --theme: #fbbf24; --theme-dim: rgba(251, 191, 36, 0.2); }
+
+        body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: var(--theme); overflow: hidden; height: 100vh; }
+        .page { display: none; height: 100vh; width: 100vw; position: absolute; padding: 25px; box-sizing: border-box; background: #050505; }
+        .active-page { display: flex; flex-direction: column; z-index: 50; }
+        
+        /* BRIGHTER GLOW EFFECT */
+        .glow-text { text-shadow: 0 0 15px var(--theme), 0 0 30px var(--theme-dim); color: #fff; }
+        .glow-border { border-color: var(--theme); box-shadow: 0 0 15px var(--theme-dim); }
+
+        #map { 
+            flex-grow: 1; width: 100%; border-radius: 15px; 
+            filter: invert(100%) hue-rotate(200deg) brightness(1.2); 
+            margin-top: 20px; border: 1px solid var(--theme-dim);
+        }
     </style>
 </head>
 <body>
@@ -22,133 +34,109 @@
     <div id="page-dash" class="page active-page">
         <div class="flex justify-between items-start">
             <div>
-                <button onclick="showPage('page-map')" class="border border-emerald-500/30 px-3 py-1 text-[10px] uppercase">View Map</button>
-                <p class="text-[8px] opacity-30 mt-1">v2.0.4 | UPDATED: 2024-05-22 14:30</p>
+                <button onclick="showPage('page-map')" class="border border-amber-500/50 px-4 py-1 text-[10px] uppercase font-bold">Tactical Map</button>
+                <p class="text-[9px] opacity-60 mt-2 uppercase tracking-widest">Build: 2024-05-22_v3</p>
             </div>
-            <p id="status-text" class="text-xs font-bold uppercase tracking-widest">Standby_</p>
+            <div class="text-right">
+                <p id="status-text" class="text-xs font-black uppercase tracking-widest">System_Ready</p>
+                <p class="text-[8px] opacity-40">STABLE_LINK_ACTIVE</p>
+            </div>
         </div>
 
         <div class="flex-1 flex flex-col items-center justify-center">
-            <div id="timer-display" class="text-[20vw] font-black tracking-tighter emerald-glow">0.0</div>
-            <button id="ignition-btn" class="mt-4 px-10 py-4 border-2 border-emerald-500 rounded-full font-bold text-xs tracking-widest uppercase active:bg-emerald-500 active:text-black transition-all">Arm System</button>
-            <p id="speed-display" class="text-[10px] opacity-40 mt-6 uppercase tracking-[0.3em]">Spd: 0.0 m/s</p>
+            <div id="timer-display" class="text-[25vw] font-black tracking-tighter glow-text">0.0</div>
+            
+            <button id="ignition-btn" class="mt-6 px-12 py-5 border-2 glow-border rounded-xl font-black text-sm uppercase transition-all active:scale-95 bg-transparent">
+                Arm System
+            </button>
+            
+            <div class="mt-8 flex gap-8">
+                <p id="speed-display" class="text-[10px] font-bold uppercase tracking-widest opacity-70">Spd: 0.0 m/s</p>
+                <p id="lat-display" class="text-[10px] font-bold uppercase tracking-widest opacity-30">0.0000, 0.0000</p>
+            </div>
         </div>
-        
-        <div class="text-[8px] opacity-20 text-center pb-4">GPS_READY // STORAGE_ACTIVE</div>
     </div>
 
     <div id="page-map" class="page">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xs font-bold uppercase">Tactical_Map</h2>
-            <button onclick="showPage('page-dash')" class="border border-white/20 px-4 py-1 text-[10px]">Close</button>
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="text-xs font-black uppercase">Navigation_Matrix</h2>
+            <button onclick="showPage('page-dash')" class="bg-amber-500 text-black px-4 py-1 text-[10px] font-bold rounded">Exit</button>
         </div>
         <div id="map"></div>
     </div>
 
     <script>
-        // DATA STATE
         let db = JSON.parse(localStorage.getItem('gravity_db') || '[]');
-        let isArmed = false;
-        let isIdling = false;
-        let startTime;
-        let timerInterval;
-        let currentPos = { lat: 0, lng: 0 };
-        let mapInstance = null;
+        let isArmed = false, isIdling = false, startTime, timerInterval;
+        let currentPos = {lat: 0, lng: 0}, mainMapInstance = null;
 
-        // AUDIO SETUP
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-        // 1. INITIALIZE SENSORS (Triggered by button to bypass browser security)
-        function initSensors() {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            
-            if ("geolocation" in navigator) {
-                navigator.geolocation.watchPosition(
-                    (pos) => {
-                        const speed = pos.coords.speed || 0;
-                        updateSystem(pos.coords.latitude, pos.coords.longitude, speed);
-                    },
-                    (err) => console.warn("GPS_ERROR:", err.message),
-                    { enableHighAccuracy: true }
-                );
-            }
+        function showPage(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+            document.getElementById(id).classList.add('active-page');
+            if (id === 'page-map') setTimeout(initMap, 150);
         }
 
-        // 2. CORE LOGIC
+        function initMap() {
+            if (mainMapInstance) mainMapInstance.remove();
+            mainMapInstance = L.map('map').setView([currentPos.lat, currentPos.lng], 16);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mainMapInstance);
+            
+            // Render logs as bright amber circles
+            db.forEach(log => {
+                L.circle([log.lat, log.lng], {radius: 15, color: '#fbbf24', fillOpacity: 0.8}).addTo(mainMapInstance);
+            });
+            setTimeout(() => mainMapInstance.invalidateSize(), 200);
+        }
+
         function updateSystem(lat, lng, spd) {
             currentPos = { lat, lng };
             document.getElementById('speed-display').innerText = `Spd: ${spd.toFixed(1)} m/s`;
+            document.getElementById('lat-display').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
             
             if (isArmed) {
-                // If speed drops below 0.3 m/s, start the timer
                 if (spd < 0.3 && !isIdling) {
-                    startTimer();
-                } 
-                // If speed goes above 0.8 m/s, stop and save
-                else if (spd > 0.8 && isIdling) {
-                    stopTimer();
+                    isIdling = true;
+                    startTime = Date.now();
+                    document.getElementById('status-text').innerText = "IDLING_STATIONARY";
+                    timerInterval = setInterval(() => {
+                        document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
+                    }, 100);
+                } else if (spd > 0.8 && isIdling) {
+                    isIdling = false;
+                    clearInterval(timerInterval);
+                    const dur = parseFloat(document.getElementById('timer-display').innerText);
+                    if (dur > 2) db.push({ts: Date.now(), dur, lat, lng});
+                    localStorage.setItem('gravity_db', JSON.stringify(db));
+                    document.getElementById('timer-display').innerText = "0.0";
+                    document.getElementById('status-text').innerText = "SYSTEM_ARMED";
                 }
             }
         }
 
-        function startTimer() {
-            isIdling = true;
-            startTime = Date.now();
-            document.getElementById('status-text').innerText = "IDLING_";
-            document.getElementById('status-text').style.color = "#fbbf24"; // Amber
+        // START SYSTEM ON BUTTON CLICK
+        document.getElementById('ignition-btn').addEventListener('click', function() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
             
-            timerInterval = setInterval(() => {
-                const elapsed = (Date.now() - startTime) / 1000;
-                document.getElementById('timer-display').innerText = elapsed.toFixed(1);
-            }, 100);
-        }
+            isArmed = !isArmed;
+            this.innerText = isArmed ? "System Online" : "Arm System";
+            this.style.backgroundColor = isArmed ? "#fbbf24" : "transparent";
+            this.style.color = isArmed ? "#000" : "#fbbf24";
+            document.getElementById('status-text').innerText = isArmed ? "System_Armed" : "System_Ready";
 
-        function stopTimer() {
-            isIdling = false;
-            clearInterval(timerInterval);
-            const duration = parseFloat(document.getElementById('timer-display').innerText);
-            
-            if (duration > 2) {
-                db.push({ ts: Date.now(), dur: duration, lat: currentPos.lat, lng: currentPos.lng });
-                localStorage.setItem('gravity_db', JSON.stringify(db));
+            if (isArmed && "geolocation" in navigator) {
+                navigator.geolocation.watchPosition(pos => {
+                    updateSystem(pos.coords.latitude, pos.coords.longitude, pos.coords.speed || 0);
+                }, err => console.error(err), { enableHighAccuracy: true });
             }
             
-            document.getElementById('timer-display').innerText = "0.0";
-            document.getElementById('status-text').innerText = "ARMED_";
-            document.getElementById('status-text').style.color = "#10b981"; // Emerald
-        }
-
-        // 3. UI NAVIGATION
-        function showPage(id) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
-            document.getElementById(id).classList.add('active-page');
-            if (id === 'page-map') setTimeout(renderMap, 100);
-        }
-
-        function renderMap() {
-            if (mapInstance) mapInstance.remove();
-            mapInstance = L.map('map').setView([currentPos.lat || 0, currentPos.lng || 0], 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
-            
-            db.forEach(log => {
-                L.circle([log.lat, log.lng], {radius: 20, color: '#10b981', fillOpacity: 0.5}).addTo(mapInstance);
-            });
-            
-            setTimeout(() => mapInstance.invalidateSize(), 200);
-        }
-
-        // 4. BUTTON LISTENER (Inside the script tags where it belongs)
-        document.getElementById('ignition-btn').addEventListener('click', function() {
-            initSensors();
-            isArmed = !isArmed;
-            
-            this.innerText = isArmed ? "System Armed" : "Arm System";
-            this.style.borderColor = isArmed ? "#ef4444" : "#10b981"; // Red when armed
-            document.getElementById('status-text').innerText = isArmed ? "Armed_" : "Standby_";
-            
-            if (!isArmed && isIdling) stopTimer();
+            if (!isArmed && isIdling) {
+                clearInterval(timerInterval);
+                isIdling = false;
+                document.getElementById('timer-display').innerText = "0.0";
+            }
         });
-
     </script>
 </body>
 </html>
