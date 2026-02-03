@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gravity Intel Pro</title>
+    <title>Gravity Intelligence Pro</title>
     <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -11,86 +11,95 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
         body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: #10b981; overflow: hidden; height: 100vh; }
-        .page { display: none; height: 100vh; width: 100vw; position: absolute; top: 0; left: 0; padding: 20px; box-sizing: border-box; background: #050505; }
-        .active-page { display: flex; flex-direction: column; z-index: 50; }
+        .page { display: none; height: 100vh; width: 100vw; position: absolute; padding: 20px; box-sizing: border-box; }
+        .active-page { display: flex; flex-direction: column; z-index: 10; }
         #map, #snapshot-map { 
-            flex-grow: 1; 
-            width: 100%; 
+            height: 350px; 
+            width: 100%;
             border-radius: 12px; 
             filter: invert(100%) hue-rotate(180deg) brightness(95%); 
-            margin: 15px 0; 
-            border: 1px solid #10b98133;
-            background: #111;
+            margin-top: 20px; 
+            border: 1px solid #10b98133; 
         }
     </style>
 </head>
 <body>
-
     <div id="page-dash" class="page active-page">
-        <div class="flex justify-between items-start mb-4">
-            <button onclick="showPage('page-menu')" class="border border-emerald-500/30 px-3 py-1 text-[10px] uppercase">Database</button>
-            <div class="text-right">
-                <button onclick="takeSnapshot()" id="snap-btn" class="hidden bg-emerald-500 text-black px-2 py-1 font-bold text-[10px] rounded mb-2 uppercase">Snapshot</button>
-                <p id="status-text" class="text-xs font-bold uppercase tracking-widest">Standby_</p>
-            </div>
+        <div class="flex justify-between">
+            <button onclick="showPage('page-menu')" class="border border-emerald-500/30 px-3 py-1 text-[10px]">MENU</button>
+            <p id="status-text" class="text-xs font-bold uppercase">Standby_</p>
         </div>
         <div class="flex-1 flex flex-col items-center justify-center">
-            <div id="timer-display" class="text-[20vw] font-black tracking-tighter">0.0</div>
-            <button id="ignition-btn" class="mt-4 px-10 py-4 border-2 border-emerald-500 rounded-full font-bold text-xs uppercase active:bg-emerald-500 active:text-black">Arm System</button>
-            <p id="speed-display" class="text-[10px] opacity-40 mt-6 uppercase">Spd: 0.0 m/s</p>
+            <div id="timer-display" class="text-[20vw] font-black">0.0</div>
+            <button id="ignition-btn" class="mt-4 px-10 py-4 border-2 border-emerald-500 rounded-full font-bold">ARM SYSTEM</button>
+            <p id="speed-display" class="text-[10px] opacity-40 mt-4">Spd: 0.0 m/s</p>
         </div>
     </div>
 
     <div id="page-map" class="page">
-        <div class="flex justify-between items-center mb-2">
-            <h2 class="text-xs font-bold uppercase tracking-widest">Tactical_Map</h2>
-            <button onclick="showPage('page-dash')" class="border border-white/20 px-4 py-1 text-[10px]">Back</button>
-        </div>
+        <button onclick="showPage('page-dash')" class="mb-4 text-[10px]">BACK</button>
         <div id="map"></div>
     </div>
 
     <script>
         let db = JSON.parse(localStorage.getItem('gravity_db') || '[]');
-        let isArmed = false, currentPos = {lat: 0, lng: 0}, mainMapInstance = null;
+        let isArmed = false, isIdling = false, startTime, timerInterval;
+        let currentPos = {lat: 0, lng: 0}, ghostMode = false;
+        let mainMapInstance = null;
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
         function showPage(id) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.getElementById(id).classList.add('active-page');
-            
-            // CRITICAL FIX: Refresh map when page becomes visible
-            if (id === 'page-map') {
-                setTimeout(initMap, 100);
-            }
+            if (id === 'page-map') setTimeout(renderMap, 100);
         }
 
-        function initMap() {
+        function renderMap() {
             if (mainMapInstance) mainMapInstance.remove();
-            
-            // Set view to current location, or default to 0,0 if GPS hasn't fired
-            const lat = currentPos.lat || 0;
-            const lng = currentPos.lng || 0;
-
-            mainMapInstance = L.map('map').setView([lat, lng], 15);
+            mainMapInstance = L.map('map').setView([currentPos.lat, currentPos.lng], 15);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mainMapInstance);
-            
-            db.forEach(log => {
-                L.circle([log.lat, log.lng], {radius: 20, color: '#10b981'}).addTo(mainMapInstance);
-            });
-
-            // Force recalculation of container size
             setTimeout(() => mainMapInstance.invalidateSize(), 200);
         }
 
-        document.getElementById('ignition-btn').addEventListener('click', function() {
-            isArmed = !isArmed;
-            this.innerText = isArmed ? "SYSTEM ARMED" : "ARM SYSTEM";
-            
-            if (isArmed && "geolocation" in navigator) {
+        const initSensors = () => {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            if (navigator.geolocation) {
                 navigator.geolocation.watchPosition(pos => {
-                    currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                    document.getElementById('speed-display').innerText = `Spd: ${(pos.coords.speed || 0).toFixed(1)} m/s`;
+                    if (!ghostMode) updateSystem(pos.coords.latitude, pos.coords.longitude, pos.coords.speed || 0);
                 }, err => console.error(err), { enableHighAccuracy: true });
             }
+        };
+
+        function updateSystem(lat, lng, spd) {
+            currentPos = { lat, lng };
+            document.getElementById('speed-display').innerText = `Spd: ${spd.toFixed(1)} m/s`;
+            if (isArmed && spd < 0.3 && !isIdling) startIdle();
+            if (isArmed && spd > 0.8 && isIdling) stopIdle();
+        }
+
+        function startIdle() {
+            isIdling = true;
+            startTime = Date.now();
+            timerInterval = setInterval(() => {
+                document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
+            }, 100);
+        }
+
+        function stopIdle() {
+            isIdling = false;
+            clearInterval(timerInterval);
+            const dur = parseFloat(document.getElementById('timer-display').innerText);
+            if (dur > 2) db.push({ts: Date.now(), dur, ...currentPos});
+            localStorage.setItem('gravity_db', JSON.stringify(db));
+            document.getElementById('timer-display').innerText = "0.0";
+        }
+
+        document.getElementById('ignition-btn').addEventListener('click', () => {
+            initSensors();
+            isArmed = !isArmed;
+            document.getElementById('ignition-btn').innerText = isArmed ? "SYSTEM ARMED" : "ARM SYSTEM";
+            if(!isArmed) stopIdle();
         });
     </script>
 </body>
