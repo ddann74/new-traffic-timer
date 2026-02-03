@@ -13,7 +13,6 @@
         body { font-family: 'JetBrains+Mono', monospace; background-color: #050505; color: #10b981; overflow: hidden; height: 100vh; }
         .page { display: none; height: 100vh; width: 100vw; position: absolute; top: 0; left: 0; padding: 20px; box-sizing: border-box; background: #050505; }
         .active-page { display: flex; flex-direction: column; z-index: 50; }
-        .emerald-glow { text-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
         #map, #snapshot-map { 
             flex-grow: 1; 
             width: 100%; 
@@ -23,209 +22,76 @@
             border: 1px solid #10b98133;
             background: #111;
         }
-        .btn-ui { border: 1px solid rgba(16, 185, 129, 0.3); padding: 8px 16px; text-transform: uppercase; font-size: 10px; cursor: pointer; }
-        .btn-ui:active { background: #10b981; color: #000; }
     </style>
 </head>
 <body>
 
     <div id="page-dash" class="page active-page">
         <div class="flex justify-between items-start mb-4">
-            <button onclick="showPage('page-menu')" class="btn-ui">Menu</button>
+            <button onclick="showPage('page-menu')" class="border border-emerald-500/30 px-3 py-1 text-[10px] uppercase">Database</button>
             <div class="text-right">
                 <button onclick="takeSnapshot()" id="snap-btn" class="hidden bg-emerald-500 text-black px-2 py-1 font-bold text-[10px] rounded mb-2 uppercase">Snapshot</button>
                 <p id="status-text" class="text-xs font-bold uppercase tracking-widest">Standby_</p>
             </div>
         </div>
         <div class="flex-1 flex flex-col items-center justify-center">
-            <div id="timer-display" class="text-[20vw] font-black tracking-tighter emerald-glow">0.0</div>
-            <button id="ignition-btn" class="mt-4 px-10 py-4 border-2 border-emerald-500 rounded-full font-bold text-xs tracking-widest uppercase active:bg-emerald-500 active:text-black transition-all">Arm System</button>
-            <p id="speed-display" class="text-[10px] opacity-40 mt-6 uppercase tracking-[0.3em]">Spd: 0.0 m/s</p>
+            <div id="timer-display" class="text-[20vw] font-black tracking-tighter">0.0</div>
+            <button id="ignition-btn" class="mt-4 px-10 py-4 border-2 border-emerald-500 rounded-full font-bold text-xs uppercase active:bg-emerald-500 active:text-black">Arm System</button>
+            <p id="speed-display" class="text-[10px] opacity-40 mt-6 uppercase">Spd: 0.0 m/s</p>
         </div>
-        <div class="mt-4 p-2 bg-white/5 rounded text-[8px] opacity-30 font-mono">
-            SYS_LOG: <span id="debug-coords">GPS_OFFLINE</span>
-        </div>
-    </div>
-
-    <div id="page-menu" class="page">
-        <div class="flex justify-between mb-8">
-            <h1 class="text-xl font-black italic text-emerald-500 underline">DATABASE</h1>
-            <button onclick="showPage('page-dash')" class="btn-ui">Back</button>
-        </div>
-        <div class="grid grid-cols-2 gap-4">
-            <div onclick="showPage('page-map')" class="border border-emerald-500/50 p-6 text-center text-[10px] cursor-pointer hover:bg-emerald-500/10 uppercase">Global Heatmap</div>
-            <div onclick="exportData()" class="border border-emerald-500/50 p-6 text-center text-[10px] cursor-pointer hover:bg-emerald-500/10 uppercase">Export JSON</div>
-        </div>
-        <div id="mini-log" class="mt-8 text-[9px] space-y-1 overflow-y-auto max-h-64 border-t border-white/10 pt-4"></div>
     </div>
 
     <div id="page-map" class="page">
         <div class="flex justify-between items-center mb-2">
-            <h2 class="text-xs font-bold uppercase">Tactical_Map</h2>
-            <button onclick="showPage('page-menu')" class="btn-ui">Close</button>
+            <h2 class="text-xs font-bold uppercase tracking-widest">Tactical_Map</h2>
+            <button onclick="showPage('page-dash')" class="border border-white/20 px-4 py-1 text-[10px]">Back</button>
         </div>
         <div id="map"></div>
     </div>
 
-    <div id="page-snap" class="page">
-        <div class="flex justify-between items-center mb-2">
-            <h2 class="text-xs font-bold">SESSION_DATA</h2>
-            <button onclick="showPage('page-dash')" class="btn-ui text-emerald-500 border-emerald-500">Return</button>
-        </div>
-        <div id="snapshot-map"></div>
-        <div class="p-4 border border-emerald-500/20 rounded-lg text-center bg-emerald-500/5">
-            <p id="snap-stats" class="text-lg font-bold italic tracking-tighter uppercase">Analyzing...</p>
-        </div>
-    </div>
-
     <script>
-        // --- DATA & CONFIG ---
         let db = JSON.parse(localStorage.getItem('gravity_db') || '[]');
-        let isArmed = false, isIdling = false, startTime, timerInterval;
-        let currentPos = {lat: 0, lng: 0};
-        let sessionStartTime = null;
-        let mainMapInstance = null, snapMapInstance = null;
-        
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let isArmed = false, currentPos = {lat: 0, lng: 0}, mainMapInstance = null;
 
-        // --- AUDIO ENGINE ---
-        function playPing(freq = 440, duration = 0.1) {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.frequency.value = freq;
-            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-            osc.start(); osc.stop(audioCtx.currentTime + duration);
-        }
-
-        // --- CORE LOGIC ---
-        function initSensors() {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            if ("geolocation" in navigator) {
-                navigator.geolocation.watchPosition(
-                    (pos) => {
-                        const { latitude, longitude, speed } = pos.coords;
-                        updateSystem(latitude, longitude, speed || 0);
-                    },
-                    (err) => { document.getElementById('debug-coords').innerText = "ERR: " + err.message; },
-                    { enableHighAccuracy: true, maximumAge: 0 }
-                );
-            }
-        }
-
-        function updateSystem(lat, lng, spd) {
-            currentPos = { lat, lng };
-            document.getElementById('speed-display').innerText = `Spd: ${spd.toFixed(1)} m/s`;
-            document.getElementById('debug-coords').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-            
-            if (isArmed) {
-                if (spd < 0.3 && !isIdling) startIdle();
-                else if (spd > 0.8 && isIdling) stopIdle();
-            }
-        }
-
-        function startIdle() {
-            isIdling = true;
-            startTime = Date.now();
-            playPing(600, 0.2);
-            document.getElementById('status-text').innerText = "IDLING_";
-            timerInterval = setInterval(() => {
-                document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
-            }, 100);
-        }
-
-        function stopIdle() {
-            if (!isIdling) return;
-            isIdling = false;
-            clearInterval(timerInterval);
-            const duration = parseFloat(document.getElementById('timer-display').innerText);
-            
-            if (duration > 2) {
-                db.push({ ts: Date.now(), dur: duration, lat: currentPos.lat, lng: currentPos.lng });
-                localStorage.setItem('gravity_db', JSON.stringify(db));
-                playPing(300, 0.3);
-            }
-            
-            document.getElementById('timer-display').innerText = "0.0";
-            document.getElementById('status-text').innerText = "ARMED_";
-            renderMiniLog();
-        }
-
-        // --- NAVIGATION & MAPS ---
         function showPage(id) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.getElementById(id).classList.add('active-page');
             
+            // CRITICAL FIX: Refresh map when page becomes visible
             if (id === 'page-map') {
-                setTimeout(renderMainMap, 100);
+                setTimeout(initMap, 100);
             }
         }
 
-        function renderMainMap() {
+        function initMap() {
             if (mainMapInstance) mainMapInstance.remove();
-            mainMapInstance = L.map('map').setView([currentPos.lat || 0, currentPos.lng || 0], 15);
+            
+            // Set view to current location, or default to 0,0 if GPS hasn't fired
+            const lat = currentPos.lat || 0;
+            const lng = currentPos.lng || 0;
+
+            mainMapInstance = L.map('map').setView([lat, lng], 15);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mainMapInstance);
             
             db.forEach(log => {
-                L.circle([log.lat, log.lng], {radius: 20, color: '#10b981', fillOpacity: 0.4}).addTo(mainMapInstance);
+                L.circle([log.lat, log.lng], {radius: 20, color: '#10b981'}).addTo(mainMapInstance);
             });
 
-            // CRITICAL: Refresh map size calculation
+            // Force recalculation of container size
             setTimeout(() => mainMapInstance.invalidateSize(), 200);
         }
 
-        function takeSnapshot() {
-            showPage('page-snap');
-            const sessionData = db.filter(l => l.ts >= sessionStartTime);
-            
-            setTimeout(() => {
-                if (snapMapInstance) snapMapInstance.remove();
-                snapMapInstance = L.map('snapshot-map').setView([currentPos.lat, currentPos.lng], 16);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(snapMapInstance);
-                
-                let total = 0;
-                sessionData.forEach(l => {
-                    total += l.dur;
-                    L.circle([l.lat, l.lng], {radius: 30, color: '#ef4444'}).addTo(snapMapInstance);
-                });
-                
-                document.getElementById('snap-stats').innerText = `${sessionData.length} STOPS | ${Math.round(total)}s TOTAL`;
-                snapMapInstance.invalidateSize();
-            }, 300);
-        }
-
-        // --- UTILS ---
-        function renderMiniLog() {
-            const logs = db.slice(-10).reverse();
-            document.getElementById('mini-log').innerHTML = logs.map(l => 
-                `<div class="flex justify-between border-b border-white/5 pb-1 uppercase">
-                    <span>${new Date(l.ts).toLocaleTimeString()}</span>
-                    <span class="text-emerald-500">${l.dur}s</span>
-                </div>`
-            ).join('');
-        }
-
-        function exportData() {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
-            const a = document.createElement('a');
-            a.href = dataStr; a.download = "gravity_data.json"; a.click();
-        }
-
-        // --- LISTENERS ---
         document.getElementById('ignition-btn').addEventListener('click', function() {
-            initSensors();
             isArmed = !isArmed;
-            sessionStartTime = isArmed ? Date.now() : null;
-            this.innerText = isArmed ? "System Armed" : "Arm System";
-            this.style.borderColor = isArmed ? "#ef4444" : "#10b981";
-            document.getElementById('status-text').innerText = isArmed ? "Armed_" : "Standby_";
-            document.getElementById('snap-btn').classList.toggle('hidden', !isArmed);
-            if (!isArmed) stopIdle();
+            this.innerText = isArmed ? "SYSTEM ARMED" : "ARM SYSTEM";
+            
+            if (isArmed && "geolocation" in navigator) {
+                navigator.geolocation.watchPosition(pos => {
+                    currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    document.getElementById('speed-display').innerText = `Spd: ${(pos.coords.speed || 0).toFixed(1)} m/s`;
+                }, err => console.error(err), { enableHighAccuracy: true });
+            }
         });
-
-        renderMiniLog();
     </script>
 </body>
 </html>
