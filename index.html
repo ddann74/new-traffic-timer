@@ -184,3 +184,39 @@
     </script>
 </body>
 </html>
+// Add this at the start of your <script> to ensure audio and GPS are initialized correctly
+const initSensors = () => {
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    
+    // Check for Geolocation Support
+    if (!navigator.geolocation) {
+        document.getElementById('debug-coords').innerText = "GPS_NOT_SUPPORTED";
+    }
+};
+
+// Update your Ignition Button listener to include the initializer
+document.getElementById('ignition-btn').addEventListener('click', () => {
+    initSensors(); // Resume audio context on user gesture
+    isArmed = !isArmed;
+    sessionStartTime = isArmed ? Date.now() : null;
+    document.getElementById('ignition-btn').innerText = isArmed ? "SYSTEM ARMED" : "ARM SYSTEM";
+    document.getElementById('snap-btn').classList.toggle('hidden', !isArmed);
+    if(!isArmed) stopIdle();
+});
+
+// Refine the updateSystem function to handle null speeds (common on some devices)
+function updateSystem(lat, lng, spd) {
+    currentPos = { lat, lng };
+    // Some devices return null for speed if stationary; treat null as 0
+    const currentSpeed = spd || 0; 
+    
+    document.getElementById('speed-display').innerText = `Spd: ${currentSpeed.toFixed(1)} m/s`;
+    document.getElementById('debug-coords').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    
+    if (isArmed) {
+        if (currentSpeed < 0.3 && !isIdling) startIdle();
+        else if (currentSpeed > 0.8 && isIdling) stopIdle();
+    }
+}
