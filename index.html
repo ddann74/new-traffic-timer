@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Gravity Intelligence Pro</title>
-    <link rel="apple-touch-icon" href="icon.png">
-    <link rel="icon" type="image/png" href="icon.png">
-    <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -16,7 +13,7 @@
         .page { display: none; height: 100vh; width: 100vw; position: absolute; padding: 20px; z-index: 10; }
         .active-page { display: flex; flex-direction: column; }
         .emerald-glow { text-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
-        #map, #snapshot-map { height: 350px; border-radius: 12px; filter: invert(100%) hue-rotate(180deg) brightness(95%); margin-top: 20px; border: 1px solid #10b98133; }
+        #map, #snapshot-map { height: 350px; border-radius: 12px; filter: invert(100%) hue-rotate(180deg) brightness(95%); margin-top: 20px; border: 1px solid #10b98133; background: #111; }
         .btn-nav { border: 1px solid #10b981; padding: 10px; text-align: center; font-size: 10px; cursor: pointer; border-radius: 8px; }
     </style>
 </head>
@@ -32,23 +29,13 @@
         </div>
 
         <div class="flex-1 flex flex-col items-center justify-center">
-            <p id="prediction-msg" class="text-[10px] text-orange-500 h-4 uppercase"></p>
             <div id="timer-display" class="text-[25vw] font-black tracking-tighter emerald-glow transition-colors duration-700">0.0</div>
-            
             <button id="ignition-btn" class="mt-4 px-10 py-3 border-2 border-emerald-500 rounded-full font-bold text-xs tracking-widest uppercase">Arm System</button>
-            
             <div class="mt-8 flex flex-col items-center gap-2">
-                <button onclick="isIdling ? stopIdle() : startIdle()" class="text-[10px] text-emerald-500/50 underline uppercase tracking-widest">
-                    Manual Stop/Start
-                </button>
-                <button onclick="toggleGhostDrive()" class="text-[10px] text-orange-500/50 underline uppercase tracking-widest">
-                    Toggle Ghost Drive
-                </button>
+                <button onclick="toggleGhostDrive()" id="ghost-btn" class="text-[10px] text-orange-500/50 underline uppercase tracking-widest">Toggle Ghost Drive</button>
             </div>
-
             <p id="speed-display" class="text-[10px] opacity-40 mt-6 uppercase tracking-[0.3em]">Spd: 0.0 m/s</p>
         </div>
-
         <div class="mt-4 p-2 bg-white/5 rounded text-[8px] opacity-30 font-mono">
             GPS_LOG: <span id="debug-coords">WAITING_FOR_SIGNAL...</span>
         </div>
@@ -62,19 +49,10 @@
         <div class="grid grid-cols-2 gap-4 mb-8">
             <div onclick="showPage('page-stats')" class="btn-nav py-6">STATISTICS</div>
             <div onclick="showPage('page-map')" class="btn-nav py-6">ALL-TIME MAP</div>
-            <div onclick="exportData()" class="btn-nav py-6">EXPORT CSV</div>
-            <div onclick="shareApp()" class="btn-nav py-6">SHARE</div>
+            <div onclick="exportData()" class="btn-nav py-6">EXPORT JSON</div>
+            <div onclick="location.reload()" class="btn-nav py-6">RELOAD</div>
         </div>
-        <p class="text-[10px] opacity-30 mb-2 uppercase">Recent History</p>
         <div id="mini-log" class="text-[10px] space-y-1 h-48 overflow-y-auto border border-emerald-500/10 p-2"></div>
-    </div>
-
-    <div id="page-stats" class="page bg-black overflow-y-auto">
-        <button onclick="showPage('page-menu')" class="text-xs mb-4 border border-white/20 px-2 py-1 inline-block">BACK</button>
-        <h2 class="text-sm font-bold border-b border-emerald-500/20 pb-2 mb-4 uppercase">Time Lost</h2>
-        <div class="space-y-4 mb-8">
-            <div class="flex justify-between"><span>Today</span><span id="stat-day">0s</span></div>
-        </div>
     </div>
 
     <div id="page-map" class="page bg-black">
@@ -88,8 +66,8 @@
             <button onclick="showPage('page-dash')" class="text-xs border border-white/20 px-4 py-2">CLOSE</button>
         </div>
         <div id="snapshot-map"></div>
-        <div class="mt-6 p-4 border border-emerald-500/20 rounded-lg">
-            <p id="snap-stats" class="text-xl font-bold italic text-center">ANALYZING DRIVE...</p>
+        <div class="mt-6 p-4 border border-emerald-500/20 rounded-lg text-center">
+            <p id="snap-stats" class="text-xl font-bold italic">ANALYZING DRIVE...</p>
         </div>
     </div>
 
@@ -98,57 +76,41 @@
         let isArmed = false, isIdling = false, startTime, timerInterval;
         let currentPos = {lat: 0, lng: 0};
         let sessionStartTime = null, snapMapInstance = null, mainMapInstance = null;
+        let ghostMode = false;
         let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        let ghostDrive = false;
-
-        // GEOLOCATION TRACKING
-        if ("geolocation" in navigator) {
-            navigator.geolocation.watchPosition((position) => {
-                currentPos.lat = position.coords.latitude;
-                currentPos.lng = position.coords.longitude;
-                const speed = position.coords.speed || 0;
-                
-                document.getElementById('debug-coords').innerText = `${currentPos.lat.toFixed(4)}, ${currentPos.lng.toFixed(4)}`;
-                document.getElementById('speed-display').innerText = `Spd: ${speed.toFixed(1)} m/s`;
-
-                // Auto-idle logic: If speed is near zero and system is armed
-                if (isArmed && speed < 0.5 && !isIdling) {
-                    startIdle();
-                } else if (speed >= 0.5 && isIdling) {
-                    stopIdle();
-                }
-            }, (err) => {
-                document.getElementById('debug-coords').innerText = "ERROR: " + err.message;
-            }, { enableHighAccuracy: true });
-        }
 
         function showPage(id) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.getElementById(id).classList.add('active-page');
-            if(id === 'page-map') renderMainMap();
-            if(id === 'page-stats') renderStats();
+            if(id === 'page-map') setTimeout(renderMainMap, 100);
             if(id === 'page-menu') renderMiniLog();
         }
 
-        function playSound(f1, f2) {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            const o = audioCtx.createOscillator();
-            const g = audioCtx.createGain();
-            o.connect(g); g.connect(audioCtx.destination);
-            o.frequency.setValueAtTime(f1, audioCtx.currentTime);
-            o.frequency.exponentialRampToValueAtTime(f2, audioCtx.currentTime + 0.1);
-            g.gain.setValueAtTime(0.05, audioCtx.currentTime);
-            o.start(); o.stop(audioCtx.currentTime + 0.1);
+        // --- GPS CORE ---
+        navigator.geolocation.watchPosition(p => {
+            if(ghostMode) return; 
+            updateSystem(p.coords.latitude, p.coords.longitude, p.coords.speed || 0);
+        }, err => {
+            document.getElementById('debug-coords').innerText = "GPS_ERROR: " + err.message;
+        }, {enableHighAccuracy: true});
+
+        function updateSystem(lat, lng, spd) {
+            currentPos = { lat, lng };
+            document.getElementById('speed-display').innerText = `Spd: ${spd.toFixed(1)} m/s`;
+            document.getElementById('debug-coords').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            
+            if (isArmed) {
+                if (spd < 0.3 && !isIdling) startIdle();
+                else if (spd > 0.8 && isIdling) stopIdle();
+            }
         }
 
         function startIdle() {
-            if (isIdling || !isArmed) return;
+            if (isIdling) return;
             isIdling = true; startTime = Date.now();
-            playSound(880, 440);
             document.getElementById('status-text').innerText = "IDLING_";
             timerInterval = setInterval(() => {
-                const dur = (Date.now() - startTime) / 1000;
-                document.getElementById('timer-display').innerText = dur.toFixed(1);
+                document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
             }, 100);
         }
 
@@ -156,29 +118,29 @@
             if (!isIdling) return;
             isIdling = false; clearInterval(timerInterval);
             const dur = parseFloat(document.getElementById('timer-display').innerText);
-            if (dur > 1) {
+            if (dur > 2) {
                 db.push({ ts: Date.now(), dur, lat: currentPos.lat, lng: currentPos.lng });
                 localStorage.setItem('gravity_db', JSON.stringify(db));
-                playSound(440, 880);
             }
-            document.getElementById('status-text').innerText = "SCANNING_";
             document.getElementById('timer-display').innerText = "0.0";
+            document.getElementById('status-text').innerText = "SCANNING_";
         }
 
         document.getElementById('ignition-btn').addEventListener('click', () => {
             isArmed = !isArmed;
-            const btn = document.getElementById('ignition-btn');
-            if (isArmed) {
-                sessionStartTime = Date.now();
-                btn.innerText = "SYSTEM ARMED";
-                btn.style.borderColor = "#10b981";
-                document.getElementById('snap-btn').classList.remove('hidden');
-            } else {
-                btn.innerText = "ARM SYSTEM";
-                btn.style.borderColor = "#333";
-                stopIdle();
-            }
+            sessionStartTime = isArmed ? Date.now() : null;
+            document.getElementById('ignition-btn').innerText = isArmed ? "SYSTEM ARMED" : "ARM SYSTEM";
+            document.getElementById('snap-btn').classList.toggle('hidden', !isArmed);
+            if(!isArmed) stopIdle();
         });
+
+        function renderMainMap() {
+            if (mainMapInstance) mainMapInstance.remove();
+            mainMapInstance = L.map('map').setView([currentPos.lat, currentPos.lng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mainMapInstance);
+            db.forEach(l => L.circle([l.lat, l.lng], {radius: 20, color: '#10b981'}).addTo(mainMapInstance));
+            mainMapInstance.invalidateSize();
+        }
 
         function takeSnapshot() {
             showPage('page-snap');
@@ -187,66 +149,37 @@
                 if (snapMapInstance) snapMapInstance.remove();
                 snapMapInstance = L.map('snapshot-map').setView([currentPos.lat, currentPos.lng], 15);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(snapMapInstance);
-                
-                // Ensure map renders correctly inside hidden container
                 snapMapInstance.invalidateSize();
-
+                
                 let total = 0;
                 sessionData.forEach(l => {
                     total += l.dur;
-                    const c = l.dur > 60 ? '#ef4444' : '#10b981';
-                    L.circle([l.lat, l.lng], {radius: 30, color: c, fillOpacity: 0.6}).addTo(snapMapInstance);
+                    L.circle([l.lat, l.lng], {radius: 30, color: '#ef4444', fillOpacity: 0.6}).addTo(snapMapInstance);
                 });
                 document.getElementById('snap-stats').innerText = `${sessionData.length} STOPS | ${Math.round(total/60)}m WASTED`;
-            }, 200);
-        }
-
-        function renderMainMap() {
-            if (mainMapInstance) mainMapInstance.remove();
-            mainMapInstance = L.map('map').setView([currentPos.lat, currentPos.lng], 12);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mainMapInstance);
-            
-            setTimeout(() => mainMapInstance.invalidateSize(), 100);
-            
-            db.forEach(l => L.circle([l.lat, l.lng], {radius: 20, color: '#10b981'}).addTo(mainMapInstance));
-        }
-
-        function renderStats() {
-            const todayStart = new Date().setHours(0,0,0,0);
-            const dayTotal = db.filter(l => l.ts >= todayStart).reduce((a,b) => a+b.dur, 0);
-            document.getElementById('stat-day').innerText = Math.round(dayTotal) + "s";
+            }, 300);
         }
 
         function renderMiniLog() {
-            const container = document.getElementById('mini-log');
-            container.innerHTML = db.slice(-10).reverse().map(l => `
-                <div class="flex justify-between border-b border-white/5 pb-1">
-                    <span>${new Date(l.ts).toLocaleTimeString()}</span>
-                    <span class="text-emerald-500">${l.dur.toFixed(1)}s</span>
-                </div>
-            `).join('');
+            const last10 = db.slice(-10).reverse();
+            document.getElementById('mini-log').innerHTML = last10.map(l => `<div class="flex justify-between border-b border-white/5 pb-1"><span>${new Date(l.ts).toLocaleTimeString()}</span><span>${l.dur}s</span></div>`).join('');
         }
 
         function toggleGhostDrive() {
-            ghostDrive = !ghostDrive;
-            alert("Ghost Drive: " + (ghostDrive ? "ENABLED" : "DISABLED"));
+            ghostMode = !ghostMode;
+            document.getElementById('ghost-btn').innerText = ghostMode ? "DEACTIVATE GHOST" : "TOGGLE GHOST DRIVE";
+            if(ghostMode) {
+                alert("Ghost Drive Active. Simulating 0 speed/movement.");
+                updateSystem(currentPos.lat || 40.7128, currentPos.lng || -74.0060, 0);
+            }
         }
 
         function exportData() {
-            const blob = new Blob([JSON.stringify(db)], {type: 'application/json'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'gravity_intelligence_export.json';
-            a.click();
-        }
-
-        function shareApp() {
-            if (navigator.share) {
-                navigator.share({ title: 'Gravity Intelligence Pro', url: window.location.href });
-            } else {
-                alert("URL copied to clipboard: " + window.location.href);
-            }
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "gravity_data.json");
+            downloadAnchorNode.click();
         }
     </script>
 </body>
