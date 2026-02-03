@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gravity Intelligence Pro</title>
+    <title>Gravity Intel Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -14,15 +14,19 @@
         .page { display: none; flex-direction: column; height: 100vh; width: 100vw; position: absolute; padding: 25px; box-sizing: border-box; background: radial-gradient(circle at center, #001a1a 0%, #000 100%); }
         .active-page { display: flex; z-index: 50; }
         
-        /* DROPDOWN STYLING */
-        #options-menu { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); transform: scale(0.9) translateY(-10px); opacity: 0; pointer-events: none; }
-        #options-menu.open { transform: scale(1) translateY(0); opacity: 1; pointer-events: auto; }
+        /* DROPDOWN */
+        #options-menu { transition: all 0.2s ease; transform: translateY(-5px); opacity: 0; pointer-events: none; z-index: 200; }
+        #options-menu.open { transform: translateY(0); opacity: 1; pointer-events: auto; }
 
-        @keyframes save-flash { 0% { background: rgba(255,255,255,0.8); } 100% { background: transparent; } }
-        .flash-active { animation: save-flash 0.4s ease-out; }
+        /* PULSE & FLASH */
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 10px var(--accent); } 50% { opacity: 0.2; transform: scale(0.8); } }
+        .pulse-active { animation: pulse-dot 1.2s infinite; }
         
+        @keyframes bg-flash { 0% { background: rgba(255,255,255,0.4); } 100% { background: transparent; } }
+        .flash-trigger { animation: bg-flash 0.4s ease-out; }
+
         .glow-text { text-shadow: 0 0 15px var(--accent); color: #fff; }
-        #map-canvas { flex-grow: 1; border-radius: 12px; filter: invert(90%) hue-rotate(180deg) contrast(1.2); border: 1px solid var(--accent); }
+        #map-canvas { flex-grow: 1; border-radius: 12px; filter: invert(90%) hue-rotate(180deg); border: 1px solid rgba(0, 242, 255, 0.3); }
     </style>
 </head>
 <body>
@@ -30,84 +34,79 @@
     <div id="page-dash" class="page active-page">
         <div class="flex justify-between items-start z-[100]">
             <div>
-                <button onclick="showPage('page-history')" class="border border-cyan-500/50 px-3 py-1 text-[10px] font-bold uppercase tracking-widest">Logs</button>
-                <p class="text-[8px] opacity-40 mt-2 uppercase">System_Active</p>
+                <p class="text-[10px] font-black tracking-widest uppercase">System_Core</p>
+                <p id="build-tag" class="text-[8px] opacity-60 uppercase font-bold">Build: 02/04/2026_V3.0</p>
             </div>
             
             <div class="relative text-right">
-                <button onclick="toggleMenu()" class="bg-cyan-900/40 border border-cyan-400 px-4 py-1 text-[10px] font-black uppercase">Options ▾</button>
-                
-                <div id="options-menu" class="absolute right-0 mt-2 w-52 bg-black border border-cyan-400 p-1 shadow-2xl rounded-lg text-left z-[110]">
-                    <button onclick="launchMapping()" class="w-full text-left px-4 py-3 text-[9px] uppercase hover:bg-cyan-900 flex justify-between">
-                        <span>Initialize Map</span>
-                        <span class="opacity-50">📡</span>
-                    </button>
-                    <button onclick="exportCSV()" class="w-full text-left px-4 py-3 text-[9px] uppercase hover:bg-cyan-900 border-t border-cyan-900/50">Export Dataset</button>
-                    <button onclick="setMode('stealth')" class="w-full text-left px-4 py-3 text-[9px] uppercase hover:bg-cyan-900 border-t border-cyan-900/50">Stealth Protocol</button>
+                <button onclick="toggleMenu()" class="bg-cyan-950/50 border border-cyan-400/50 px-4 py-1 text-[10px] font-black uppercase">Options ▾</button>
+                <div id="options-menu" class="absolute right-0 mt-2 w-48 bg-black border border-cyan-400 p-1 rounded shadow-2xl">
+                    <button onclick="launchMap()" class="w-full text-left px-3 py-3 text-[9px] uppercase hover:bg-cyan-900">Initialize Map</button>
+                    <button onclick="exportCSV()" class="w-full text-left px-3 py-3 text-[9px] uppercase hover:bg-cyan-900 border-t border-cyan-900">Export CSV</button>
+                </div>
+
+                <div class="flex items-center justify-end gap-2 mt-4">
+                    <div id="status-dot" class="w-2 h-2 rounded-full bg-cyan-400 opacity-20 transition-all duration-500"></div>
+                    <p id="status-text" class="text-[10px] font-black uppercase tracking-widest">Idle_</p>
                 </div>
             </div>
         </div>
 
-        <div id="flash-overlay" class="flex-1 flex flex-col items-center justify-center">
-            <div id="timer-display" class="text-[25vw] font-black glow-text">0.0</div>
-            <button id="ignition-btn" class="mt-6 px-14 py-6 border-2 border-cyan-400 rounded-full font-black text-sm uppercase transition-all">
+        <div id="main-container" class="flex-1 flex flex-col items-center justify-center transition-all duration-300">
+            <div id="timer-display" class="text-[25vw] font-black tracking-tighter glow-text">0.0</div>
+            
+            <button id="arm-btn" class="mt-8 px-14 py-6 border-2 border-cyan-400 rounded-full font-black text-sm uppercase transition-all active:scale-95">
                 Arm System
             </button>
-            <p id="speed-display" class="text-[10px] font-bold uppercase tracking-[0.4em] mt-8 opacity-40">SPD: 0.0 M/S</p>
+            
+            <p id="speed-display" class="text-[10px] font-bold uppercase tracking-[0.4em] mt-10 opacity-40">Velocity: 0.0 M/S</p>
+        </div>
+
+        <div class="flex justify-center gap-4 mt-4">
+            <button onclick="showPage('page-history')" class="text-[9px] uppercase font-bold opacity-60 hover:opacity-100">View Logs</button>
         </div>
     </div>
 
     <div id="page-map" class="page">
         <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xs font-black uppercase tracking-widest text-white">Mapping_Matrix</h2>
-            <button onclick="showPage('page-dash')" class="border border-white/20 px-4 py-1 text-[10px] uppercase">Exit</button>
+            <h2 class="text-xs font-black uppercase">Spatial_Relativity</h2>
+            <button onclick="showPage('page-dash')" class="bg-cyan-500 text-black px-4 py-1 text-[10px] font-black">Return</button>
         </div>
         <div id="map-canvas"></div>
+    </div>
+
+    <div id="page-history" class="page">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xs font-black uppercase">Event_Logs</h2>
+            <button onclick="showPage('page-dash')" class="text-cyan-400 border border-cyan-400 px-4 py-1 text-[10px]">Back</button>
+        </div>
+        <div id="log-container" class="flex-1 overflow-y-auto space-y-2"></div>
     </div>
 
     <script>
         let db = JSON.parse(localStorage.getItem('gravity_db') || '[]');
         let isArmed = false, isIdling = false, startTime, timerInterval;
-        let mapObj = null, userPos = { lat: 0, lng: 0 };
+        let lastCoords = { lat: 0, lng: 0 };
 
         function toggleMenu() { document.getElementById('options-menu').classList.toggle('open'); }
-
+        
         function showPage(id) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.getElementById(id).classList.add('active-page');
-            if (id === 'page-map') initTacticalMap();
+            if(id === 'page-map') renderMap();
         }
 
-        // NEW MAPPING FUNCTION FOR DROPDOWN
-        function launchMapping() {
-            toggleMenu();
-            showPage('page-map');
-        }
-
-        function initTacticalMap() {
-            if (mapObj) mapObj.remove();
-            mapObj = L.map('map-canvas', { zoomControl: false }).setView([userPos.lat, userPos.lng], 16);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapObj);
-            
-            // Render saved stops as high-visibility circles
-            db.forEach(stop => {
-                L.circle([stop.lat, stop.lng], {
-                    radius: 20,
-                    color: '#00f2ff',
-                    fillColor: '#00f2ff',
-                    fillOpacity: 0.6
-                }).addTo(mapObj).bindPopup(`Duration: ${stop.dur}s`);
-            });
-        }
+        function launchMap() { toggleMenu(); showPage('page-map'); }
 
         function processLogic(lat, lng, spd) {
-            userPos = { lat, lng };
-            document.getElementById('speed-display').innerText = `SPD: ${spd.toFixed(1)} M/S`;
+            lastCoords = { lat, lng };
+            document.getElementById('speed-display').innerText = `Velocity: ${spd.toFixed(1)} M/S`;
             
             if (isArmed) {
                 if (spd < 0.3 && !isIdling) {
                     isIdling = true;
                     startTime = Date.now();
+                    document.getElementById('status-text').innerText = "Tracking_";
                     timerInterval = setInterval(() => {
                         document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
                     }, 100);
@@ -118,34 +117,27 @@
                     db.push({ ts: Date.now(), dur, lat, lng });
                     localStorage.setItem('gravity_db', JSON.stringify(db));
                     
-                    document.getElementById('flash-overlay').classList.add('flash-active');
+                    // Trigger Visual Save Flash
+                    document.getElementById('main-container').classList.add('flash-trigger');
                     setTimeout(() => {
-                        document.getElementById('flash-overlay').classList.remove('flash-active');
+                        document.getElementById('main-container').classList.remove('flash-trigger');
                         document.getElementById('timer-display').innerText = "0.0";
                     }, 400);
+                    document.getElementById('status-text').innerText = "Armed_";
                 }
             }
         }
 
-        document.getElementById('ignition-btn').addEventListener('click', function() {
+        document.getElementById('arm-btn').addEventListener('click', function() {
             isArmed = !isArmed;
-            // BUTTON LABEL TOGGLE
-            this.innerText = isArmed ? "STANDBY" : "ARM SYSTEM";
-            this.style.background = isArmed ? "var(--accent)" : "transparent";
-            this.style.color = isArmed ? "#000" : "var(--accent)";
-
+            const dot = document.getElementById('status-dot');
+            
             if (isArmed) {
+                this.innerText = "STANDBY";
+                this.style.background = "var(--accent)";
+                this.style.color = "#000";
+                dot.classList.add('pulse-active');
+                document.getElementById('status-text').innerText = "Armed_";
+                
                 navigator.geolocation.watchPosition(pos => {
-                    processLogic(pos.coords.latitude, pos.coords.longitude, pos.coords.speed || 0);
-                }, null, { enableHighAccuracy: true });
-            } else {
-                clearInterval(timerInterval);
-                isIdling = false;
-                document.getElementById('timer-display').innerText = "0.0";
-            }
-        });
-
-        // Other functions (exportCSV, setMode) remain functional
-    </script>
-</body>
-</html>
+                    processLogic(pos.coords.latitude, pos.
