@@ -17,16 +17,17 @@
         #options-menu { transition: all 0.2s ease; transform: translateY(-5px); opacity: 0; pointer-events: none; z-index: 200; }
         #options-menu.open { transform: translateY(0); opacity: 1; pointer-events: auto; }
 
+        /* PULSE & FLASH */
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 10px var(--accent); } 50% { opacity: 0.2; transform: scale(0.8); } }
+        .pulse-active { animation: pulse-dot 1.2s infinite; }
+        
         .glow-text { text-shadow: 0 0 15px var(--accent); color: #fff; }
         
-        /* TACTICAL MAP STYLING */
-        #map-canvas { 
-            flex-grow: 1; 
-            border-radius: 8px; 
-            border: 1px solid rgba(0, 242, 255, 0.3);
-            background: #001111; /* Fallback color */
-        }
-        /* Inverts the standard map to look "Tactical" */
+        /* GPS SIGNAL BARS */
+        .gps-bar { width: 3px; background: currentColor; margin-left: 1px; transition: height 0.3s; }
+        
+        /* MAP STYLING */
+        #map-canvas { flex-grow: 1; border-radius: 8px; border: 1px solid rgba(0, 242, 255, 0.3); background: #001111; }
         .leaflet-tile-container { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }
     </style>
 </head>
@@ -36,7 +37,7 @@
         <div class="flex justify-between items-start z-[100]">
             <div>
                 <p class="text-[10px] font-black tracking-widest uppercase">System_Core</p>
-                <p class="text-[8px] opacity-60 uppercase font-bold">Build: 02/04/2026_V3.5</p>
+                <p class="text-[8px] opacity-60 uppercase font-bold">Build: 02/04/2026_V3.6</p>
             </div>
             
             <div class="relative text-right">
@@ -45,13 +46,23 @@
                     <button onclick="showPage('page-history')" class="w-full px-3 py-3 text-[9px] uppercase hover:bg-cyan-900">Event History</button>
                     <button onclick="launchMap()" class="w-full px-3 py-3 text-[9px] uppercase hover:bg-cyan-900 border-t border-cyan-900/50">Tactical Mapping</button>
                 </div>
+
+                <div class="flex items-center justify-end gap-3 mt-4">
+                    <div id="gps-indicator" class="flex items-end h-3 text-gray-600">
+                        <div class="gps-bar h-1"></div>
+                        <div class="gps-bar h-2"></div>
+                        <div class="gps-bar h-3"></div>
+                    </div>
+                    <div id="status-dot" class="w-2 h-2 rounded-full bg-cyan-400 opacity-20"></div>
+                    <p id="status-text" class="text-[10px] font-black uppercase tracking-widest">Idle_</p>
+                </div>
             </div>
         </div>
 
         <div id="main-container" class="flex-1 flex flex-col items-center justify-center">
             <div id="timer-display" class="text-[25vw] font-black tracking-tighter glow-text">0.0</div>
             <button id="arm-btn" class="mt-8 px-14 py-6 border-2 border-cyan-400 rounded-full font-black text-sm uppercase transition-all">Arm System</button>
-            <p id="speed-display" class="text-[10px] font-bold uppercase mt-10 opacity-40">Velocity: 0.0 M/S</p>
+            <p id="speed-display" class="text-[10px] font-bold uppercase tracking-[0.4em] mt-10 opacity-40">Velocity: 0.0 M/S</p>
         </div>
     </div>
 
@@ -61,21 +72,20 @@
             <button onclick="showPage('page-dash')" class="border border-cyan-400 px-4 py-1 text-[10px] uppercase">Close</button>
         </div>
         <div id="map-canvas"></div>
-        <p class="text-[8px] mt-2 opacity-40 uppercase">Note: Requires Internet for Tile Rendering</p>
     </div>
 
     <div id="page-history" class="page">
         <div class="flex justify-between items-center mb-6">
-            <h2 class="text-xs font-black uppercase">History</h2>
+            <h2 class="text-xs font-black uppercase">History_Matrix</h2>
             <button onclick="showPage('page-dash')" class="border border-cyan-400 px-4 py-1 text-[10px]">Back</button>
         </div>
-        <div id="log-list" class="flex-1 overflow-y-auto"></div>
+        <div id="log-list" class="flex-1 overflow-y-auto pr-2"></div>
     </div>
 
     <script>
         let db = JSON.parse(localStorage.getItem('gravity_db') || '[]');
         let isArmed = false, isIdling = false, startTime, timerInterval;
-        let mapObj = null;
+        let mapObj = null, userMarker = null, gpsWatch = null;
         let lastPos = { lat: 0, lng: 0 };
 
         function toggleMenu() { document.getElementById('options-menu').classList.toggle('open'); }
@@ -86,74 +96,36 @@
             if(id === 'page-map') initMap();
         }
 
-        function launchMap() {
-            toggleMenu();
-            showPage('page-map');
+        function launchMap() { toggleMenu(); showPage('page-map'); }
+
+        function updateGPSSignal(status) {
+            const icon = document.getElementById('gps-indicator');
+            if (status === 'locked') icon.className = "flex items-end h-3 text-cyan-400";
+            else if (status === 'searching') icon.className = "flex items-end h-3 text-yellow-500 animate-pulse";
+            else icon.className = "flex items-end h-3 text-red-600";
         }
 
         function initMap() {
-            // Wait for DOM to render map-canvas
             setTimeout(() => {
                 if (mapObj) mapObj.remove();
-                
-                // Use last recorded position or default to world view
                 const center = lastPos.lat ? [lastPos.lat, lastPos.lng] : [0,0];
-                const zoom = lastPos.lat ? 16 : 2;
-
-                mapObj = L.map('map-canvas', { zoomControl: false }).setView(center, zoom);
+                mapObj = L.map('map-canvas', { zoomControl: false }).setView(center, 16);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapObj);
                 
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OSM'
-                }).addTo(mapObj);
-
-                // Add markers for every stop in history
+                // Draw historic stops
                 db.forEach(stop => {
-                    L.circle([stop.lat, stop.lng], {
-                        color: '#00f2ff',
-                        fillColor: '#00f2ff',
-                        fillOpacity: 0.5,
-                        radius: 15
-                    }).addTo(mapObj);
+                    L.circle([stop.lat, stop.lng], { color: '#00f2ff', radius: 10 }).addTo(mapObj);
                 });
+
+                // Add Current Position Marker
+                if(lastPos.lat) {
+                    userMarker = L.circleMarker([lastPos.lat, lastPos.lng], { color: '#fff', radius: 5 }).addTo(mapObj);
+                }
             }, 100);
         }
 
         function processLogic(lat, lng, spd) {
             lastPos = { lat, lng };
-            const currentSpeed = spd < 0.2 ? 0 : spd;
-            document.getElementById('speed-display').innerText = `Velocity: ${currentSpeed.toFixed(1)} M/S`;
-
-            if (isArmed) {
-                if (currentSpeed <= 0.2 && !isIdling) {
-                    isIdling = true;
-                    startTime = Date.now();
-                    timerInterval = setInterval(() => {
-                        document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
-                    }, 100);
-                } else if (currentSpeed >= 0.7 && isIdling) {
-                    isIdling = false;
-                    clearInterval(timerInterval);
-                    const dur = document.getElementById('timer-display').innerText;
-                    db.push({ ts: Date.now(), dur, lat, lng });
-                    localStorage.setItem('gravity_db', JSON.stringify(db));
-                    document.getElementById('timer-display').innerText = "0.0";
-                }
-            }
-        }
-
-        document.getElementById('arm-btn').addEventListener('click', function() {
-            isArmed = !isArmed;
-            this.innerText = isArmed ? "STANDBY" : "ARM SYSTEM";
-            this.style.background = isArmed ? "var(--accent)" : "transparent";
-            this.style.color = isArmed ? "#000" : "var(--accent)";
+            updateGPSSignal('locked');
             
-            if (isArmed) {
-                navigator.geolocation.watchPosition(
-                    pos => processLogic(pos.coords.latitude, pos.coords.longitude, pos.coords.speed || 0),
-                    null, { enableHighAccuracy: true }
-                );
-            }
-        });
-    </script>
-</body>
-</html>
+            // Map live update
