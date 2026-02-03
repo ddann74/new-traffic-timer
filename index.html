@@ -47,7 +47,6 @@
             <button onclick="showPage('page-dash')" class="text-xs border border-white/20 px-3 py-1">BACK</button>
         </div>
         <div class="grid grid-cols-2 gap-4 mb-8">
-            <div onclick="showPage('page-stats')" class="btn-nav py-6">STATISTICS</div>
             <div onclick="showPage('page-map')" class="btn-nav py-6">ALL-TIME MAP</div>
             <div onclick="exportData()" class="btn-nav py-6">EXPORT JSON</div>
             <div onclick="location.reload()" class="btn-nav py-6">RELOAD</div>
@@ -77,22 +76,24 @@
         let currentPos = {lat: 0, lng: 0};
         let sessionStartTime = null, snapMapInstance = null, mainMapInstance = null;
         let ghostMode = false;
-        let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-        function showPage(id) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
-            document.getElementById(id).classList.add('active-page');
-            if(id === 'page-map') setTimeout(renderMainMap, 100);
-            if(id === 'page-menu') renderMiniLog();
+        // 1. ACTIVATE GPS HARDWARE SENSOR
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    if (ghostMode) return; 
+                    updateSystem(
+                        position.coords.latitude, 
+                        position.coords.longitude, 
+                        position.coords.speed || 0
+                    );
+                },
+                (error) => {
+                    document.getElementById('debug-coords').innerText = "GPS_ERROR: " + error.message;
+                },
+                { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+            );
         }
-
-        // --- GPS CORE ---
-        navigator.geolocation.watchPosition(p => {
-            if(ghostMode) return; 
-            updateSystem(p.coords.latitude, p.coords.longitude, p.coords.speed || 0);
-        }, err => {
-            document.getElementById('debug-coords').innerText = "GPS_ERROR: " + err.message;
-        }, {enableHighAccuracy: true});
 
         function updateSystem(lat, lng, spd) {
             currentPos = { lat, lng };
@@ -100,6 +101,7 @@
             document.getElementById('debug-coords').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
             
             if (isArmed) {
+                // Idle triggers when speed drops below 0.3 m/s while armed
                 if (spd < 0.3 && !isIdling) startIdle();
                 else if (spd > 0.8 && isIdling) stopIdle();
             }
@@ -126,6 +128,19 @@
             document.getElementById('status-text').innerText = "SCANNING_";
         }
 
+        function showPage(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+            document.getElementById(id).classList.add('active-page');
+            
+            // 2. FIX MAP RENDERING: Leaflet requires a resize check when a map becomes visible
+            if(id === 'page-map') {
+                setTimeout(() => {
+                    renderMainMap();
+                    if(mainMapInstance) mainMapInstance.invalidateSize();
+                }, 200);
+            }
+        }
+
         document.getElementById('ignition-btn').addEventListener('click', () => {
             isArmed = !isArmed;
             sessionStartTime = isArmed ? Date.now() : null;
@@ -139,7 +154,6 @@
             mainMapInstance = L.map('map').setView([currentPos.lat, currentPos.lng], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mainMapInstance);
             db.forEach(l => L.circle([l.lat, l.lng], {radius: 20, color: '#10b981'}).addTo(mainMapInstance));
-            mainMapInstance.invalidateSize();
         }
 
         function takeSnapshot() {
@@ -160,16 +174,11 @@
             }, 300);
         }
 
-        function renderMiniLog() {
-            const last10 = db.slice(-10).reverse();
-            document.getElementById('mini-log').innerHTML = last10.map(l => `<div class="flex justify-between border-b border-white/5 pb-1"><span>${new Date(l.ts).toLocaleTimeString()}</span><span>${l.dur}s</span></div>`).join('');
-        }
-
         function toggleGhostDrive() {
             ghostMode = !ghostMode;
             document.getElementById('ghost-btn').innerText = ghostMode ? "DEACTIVATE GHOST" : "TOGGLE GHOST DRIVE";
             if(ghostMode) {
-                alert("Ghost Drive Active. Simulating 0 speed/movement.");
+                // Manually trigger system with zero speed for desk testing
                 updateSystem(currentPos.lat || 40.7128, currentPos.lng || -74.0060, 0);
             }
         }
@@ -184,105 +193,3 @@
     </script>
 </body>
 </html>
-// Add this at the start of your <script> to ensure audio and GPS are initialized correctly
-const initSensors = () => {
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
-    
-    // Check for Geolocation Support
-    if (!navigator.geolocation) {
-        document.getElementById('debug-coords').innerText = "GPS_NOT_SUPPORTED";
-    }
-};
-
-// Update your Ignition Button listener to include the initializer
-document.getElementById('ignition-btn').addEventListener('click', () => {
-    initSensors(); // Resume audio context on user gesture
-    isArmed = !isArmed;
-    sessionStartTime = isArmed ? Date.now() : null;
-    document.getElementById('ignition-btn').innerText = isArmed ? "SYSTEM ARMED" : "ARM SYSTEM";
-    document.getElementById('snap-btn').classList.toggle('hidden', !isArmed);
-    if(!isArmed) stopIdle();
-});
-
-// Refine the updateSystem function to handle null speeds (common on some devices)
-function updateSystem(lat, lng, spd) {
-    currentPos = { lat, lng };
-    // Some devices return null for speed if stationary; treat null as 0
-    const currentSpeed = spd || 0; 
-    
-    document.getElementById('speed-display').innerText = `Spd: ${currentSpeed.toFixed(1)} m/s`;
-    document.getElementById('debug-coords').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-    
-    if (isArmed) {
-        if (currentSpeed < 0.3 && !isIdling) startIdle();
-        else if (currentSpeed > 0.8 && isIdling) stopIdle();
-    }
-}
-<script>
-    let db = JSON.parse(localStorage.getItem('gravity_db') || '[]');
-    let isArmed = false, isIdling = false, startTime, timerInterval;
-    let currentPos = {lat: 0, lng: 0};
-    let sessionStartTime = null, snapMapInstance = null, mainMapInstance = null;
-    let ghostMode = false;
-    let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-    // 1. ACTUALLY START THE GPS SENSOR
-    if ("geolocation" in navigator) {
-        navigator.geolocation.watchPosition(
-            (position) => {
-                if (ghostMode) return; // Don't override ghost data
-                updateSystem(
-                    position.coords.latitude, 
-                    position.coords.longitude, 
-                    position.coords.speed || 0
-                );
-            },
-            (error) => {
-                document.getElementById('debug-coords').innerText = "ERROR: " + error.message;
-            },
-            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-        );
-    }
-
-    function updateSystem(lat, lng, spd) {
-        currentPos = { lat, lng };
-        document.getElementById('speed-display').innerText = `Spd: ${spd.toFixed(1)} m/s`;
-        document.getElementById('debug-coords').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-        
-        if (isArmed) {
-            // Speed threshold for idling (approx 1.0 km/h)
-            if (spd < 0.3 && !isIdling) startIdle();
-            else if (spd > 0.8 && isIdling) stopIdle();
-        }
-    }
-
-    // 2. FIX MAP RENDERING
-    function showPage(id) {
-        document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
-        document.getElementById(id).classList.add('active-page');
-        
-        // Leaflet needs a "nudge" to realize the container size has changed
-        if(id === 'page-map') {
-            setTimeout(() => {
-                renderMainMap();
-                if(mainMapInstance) mainMapInstance.invalidateSize();
-            }, 200);
-        }
-    }
-
-    function toggleGhostDrive() {
-        ghostMode = !ghostMode;
-        const btn = document.getElementById('ghost-btn');
-        if(ghostMode) {
-            btn.innerText = "DEACTIVATE GHOST";
-            // Simulate sitting still at a specific coordinate
-            updateSystem(40.7128, -74.0060, 0); 
-        } else {
-            btn.innerText = "TOGGLE GHOST DRIVE";
-        }
-    }
-
-    // ... (Keep your startIdle, stopIdle, and Ignition logic) ...
-</script>
