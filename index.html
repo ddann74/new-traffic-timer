@@ -3,26 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V10.2</title>
+    <title>Gravity Intel V10.4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/leaflet.heatmap@1.0.0/leaflet-heatmap.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
         :root { --accent: #00f2ff; --bg: #050505; --active: #00ff88; }
-        body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; }
+        body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; transition: opacity 0.5s; }
         .page { display: none; height: calc(100vh - 90px); width: 100vw; flex-direction: column; overflow-y: auto; }
         .active-page { display: flex; }
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 90px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 1000; }
-        .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; }
+        .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; border: none; background: none; color: inherit; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 2px solid var(--accent); }
         #timer-display { font-size: 26vw; font-weight: 800; color: white; line-height: 1; }
         .safe-mode-overlay { position: fixed; inset: 0; background: black; z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; }
         .engage-btn { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
         .engage-btn.active { background: var(--active); color: black; box-shadow: 0 0 30px var(--active); border-color: var(--active); }
-        /* Locate Button Styling */
-        .locate-btn { position: absolute; bottom: 110px; right: 20px; z-index: 2000; background: black; border: 2px solid var(--accent); color: var(--accent); padding: 12px; border-radius: 50%; box-shadow: 0 0 15px rgba(0,242,255,0.3); }
+        .locate-btn { position: absolute; bottom: 110px; right: 20px; z-index: 2000; background: black; border: 2px solid var(--accent); color: var(--accent); padding: 12px; border-radius: 50%; }
+        .low-batt-warn { color: #ff3333; font-size: 8px; font-weight: bold; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
     </style>
 </head>
 <body>
@@ -30,13 +30,17 @@
     <div id="safe-mode" class="safe-mode-overlay">
         <div class="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-6"></div>
         <h2 class="text-lg font-black tracking-widest text-white uppercase">Safe Mode</h2>
-        <p class="text-[9px] opacity-40 mt-1 uppercase">Eyes on the Road</p>
     </div>
 
     <div id="page-dash" class="page active-page p-6 justify-center">
+        <div class="flex justify-between items-center mb-4">
+            <span id="batt-status" class="hidden low-batt-warn">LOW POWER MODE ACTIVE</span>
+            <button onclick="resetTrip()" class="text-[8px] border border-zinc-700 px-2 py-1 rounded text-zinc-500 uppercase">New Trip</button>
+        </div>
+
         <div id="trip-recap-ui" class="hidden mb-6 p-4 bg-zinc-900/80 border border-zinc-700 rounded-lg">
             <div class="flex justify-between items-end">
-                <span class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Current Trip Grade</span>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Trip Grade</span>
                 <span id="trip-grade" class="text-3xl font-black text-white">--</span>
             </div>
             <div class="h-1.5 bg-zinc-800 rounded-full mt-2 overflow-hidden">
@@ -50,7 +54,7 @@
                 <div id="obj-score" class="text-xl font-black text-white">--</div>
             </div>
             <div class="bg-zinc-900/50 p-3 rounded border border-zinc-800">
-                <span class="text-[8px] opacity-40 uppercase">Route Average</span>
+                <span class="text-[8px] opacity-40 uppercase">Trip Average</span>
                 <div id="avg-wait" class="text-xl font-black text-white">--</div>
             </div>
         </div>
@@ -65,10 +69,15 @@
     </div>
 
     <div id="page-map" class="page relative">
-        <div id="map-canvas" class="h-full w-full"></div>
+        <div id="map-canvas" class="h-full w-full bg-zinc-900"></div>
         <button onclick="locateUser()" class="locate-btn">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
         </button>
+    </div>
+
+    <div id="page-history" class="page p-6">
+        <h2 class="text-xs font-black tracking-widest mb-4 uppercase">Stop History</h2>
+        <div id="history-list" class="space-y-2 text-[10px]"></div>
     </div>
 
     <nav class="nav-bar">
@@ -79,27 +88,54 @@
     </nav>
 
     <script>
-        const DB_KEY = 'GRV_DB_PRO_102';
+        const DB_KEY = 'GRV_DB_PRO_104';
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+        let tripData = []; 
         let isStopped = false, isArmed = false, startMark = 0, timerInterval = null, lastPos = null;
         let mapInstance = null;
+        let markerLayer = null;
 
         function speak(text) {
+            if (!window.speechSynthesis) return;
             window.speechSynthesis.cancel();
             window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
         }
 
+        // Battery Logic
+        if ('getBattery' in navigator) {
+            navigator.getBattery().then(batt => {
+                const updateBattUI = () => {
+                    const isLow = batt.level < 0.20 && !batt.charging;
+                    document.body.style.opacity = isLow ? "0.6" : "1";
+                    document.getElementById('batt-status').classList.toggle('hidden', !isLow);
+                };
+                batt.addEventListener('levelchange', updateBattUI);
+                batt.addEventListener('chargingchange', updateBattUI);
+                updateBattUI();
+            });
+        }
+
+        function resetTrip() {
+            tripData = [];
+            document.getElementById('trip-recap-ui').classList.add('hidden');
+            document.getElementById('obj-score').innerText = "--";
+            document.getElementById('avg-wait').innerText = "--";
+            speak("Trip data cleared.");
+        }
+
         async function toggleSystem() {
             if (!isArmed) {
-                if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                    await DeviceMotionEvent.requestPermission();
-                }
-                isArmed = true;
-                const btn = document.getElementById('master-start');
-                btn.innerText = "System Active";
-                btn.classList.add('active');
-                speak("Gravity Active.");
-                navigator.geolocation.watchPosition(handleGPS, null, { enableHighAccuracy: true });
+                try {
+                    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                        await DeviceMotionEvent.requestPermission();
+                    }
+                    isArmed = true;
+                    const btn = document.getElementById('master-start');
+                    btn.classList.add('active');
+                    btn.innerText = "System Active";
+                    speak("System Online.");
+                    navigator.geolocation.watchPosition(handleGPS, (err) => console.error(err), { enableHighAccuracy: true });
+                } catch (e) { alert("Permission denied or error: " + e); }
             } else { location.reload(); }
         }
 
@@ -107,7 +143,9 @@
             lastPos = [pos.coords.latitude, pos.coords.longitude];
             const speed = (pos.coords.speed || 0) * 3.6;
             document.getElementById('speed-val').innerText = Math.round(speed);
-            document.getElementById('safe-mode').style.display = speed > 10 ? 'flex' : 'none';
+            
+            // Safe Mode Trigger
+            document.getElementById('safe-mode').style.display = speed > 12 ? 'flex' : 'none';
 
             if (speed < 1.0 && !isStopped && isArmed) {
                 isStopped = true;
@@ -121,20 +159,27 @@
                 clearInterval(timerInterval);
                 const dur = (Date.now() - startMark) / 1000;
                 const score = Math.min(10, (100 / dur) * 2).toFixed(1);
-                storage.push({ d: dur, ts: Date.now(), lat: lastPos[0], lng: lastPos[1], obj: score });
+                
+                const entry = { d: dur, ts: Date.now(), lat: lastPos[0], lng: lastPos[1], obj: score };
+                storage.push(entry);
+                tripData.push(entry);
                 localStorage.setItem(DB_KEY, JSON.stringify(storage));
-                document.getElementById('obj-score').innerText = score;
-                speak(`Move. Score ${score}`);
+                
+                updateDashUI(score);
+                speak(`Efficiency ${score}`);
                 document.getElementById('timer-display').innerText = "0.0";
             }
         }
 
-        function locateUser() {
-            if (lastPos && mapInstance) {
-                mapInstance.setView(lastPos, 16);
-            } else {
-                speak("GPS signal searching.");
-            }
+        function updateDashUI(score) {
+            document.getElementById('obj-score').innerText = score;
+            document.getElementById('trip-recap-ui').classList.remove('hidden');
+            const avg = tripData.reduce((a, b) => a + parseFloat(b.obj), 0) / tripData.length;
+            document.getElementById('avg-wait').innerText = avg.toFixed(1);
+            
+            const grade = avg > 8.5 ? "A+" : avg > 7.5 ? "A" : avg > 6.5 ? "B" : "C";
+            document.getElementById('trip-grade').innerText = grade;
+            document.getElementById('grade-progress').style.width = (avg * 10) + "%";
         }
 
         function tab(n) {
@@ -142,14 +187,51 @@
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
             document.getElementById('page-'+n).classList.add('active-page');
             document.getElementById('tab-'+n).classList.add('nav-btn-active');
-            if(n === 'map') initMap();
+            
+            if(n === 'map') {
+                setTimeout(initMap, 100); 
+            } else if (n === 'history') {
+                renderHistory();
+            }
         }
 
         function initMap() {
-            if (mapInstance) return;
-            mapInstance = L.map('map-canvas', { zoomControl: false }).setView(lastPos || [0,0], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
+            if (!mapInstance) {
+                mapInstance = L.map('map-canvas', { zoomControl: false }).setView(lastPos || [0,0], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    className: 'map-tiles'
+                }).addTo(mapInstance);
+                markerLayer = L.layerGroup().addTo(mapInstance);
+            }
+            
+            markerLayer.clearLayers();
+            storage.forEach(point => {
+                const color = point.obj > 7 ? '#00ff88' : point.obj > 4 ? '#ffff00' : '#ff3333';
+                L.circle([point.lat, point.lng], { radius: 20, color: color, fillOpacity: 0.6 }).addTo(markerLayer);
+            });
+            
+            if(lastPos) mapInstance.panTo(lastPos);
+            mapInstance.invalidateSize();
+        }
+
+        function locateUser() {
+            if (lastPos && mapInstance) mapInstance.setView(lastPos, 16);
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = storage.slice().reverse().map(h => `
+                <div class="flex justify-between border-b border-zinc-800 pb-2">
+                    <span>${new Date(h.ts).toLocaleTimeString()}</span>
+                    <span class="font-bold text-white">${h.d.toFixed(1)}s</span>
+                    <span class="${h.obj > 7 ? 'text-green-400' : 'text-red-400'}">${h.obj}pts</span>
+                </div>
+            `).join('');
         }
     </script>
+    <style>
+        /* Grayscale Map Filter for HUD look */
+        .map-tiles { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }
+    </style>
 </body>
 </html>
