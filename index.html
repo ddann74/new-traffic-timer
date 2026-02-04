@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V6.4</title>
+    <title>Gravity Intel V6.5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        :root { --accent: #00f2ff; --bg: #000; --warn: #ff2a6d; --signal: #ffcf2a; --go: #00ff88; --wait: #ff8800; }
+        :root { --accent: #00f2ff; --bg: #000; --warn: #ff2a6d; --go: #00ff88; --wait: #ff8800; }
         body { font-family: 'JetBrains+Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; }
         
         .page { display: none; height: calc(100vh - 95px); width: 100vw; flex-direction: column; padding: 20px; box-sizing: border-box; overflow-y: auto; }
@@ -25,9 +25,7 @@
         .nav-btn-active { opacity: 1; border-top-color: var(--accent); background: rgba(0,242,255,0.05); }
         .nav-btn span { font-size: 10px; font-weight: 800; margin-top: 6px; letter-spacing: 1px; }
 
-        #speed-readout { font-size: 12vw; font-weight: 800; opacity: 0.5; line-height: 1; margin-bottom: -10px; }
-        #speed-unit { font-size: 3vw; vertical-align: middle; margin-left: 5px; opacity: 0.6; }
-
+        #speed-readout { font-size: 12vw; font-weight: 800; opacity: 0.5; line-height: 1; }
         #timer-display { font-size: 32vw; font-weight: 800; transition: 0.3s; line-height: 1; color: var(--accent); }
         
         /* DYNAMIC COLOR STATES */
@@ -36,15 +34,11 @@
         .state-red { color: var(--warn) !important; }
         .state-record { color: var(--warn) !important; animation: pulse-red 0.5s infinite; }
 
-        @keyframes pulse-red {
-            0% { opacity: 1; }
-            50% { opacity: 0.3; }
-            100% { opacity: 1; }
-        }
+        @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
         #map-canvas { height: 100%; width: 100%; background: #000; border-radius: 8px; border: 1px solid #111; }
         .leaflet-tile-container { filter: invert(100%) hue-rotate(180deg) brightness(80%) contrast(1.2); }
-        .leaflet-popup-content-wrapper { background: #111; color: #fff; border: 1px solid var(--accent); font-family: 'JetBrains Mono'; }
+        .leaflet-popup-content-wrapper { background: #111; color: #fff; border: 1px solid var(--accent); font-family: 'JetBrains Mono'; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -52,19 +46,19 @@
     <div class="px-6 py-4 flex justify-between items-center bg-black/80 backdrop-blur-md sticky top-0 z-50">
         <div class="flex items-center gap-3">
             <div id="gps-dot" class="w-2 h-2 rounded-full bg-zinc-800"></div>
-            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v6.4_Predict</span>
+            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v6.5_Final</span>
         </div>
         <div id="acc-display" class="text-[9px] font-bold opacity-40 uppercase tracking-tighter">ACC: --</div>
     </div>
 
     <div id="page-dash" class="page active-page items-center justify-center">
-        <div id="speed-container" class="flex items-baseline">
+        <div class="flex items-baseline mb-[-10px]">
             <div id="speed-readout">0</div>
-            <span id="speed-unit">KM/H</span>
+            <span class="text-[3vw] ml-1 opacity-60">KM/H</span>
         </div>
         <div id="timer-display">0.0</div>
         <div id="status-sub" class="text-[10px] font-black opacity-30 mt-4 mb-12 tracking-widest uppercase">System Standby</div>
-        <button id="arm-trigger" class="border-2 border-cyan-400 px-16 py-5 rounded-full font-black uppercase text-xs active:scale-95 transition-all">Arm System</button>
+        <button id="arm-trigger" class="border-2 border-cyan-400 px-16 py-5 rounded-full font-black uppercase text-xs active:scale-95 transition-all select-none">Arm System</button>
     </div>
 
     <div id="page-map" class="page">
@@ -72,6 +66,7 @@
     </div>
 
     <div id="page-history" class="page"><div id="log-feed" class="flex flex-col gap-2"></div></div>
+
     <div id="page-rank" class="page"><div id="rank-feed" class="flex flex-col gap-3 mb-10"></div></div>
 
     <nav class="nav-bar">
@@ -82,7 +77,7 @@
     </nav>
 
     <script>
-        let storage = JSON.parse(localStorage.getItem('GRV_V64') || '[]');
+        let storage = JSON.parse(localStorage.getItem('GRV_V65') || '[]');
         let isArmed = false, isStopped = false, timerInterval = null, startMark = 0;
         let coords = { lat: 0, lng: 0 }, mapInstance = null, watchRef = null;
         let localAvg = 0, localMax = 0;
@@ -97,53 +92,39 @@
             if(name === 'rank') loadRanks();
         }
 
-        // FIND HISTORY FOR CURRENT LOCATION (50m Radius)
         function getLocalStats(lat, lng) {
             const nearby = storage.filter(p => {
-                const d = Math.sqrt(Math.pow(lat - p.lat, 2) + Math.pow(lng - p.lng, 2));
-                return d < 0.0005; // Approx 50 meters
+                const dist = Math.sqrt(Math.pow(lat - p.lat, 2) + Math.pow(lng - p.lng, 2));
+                return dist < 0.0005; 
             });
             if (nearby.length === 0) return { avg: 0, max: 0 };
-            const sum = nearby.reduce((a, b) => a + b.d, 0);
             return {
-                avg: sum / nearby.length,
+                avg: nearby.reduce((a, b) => a + b.d, 0) / nearby.length,
                 max: Math.max(...nearby.map(p => p.d))
             };
         }
 
-        function updateTimerColor(currentSeconds) {
+        function updateTimerColor(sec) {
             const el = document.getElementById('timer-display');
             el.classList.remove('state-green', 'state-orange', 'state-red', 'state-record');
-
-            if (localAvg === 0) return; // No history here yet
-
-            if (currentSeconds > localMax) {
-                el.classList.add('state-record');
-            } else if (currentSeconds > (localAvg * 0.66)) {
-                el.classList.add('state-red');
-            } else if (currentSeconds > (localAvg * 0.33)) {
-                el.classList.add('state-orange');
-            } else {
-                el.classList.add('state-green');
-            }
+            if (localAvg === 0) return;
+            if (sec > localMax) el.classList.add('state-record');
+            else if (sec > (localAvg * 0.66)) el.classList.add('state-red');
+            else if (sec > (localAvg * 0.33)) el.classList.add('state-orange');
+            else el.classList.add('state-green');
         }
 
         function handleGPS(pos) {
             if (!isArmed) return;
             const s = pos.coords.speed || 0;
-            const kph = Math.round(s * 3.6);
             coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-            
-            document.getElementById('speed-readout').innerText = kph;
+            document.getElementById('speed-readout').innerText = Math.round(s * 3.6);
             document.getElementById('acc-display').innerText = `ACC: ${pos.coords.accuracy.toFixed(0)}M`;
 
             if(s <= 0.3 && !isStopped) {
                 isStopped = true; startMark = Date.now();
-                // Calc local stats once when stopping
                 const stats = getLocalStats(coords.lat, coords.lng);
-                localAvg = stats.avg;
-                localMax = stats.max;
-
+                localAvg = stats.avg; localMax = stats.max;
                 timerInterval = setInterval(() => {
                     const elapsed = (Date.now() - startMark) / 1000;
                     document.getElementById('timer-display').innerText = elapsed.toFixed(1);
@@ -151,38 +132,54 @@
                 }, 100);
             } else if(s > 0.9 && isStopped) {
                 isStopped = false; clearInterval(timerInterval);
-                const duration = parseFloat(document.getElementById('timer-display').innerText);
-                if(duration > 1.5) {
-                    storage.push({ d: duration, ts: Date.now(), lat: coords.lat, lng: coords.lng });
-                    localStorage.setItem('GRV_V64', JSON.stringify(storage));
+                const dur = parseFloat(document.getElementById('timer-display').innerText);
+                if(dur > 1.5) {
+                    storage.push({ d: dur, ts: Date.now(), lat: coords.lat, lng: coords.lng });
+                    localStorage.setItem('GRV_V65', JSON.stringify(storage));
                 }
                 document.getElementById('timer-display').innerText = "0.0";
-                document.getElementById('timer-display').classList.remove('state-green', 'state-orange', 'state-red', 'state-record');
+                document.getElementById('timer-display').className = ""; 
             }
         }
 
         function initMap() {
             if (mapInstance) mapInstance.remove();
             let center = storage.length ? [storage[storage.length-1].lat, storage[storage.length-1].lng] : [coords.lat, coords.lng];
-            mapInstance = L.map('map-canvas', {zoomControl: false}).setView(center, 15);
+            mapInstance = L.map('map-canvas', {zoomControl: false, tap: true}).setView(center, 15);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
             storage.forEach(p => {
-                const timeLabel = new Date(p.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                L.circle([p.lat, p.lng], {color: '#00f2ff', radius: 12})
-                .bindPopup(`<b>${p.d}s</b><br>${timeLabel}`).addTo(mapInstance);
+                const timeStr = new Date(p.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                L.circle([p.lat, p.lng], {color: '#00f2ff', radius: 12, weight: 2})
+                .bindPopup(`<div style="text-align:center"><b>${p.d}s</b><br>${timeStr}</div>`, {closeButton: false})
+                .addTo(mapInstance);
             });
         }
 
-        document.getElementById('arm-trigger').onclick = function() {
+        // SIMULATION LOGIC
+        let pressTimer;
+        const btn = document.getElementById('arm-trigger');
+        btn.onmousedown = () => pressTimer = setTimeout(simulateTraffic, 2000);
+        btn.onmouseup = () => clearTimeout(pressTimer);
+
+        function simulateTraffic() {
+            alert("🚦 SIMULATION MODE: 5-Minute Stop starting now.");
+            storage.push({ d: 30, ts: Date.now(), lat: 1, lng: 1 }); // Seed average
+            localAvg = 30; localMax = 35; isArmed = true; isStopped = true;
+            startMark = Date.now();
+            timerInterval = setInterval(() => {
+                const elapsed = (Date.now() - startMark) / 1000;
+                document.getElementById('timer-display').innerText = elapsed.toFixed(1);
+                updateTimerColor(elapsed);
+                if(elapsed > 300) clearInterval(timerInterval);
+            }, 100);
+        }
+
+        btn.onclick = function() {
             if(!isArmed) {
                 isArmed = true; this.innerText = "DISARM";
                 this.style.background = "var(--accent)"; this.style.color = "black";
                 watchRef = navigator.geolocation.watchPosition(handleGPS, null, {enableHighAccuracy:true});
-            } else {
-                isArmed = false; clearInterval(timerInterval);
-                navigator.geolocation.clearWatch(watchRef);
-                location.reload();
-            }
+            } else { location.reload(); }
         };
 
         function loadLogs() { document.getElementById('log-feed').innerHTML = storage.slice(-10).reverse().map(l => `<div class="p-4 border-b border-zinc-900 flex justify-between"><span>${l.d}s</span><span class="opacity-20">${new Date(l.ts).toLocaleTimeString()}</span></div>`).join(''); }
