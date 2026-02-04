@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V7.3</title>
+    <title>Gravity Intel V7.5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -37,6 +37,15 @@
 
         #map-canvas { height: 100%; width: 100%; background: #000; border-radius: 8px; border: 1px solid #111; min-height: 300px; }
         .leaflet-tile-container { filter: invert(100%) hue-rotate(180deg) brightness(80%) contrast(1.2); }
+        
+        .map-overlay-btn {
+            position: absolute; bottom: 30px; right: 20px; z-index: 1000;
+            background: #000; border: 2px solid var(--accent); color: var(--accent);
+            padding: 12px; border-radius: 50%; box-shadow: 0 0 15px rgba(0,242,255,0.4);
+        }
+        
+        .leaflet-popup-content-wrapper { background: #0a0a0a !important; color: var(--accent) !important; border: 1px solid #333; }
+        .leaflet-popup-tip { background: #0a0a0a !important; }
     </style>
 </head>
 <body>
@@ -44,7 +53,7 @@
     <div class="px-6 py-4 flex justify-between items-center bg-black/80 backdrop-blur-md sticky top-0 z-50">
         <div class="flex items-center gap-3">
             <div id="gps-dot" class="w-2 h-2 rounded-full bg-zinc-800"></div>
-            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v7.3_Stable</span>
+            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v7.5_Final</span>
         </div>
         <div id="acc-display" class="text-[9px] font-bold opacity-40 uppercase tracking-tighter">ACC: --</div>
     </div>
@@ -69,7 +78,13 @@
         </div>
     </div>
 
-    <div id="page-map" class="page"><div id="map-canvas"></div></div>
+    <div id="page-map" class="page relative p-0">
+        <div id="map-canvas"></div>
+        <button onclick="findMyLocation()" class="map-overlay-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3m0 14v3m10-10h-3M5 12H2"></path></svg>
+        </button>
+    </div>
+
     <div id="page-history" class="page"><div id="log-feed" class="flex flex-col gap-2"></div></div>
     
     <div id="page-rank" class="page">
@@ -85,10 +100,10 @@
     </nav>
 
     <script>
-        const DB_KEY = 'GRV_V73_STABLE';
+        const DB_KEY = 'GRV_V75_STABLE';
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let isArmed = false, isStopped = false, timerInterval = null, startMark = 0;
-        let coords = { lat: -34.39, lng: 150.89 }, mapInstance = null, watchRef = null;
+        let coords = { lat: 0, lng: 0 }, mapInstance = null, watchRef = null;
         let markers = [];
 
         function tab(name) {
@@ -108,9 +123,9 @@
         }
 
         function initMap() {
-            const container = document.getElementById('map-canvas');
-            if (!container || mapInstance) return;
-            mapInstance = L.map('map-canvas', {zoomControl: false}).setView([coords.lat, coords.lng], 14);
+            if (mapInstance) return;
+            const startPoint = storage.length > 0 ? [storage[storage.length-1].lat, storage[storage.length-1].lng] : [-34.39, 150.89];
+            mapInstance = L.map('map-canvas', {zoomControl: false}).setView(startPoint, 14);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
         }
 
@@ -119,96 +134,80 @@
             markers.forEach(m => mapInstance.removeLayer(m));
             markers = [];
             storage.forEach(point => {
+                const ts = new Date(point.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 const m = L.circleMarker([point.lat, point.lng], {
                     radius: 7, fillColor: "#00f2ff", color: "#fff", weight: 1, fillOpacity: 0.7
-                }).addTo(mapInstance).bindPopup(`Wait: ${point.d}s`);
+                }).addTo(mapInstance).bindPopup(`<div style="text-align:center"><b>${point.d.toFixed(1)}s</b><br><span style="font-size:10px">${ts}</span></div>`);
                 markers.push(m);
             });
         }
 
-        function updateTimerColor(sec, avg, max) {
-            const el = document.getElementById('timer-display');
-            el.className = ""; 
-            if (max > 0 && sec > max) el.classList.add('state-record');
-            else if (avg > 0 && sec > (avg * 0.8)) el.classList.add('state-red');
-            else if (avg > 0 && sec > (avg * 0.4)) el.classList.add('state-orange');
-            else el.classList.add('state-green');
+        function findMyLocation() {
+            navigator.geolocation.getCurrentPosition((pos) => {
+                const lat = pos.coords.latitude, lng = pos.coords.longitude;
+                if (mapInstance) {
+                    mapInstance.flyTo([lat, lng], 16);
+                    const pulse = L.circle([lat, lng], { radius: 20, color: '#00ff88' }).addTo(mapInstance);
+                    setTimeout(() => mapInstance.removeLayer(pulse), 3000);
+                }
+            });
         }
 
         async function startMultiStopSim() {
-            if(isArmed) return alert("Please disarm real GPS before simulation.");
-            if(timerInterval) clearInterval(timerInterval);
-            
+            if(isArmed) return alert("Disarm real GPS first.");
             document.getElementById('sim-indicator').classList.remove('hidden');
             document.getElementById('sim-progress-container').classList.remove('hidden');
             
-            const totalStops = 5;
-            let simLat = -34.39, simLng = 150.89;
+            // Start sim at current location if available
+            let sLat = coords.lat || -34.39, sLng = coords.lng || 150.89;
 
-            for (let i = 1; i <= totalStops; i++) {
-                document.getElementById('status-sub').innerText = `EN ROUTE TO STOP ${i}...`;
-                document.getElementById('speed-readout').innerText = "48";
-                
-                simLat += (Math.random() - 0.5) * 0.008;
-                simLng += (Math.random() - 0.5) * 0.008;
-                
+            for (let i = 1; i <= 5; i++) {
+                document.getElementById('status-sub').innerText = `DRIVING TO STOP ${i}...`;
+                document.getElementById('speed-readout').innerText = "52";
+                sLat += (Math.random() - 0.5) * 0.005;
+                sLng += (Math.random() - 0.5) * 0.005;
                 await new Promise(r => setTimeout(r, 2000)); 
 
+                let wait = Math.floor(Math.random() * 40) + 15;
                 document.getElementById('speed-readout').innerText = "0";
-                let waitTime = Math.floor(Math.random() * 45) + 15;
-                document.getElementById('status-sub').innerText = `STOP ${i}/${totalStops}: ANALYZING...`;
-
+                
                 await new Promise(resolve => {
                     isStopped = true;
-                    let stopStart = Date.now();
+                    let start = Date.now();
                     timerInterval = setInterval(() => {
-                        let elapsed = (Date.now() - stopStart) / 1000;
-                        document.getElementById('timer-display').innerText = elapsed.toFixed(1);
-                        updateTimerColor(elapsed, 30, 40); 
-                        document.getElementById('sim-progress-bar').style.width = (i / totalStops * 100) + "%";
+                        let elap = (Date.now() - start) / 1000;
+                        document.getElementById('timer-display').innerText = elap.toFixed(1);
+                        document.getElementById('sim-progress-bar').style.width = (i / 5 * 100) + "%";
 
-                        if (elapsed >= waitTime) {
+                        if (elap >= wait) {
                             clearInterval(timerInterval);
-                            const newPoint = { d: waitTime, ts: Date.now(), lat: simLat, lng: simLng };
-                            storage.push(newPoint);
+                            storage.push({ d: wait, ts: Date.now(), lat: sLat, lng: sLng });
                             localStorage.setItem(DB_KEY, JSON.stringify(storage));
-                            
                             if(mapInstance) {
-                                L.circleMarker([simLat, simLng], {
-                                    radius: 10, fillColor: "#ff2a6d", color: "#fff", weight: 2
-                                }).addTo(mapInstance).bindPopup(`SIM: ${waitTime}s`).openPopup();
-                                mapInstance.panTo([simLat, simLng]);
+                                L.circleMarker([sLat, sLng], {radius: 10, fillColor: "#ff2a6d", color: "#fff"}).addTo(mapInstance).bindPopup(`SIM: ${wait}s`).openPopup();
+                                mapInstance.panTo([sLat, sLng]);
                             }
-                            isStopped = false;
                             resolve();
                         }
                     }, 100);
                 });
             }
-            document.getElementById('status-sub').innerText = "SIM COMPLETE";
             document.getElementById('sim-indicator').classList.add('hidden');
-        }
-
-        function clearAllData() {
-            if(confirm("Purge all historical records?")) {
-                localStorage.removeItem(DB_KEY);
-                storage = [];
-                location.reload();
-            }
+            document.getElementById('status-sub').innerText = "SIMULATION COMPLETE";
         }
 
         function handleGPS(pos) {
-            const s = pos.coords.speed || 0;
             coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            const s = pos.coords.speed || 0;
             document.getElementById('gps-dot').style.background = "#00ff88";
             document.getElementById('speed-readout').innerText = Math.round(s * 3.6);
+            document.getElementById('acc-display').innerText = `ACC: ${Math.round(pos.coords.accuracy)}M`;
             
             if(s <= 0.3 && !isStopped) {
                 isStopped = true; startMark = Date.now();
                 timerInterval = setInterval(() => {
-                    let elapsed = (Date.now() - startMark) / 1000;
-                    document.getElementById('timer-display').innerText = elapsed.toFixed(1);
-                    updateTimerColor(elapsed, 0, 0);
+                    let elap = (Date.now() - startMark) / 1000;
+                    document.getElementById('timer-display').innerText = elap.toFixed(1);
                 }, 100);
             } else if(s > 0.8 && isStopped) {
                 isStopped = false; clearInterval(timerInterval);
@@ -224,10 +223,16 @@
         document.getElementById('arm-trigger').onclick = function() {
             if(!isArmed) {
                 isArmed = true; this.innerText = "DISARM";
-                this.style.background = "var(--accent)"; this.style.color = "black";
                 watchRef = navigator.geolocation.watchPosition(handleGPS, null, {enableHighAccuracy:true});
             } else { location.reload(); }
         };
+
+        function clearAllData() {
+            if(confirm("Wipe all logs and map markers?")) {
+                localStorage.removeItem(DB_KEY);
+                location.reload();
+            }
+        }
 
         function loadLogs() { 
             document.getElementById('log-feed').innerHTML = storage.slice(-15).reverse().map(l => `
