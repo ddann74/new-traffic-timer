@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V8.4</title>
+    <title>Gravity Intel V8.6</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -20,23 +20,22 @@
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.25; transition: 0.2s; }
         .nav-btn-active { opacity: 1; border-top: 3px solid var(--accent); background: rgba(0,242,255,0.05); }
 
-        /* Timer Dynamics */
-        #timer-display { font-size: 28vw; font-weight: 800; line-height: 1; transition: color 0.4s ease; color: white; text-align: center; }
+        /* Timer Dynamics - Updated for No Decimals */
+        #timer-display { font-size: 35vw; font-weight: 800; line-height: 1; transition: color 0.3s ease; color: white; text-align: center; }
         .phase-low { color: var(--go) !important; }
         .phase-mid { color: var(--mid) !important; }
         .phase-high { color: var(--warn) !important; }
-        .phase-record { color: var(--warn) !important; animation: pulse-record 0.6s infinite; text-shadow: 0 0 30px rgba(255,42,109,0.5); }
+        .phase-record { color: var(--warn) !important; animation: pulse-record 0.5s infinite; text-shadow: 0 0 40px rgba(255,42,109,0.7); }
 
         @keyframes pulse-record {
             0%, 100% { transform: scale(1); filter: brightness(1); }
-            50% { transform: scale(1.05); filter: brightness(1.5); }
+            50% { transform: scale(1.03); filter: brightness(1.4); }
         }
 
         /* Map & UI */
         #map-canvas { height: 100%; width: 100%; background: #000; }
         .leaflet-tile-container { filter: invert(100%) hue-rotate(180deg) brightness(80%) contrast(1.2); }
         .log-entry { border-left: 3px solid var(--accent); background: rgba(255,255,255,0.03); margin-bottom: 10px; padding: 15px; border-radius: 0 8px 8px 0; }
-        .view-tag { font-size: 9px; background: var(--accent); color: #000; padding: 2px 6px; font-weight: 800; border-radius: 3px; }
     </style>
 </head>
 <body>
@@ -44,7 +43,7 @@
     <div class="px-6 py-4 flex justify-between items-center bg-black/90 sticky top-0 z-[10002] border-b border-zinc-900">
         <div class="flex items-center gap-3">
             <div id="gps-dot" class="w-2 h-2 rounded-full bg-zinc-700"></div>
-            <span class="text-[10px] font-black tracking-widest uppercase">Gravity_v8.4_Stable</span>
+            <span class="text-[10px] font-black tracking-widest uppercase">Gravity_v8.6</span>
         </div>
         <div id="acc-display" class="text-[10px] font-bold opacity-60 uppercase">GPS: Standby</div>
     </div>
@@ -54,7 +53,7 @@
             <span id="speed-readout" class="text-6xl font-black">0</span>
             <span class="text-sm font-bold">KM/H</span>
         </div>
-        <div id="timer-display">0.0</div>
+        <div id="timer-display">0</div>
         <div id="status-sub" class="text-[10px] opacity-40 uppercase tracking-[0.4em] mb-12 text-center">System Disarmed</div>
         
         <button id="arm-trigger" class="w-full max-w-xs border-2 border-cyan-400 py-6 rounded-full font-black uppercase text-sm tracking-widest active:scale-95 transition-all">
@@ -66,20 +65,9 @@
         </button>
     </div>
 
-    <div id="page-map" class="page relative">
-        <div id="map-canvas"></div>
-    </div>
-
-    <div id="page-history" class="page p-6">
-        <h2 class="text-[11px] font-black opacity-30 uppercase tracking-[0.3em] mb-6">Activity Feed</h2>
-        <div id="log-feed"></div>
-    </div>
-
-    <div id="page-rank" class="page p-6">
-        <h2 class="text-[11px] font-black opacity-30 uppercase tracking-[0.3em] mb-8">Top Records</h2>
-        <div id="rank-feed" class="flex flex-col gap-4"></div>
-        <button onclick="clearData()" class="mt-auto mb-6 text-[10px] text-red-500 font-bold opacity-30 uppercase text-center w-full">Purge History</button>
-    </div>
+    <div id="page-map" class="page relative"><div id="map-canvas"></div></div>
+    <div id="page-history" class="page p-6"><h2 class="text-[11px] font-black opacity-30 uppercase mb-6">Activity Feed</h2><div id="log-feed"></div></div>
+    <div id="page-rank" class="page p-6"><h2 class="text-[11px] font-black opacity-30 uppercase mb-8">Top Records</h2><div id="rank-feed" class="flex flex-col gap-4"></div><button onclick="clearData()" class="mt-auto mb-6 text-[10px] text-red-500 font-bold opacity-30 uppercase text-center w-full">Purge History</button></div>
 
     <nav class="nav-bar">
         <button onclick="tab('dash')" id="tab-dash" class="nav-btn nav-btn-active"><span>DASH</span></button>
@@ -89,26 +77,23 @@
     </nav>
 
     <script>
-        const DB_KEY = 'GRV_DB_V84';
+        const DB_KEY = 'GRV_DB_V86';
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let mapInstance = null, watchRef = null, isArmed = false, isStopped = false;
         let timerInterval = null, startMark = 0, currentLocalStats = null;
-        let lastCoords = { lat: -34.397, lng: 150.899 }; // Default fallback
+        let lastCoords = { lat: -34.397, lng: 150.899 };
 
-        // Tab Navigation
         function tab(name) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
             document.getElementById(`page-${name}`).classList.add('active-page');
             document.getElementById(`tab-${name}`).classList.add('nav-btn-active');
-            if(name === 'map') setTimeout(() => { initMap(); renderMarkers(); }, 150);
+            if(name === 'map') setTimeout(() => { if (mapInstance) mapInstance.invalidateSize(); else initMap(); renderMarkers(); }, 150);
             if(name === 'history') loadLogs();
             if(name === 'rank') loadRanks();
         }
 
-        // Map Logic
         function initMap() {
-            if (mapInstance) { mapInstance.invalidateSize(); return; }
             const center = storage.length > 0 ? [storage[storage.length-1].lat, storage[storage.length-1].lng] : [lastCoords.lat, lastCoords.lng];
             mapInstance = L.map('map-canvas', { zoomControl: false }).setView(center, 15);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
@@ -117,29 +102,23 @@
         function renderMarkers() {
             if(!mapInstance) return;
             storage.forEach(p => {
-                L.circleMarker([p.lat, p.lng], { radius: 7, fillColor: "#00f2ff", color: "#fff", weight: 1, fillOpacity: 0.6 })
-                 .addTo(mapInstance).bindPopup(`<b>${p.d}s</b>`);
+                L.circleMarker([p.lat, p.lng], { radius: 7, fillColor: "#00f2ff", color: "#fff", weight: 1, fillOpacity: 0.6 }).addTo(mapInstance);
             });
-        }
-
-        // Statistics Logic
-        function getLocalStats(lat, lng) {
-            const matches = storage.filter(p => Math.abs(p.lat - lat) < 0.00045 && Math.abs(p.lng - lng) < 0.00045);
-            if (matches.length < 3) return null;
-            const times = matches.map(m => m.d);
-            return {
-                avg: times.reduce((a,b) => a+b, 0) / times.length,
-                max: Math.max(...times),
-                count: times.length
-            };
         }
 
         function updateTimerUI(elapsed) {
             const el = document.getElementById('timer-display');
-            el.innerText = elapsed.toFixed(1);
+            
+            // CLEAN DISPLAY: Shows only whole integers, no dots
+            el.innerText = Math.floor(elapsed);
+
+            // COLOR LOGIC: Based on sub-second precision for smoothness
             el.classList.remove('phase-low', 'phase-mid', 'phase-high', 'phase-record');
 
-            if (!currentLocalStats) return;
+            if (!currentLocalStats) {
+                el.style.color = "white";
+                return;
+            }
 
             const { avg, max } = currentLocalStats;
             if (elapsed > max) {
@@ -154,14 +133,12 @@
             }
         }
 
-        // GPS Handler
         function handleGPS(pos) {
             const s = pos.coords.speed || 0;
             const kmh = Math.round(s * 3.6);
             const lat = pos.coords.latitude;
             const lng = pos.coords.longitude;
-            
-            lastCoords = { lat, lng }; // Update global position
+            lastCoords = { lat, lng };
             
             document.getElementById('speed-readout').innerText = kmh;
             document.getElementById('gps-dot').style.background = "#00ff88";
@@ -170,50 +147,49 @@
             if (kmh <= 1 && !isStopped) {
                 isStopped = true;
                 startMark = Date.now();
-                currentLocalStats = getLocalStats(lat, lng);
-                document.getElementById('status-sub').innerText = currentLocalStats ? `LOCAL AVG: ${currentLocalStats.avg.toFixed(1)}s` : "NEW LOCATION";
+                // Check if this location has 3+ entries
+                const matches = storage.filter(p => Math.abs(p.lat - lat) < 0.00045 && Math.abs(p.lng - lng) < 0.00045);
+                if (matches.length >= 3) {
+                    const times = matches.map(m => m.d);
+                    currentLocalStats = { 
+                        avg: times.reduce((a,b) => a+b, 0) / times.length, 
+                        max: Math.max(...times),
+                        count: times.length
+                    };
+                    document.getElementById('status-sub').innerText = `TARGET: ${Math.floor(currentLocalStats.avg)}S`;
+                } else {
+                    currentLocalStats = null;
+                    document.getElementById('status-sub').innerText = "NEW LOCATION";
+                }
                 timerInterval = setInterval(() => updateTimerUI((Date.now() - startMark)/1000), 100);
             } else if (kmh > 3 && isStopped) {
                 isStopped = false;
                 clearInterval(timerInterval);
-                const final = parseFloat(document.getElementById('timer-display').innerText);
+                const final = (Date.now() - startMark) / 1000;
                 if (final > 2) {
-                    storage.push({ d: final, ts: Date.now(), lat: parseFloat(lat.toFixed(6)), lng: parseFloat(lng.toFixed(6)) });
+                    storage.push({ d: parseFloat(final.toFixed(1)), ts: Date.now(), lat: parseFloat(lat.toFixed(6)), lng: parseFloat(lng.toFixed(6)) });
                     localStorage.setItem(DB_KEY, JSON.stringify(storage));
                 }
-                document.getElementById('timer-display').innerText = "0.0";
+                document.getElementById('timer-display').innerText = "0";
                 document.getElementById('timer-display').classList.remove('phase-low', 'phase-mid', 'phase-high', 'phase-record');
+                document.getElementById('timer-display').style.color = "white";
                 document.getElementById('status-sub').innerText = "SYSTEM ARMED";
             }
         }
 
-        // Interaction Handlers
         document.getElementById('arm-trigger').onclick = function() {
             if(!isArmed) {
                 isArmed = true; this.innerText = "DISENGAGE";
                 this.classList.replace('border-cyan-400', 'border-red-500');
-                document.getElementById('status-sub').innerText = "SYSTEM ARMED";
                 watchRef = navigator.geolocation.watchPosition(handleGPS, null, {enableHighAccuracy:true});
             } else { location.reload(); }
         };
 
-        function jumpToLog(lat, lng, dur) {
-            tab('map');
-            setTimeout(() => {
-                if(mapInstance) {
-                    mapInstance.flyTo([lat, lng], 17);
-                    L.popup().setLatLng([lat, lng]).setContent(`<b>${dur}s</b>`).openOn(mapInstance);
-                }
-            }, 400);
-        }
-
         function loadLogs() {
-            const container = document.getElementById('log-feed');
-            if(storage.length === 0) { container.innerHTML = '<div class="opacity-20 text-center py-20">NO DATA</div>'; return; }
-            container.innerHTML = storage.slice(-20).reverse().map(l => `
-                <div class="log-entry flex justify-between items-center" onclick="jumpToLog(${l.lat}, ${l.lng}, ${l.d})">
-                    <div><div class="text-xl font-black">${l.d}s</div><div class="text-[9px] opacity-40">${new Date(l.ts).toLocaleTimeString()}</div></div>
-                    <span class="view-tag">VIEW</span>
+            const feed = document.getElementById('log-feed');
+            feed.innerHTML = storage.slice(-15).reverse().map(l => `
+                <div class="log-entry flex justify-between items-center">
+                    <div><div class="text-xl font-black">${Math.floor(l.d)}s</div><div class="text-[9px] opacity-40">${new Date(l.ts).toLocaleTimeString()}</div></div>
                 </div>`).join('');
         }
 
@@ -222,19 +198,15 @@
             document.getElementById('rank-feed').innerHTML = top.map((r, i) => `
                 <div class="p-5 bg-zinc-900 flex justify-between rounded-lg border-l-4 border-cyan-400">
                     <span class="text-[10px] font-black opacity-30">#0${i+1}</span>
-                    <span class="text-2xl font-black">${r.d}s</span>
+                    <span class="text-2xl font-black">${Math.floor(r.d)}s</span>
                 </div>`).join('');
         }
 
-        async function runLocalStressTest() {
-            if(isArmed) return alert("Disengage before testing.");
-            const seeds = [10.2, 12.5, 11.0]; // Baseline average: ~11.2s
-            seeds.forEach(v => {
-                storage.push({ d: v, ts: Date.now(), lat: lastCoords.lat, lng: lastCoords.lng });
-            });
+        function runLocalStressTest() {
+            const seeds = [10.2, 12.5, 11.0];
+            seeds.forEach(v => storage.push({ d: v, ts: Date.now(), lat: lastCoords.lat, lng: lastCoords.lng }));
             localStorage.setItem(DB_KEY, JSON.stringify(storage));
-            document.getElementById('status-sub').innerText = "PACER READY: AVG 11.2s";
-            tab('history');
+            alert("Location primed with 3 entries. Engage system to test.");
         }
 
         function clearData() { if(confirm("Purge?")) { localStorage.removeItem(DB_KEY); location.reload(); } }
