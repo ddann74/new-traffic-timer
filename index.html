@@ -3,127 +3,171 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gravity Intel Pro V4.7</title>
+    <title>Gravity Intel V5.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        :root { --accent: #00f2ff; --bg: #050505; }
-        body { font-family: 'JetBrains+Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; }
-        .system-bar { background: #000; border-bottom: 1px solid #111; padding: 12px; display: flex; justify-content: space-between; align-items: center; z-index: 100; }
-        .status-pill { font-size: 8px; border: 1px solid #222; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; }
-        .gate-active { color: #fff; background: #c00; border-color: #f00; }
-        #timer-display { font-size: 30vw; font-weight: 800; line-height: 1; transition: color 0.3s; }
-        .recording { color: #ff4444; text-shadow: 0 0 30px rgba(255, 0, 0, 0.4); }
-        .btn-main { border: 2px solid var(--accent); padding: 20px 50px; border-radius: 50px; font-weight: 800; text-transform: uppercase; }
-        .btn-armed { background: var(--accent); color: #000; }
+        :root { --accent: #00f2ff; --bg: #000; }
+        body { font-family: 'JetBrains+Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; }
+        
+        .page { display: none; height: calc(100vh - 80px); width: 100vw; flex-direction: column; padding: 20px; overflow-y: auto; }
+        .active-page { display: flex; }
+        
+        #timer-display { font-size: 28vw; font-weight: 800; line-height: 1; transition: 0.3s; }
+        .is-counting { color: #ff4444; text-shadow: 0 0 25px rgba(255, 68, 68, 0.5); }
+        
+        .nav-bar { position: fixed; bottom: 0; left: 0; width: 100%; height: 80px; background: #080808; border-top: 1px solid #1a1a1a; display: flex; justify-content: space-around; align-items: center; z-index: 1000; }
+        .nav-btn { font-size: 8px; font-weight: 800; text-transform: uppercase; opacity: 0.4; display: flex; flex-direction: column; align-items: center; }
+        .nav-btn-active { opacity: 1; color: var(--accent); }
+
+        .system-header { padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.5); }
+        .gps-dot { width: 8px; height: 8px; border-radius: 50%; background: #222; }
+        .gps-active { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+
+        #map-canvas { height: 100%; width: 100%; border-radius: 12px; }
+        .leaflet-tile-container { filter: invert(100%) hue-rotate(180deg) brightness(85%); }
+        
+        .danger-btn { border: 1px solid #441111; color: #662222; font-size: 8px; padding: 10px; border-radius: 4px; text-transform: uppercase; }
+        .danger-btn:active { background: #441111; color: white; }
     </style>
 </head>
 <body>
 
-    <div class="system-bar">
-        <div class="flex flex-col">
-            <span class="text-[9px] opacity-40">GPS_ACCURACY</span>
-            <span id="accuracy-val" class="text-[10px] font-bold">--</span>
+    <div class="system-header">
+        <div class="flex items-center gap-3">
+            <div id="gps-indicator" class="gps-dot"></div>
+            <span id="gps-text" class="text-[9px] font-black uppercase opacity-40">GPS_OFFLINE</span>
         </div>
-        <div class="flex gap-2">
-            <div id="gate-idle" class="status-pill">Moving</div>
-            <div id="gate-stop" class="status-pill">Stopped</div>
-        </div>
+        <div id="accuracy-box" class="text-[9px] font-bold">ACC: --</div>
     </div>
 
-    <div class="flex flex-col items-center justify-center h-[80vh]">
+    <div id="page-dash" class="page active-page items-center justify-center">
         <div id="timer-display">0.0</div>
-        <div id="velocity-out" class="text-xs font-bold mt-4 opacity-60 uppercase tracking-widest">Speed: 0.00 M/S</div>
-        
-        <div class="mt-10 flex flex-col items-center gap-4">
-            <button id="arm-btn" class="btn-main">Arm System</button>
-            <button id="force-stop" class="hidden text-[10px] text-red-500 underline uppercase">Force Save & Stop</button>
-        </div>
-
-        <div class="mt-8 w-64 p-4 border border-zinc-900 rounded-lg">
-            <p class="text-[8px] uppercase mb-2 opacity-50 text-center">Sensitivity (Stop at speed < X)</p>
-            <input type="range" id="sense-slider" min="0.1" max="1.5" step="0.1" value="0.5" class="w-full accent-cyan-400">
-            <div class="flex justify-between text-[8px] mt-1 opacity-40"><span>STRICT (0.1)</span><span>LOOSE (1.5)</span></div>
+        <div id="velocity-out" class="text-[10px] opacity-40 mb-10 tracking-[0.4em]">SPEED: 0.0 M/S</div>
+        <button id="arm-btn" class="border-2 border-cyan-400 px-12 py-5 rounded-full font-black uppercase text-xs">Arm System</button>
+        <div class="mt-8 w-64 text-center">
+            <p class="text-[8px] opacity-30 mb-2 uppercase">Sensitivity</p>
+            <input type="range" id="sense-slider" min="0.2" max="1.5" step="0.1" value="0.5" class="w-full accent-cyan-400">
         </div>
     </div>
+
+    <div id="page-map" class="page"><div id="map-canvas"></div></div>
+
+    <div id="page-history" class="page">
+        <h2 class="text-xs font-black uppercase mb-4 tracking-widest">Recent_Logs</h2>
+        <div id="history-list" class="space-y-2 mb-10"></div>
+    </div>
+
+    <div id="page-leader" class="page">
+        <h2 class="text-xs font-black uppercase mb-4 tracking-widest">Top_Stops</h2>
+        <div id="leader-list" class="space-y-3 mb-10"></div>
+        <hr class="border-zinc-900 my-6">
+        <button onclick="clearAllData()" class="danger-btn">Wipe All System Data</button>
+    </div>
+
+    <nav class="nav-bar">
+        <button onclick="showPage('dash')" class="nav-btn nav-btn-active" id="btn-dash"><span>DASH</span></button>
+        <button onclick="showPage('map')" class="nav-btn" id="btn-map"><span>MAP</span></button>
+        <button onclick="showPage('history')" class="nav-btn" id="btn-history"><span>LOGS</span></button>
+        <button onclick="showPage('leader')" class="nav-btn" id="btn-leader"><span>RANK</span></button>
+    </nav>
 
     <script>
+        let db = JSON.parse(localStorage.getItem('gravity_final_db') || '[]');
         let isArmed = false, isIdling = false, startTime, timerInterval, gpsWatch;
-        let stopThreshold = 0.5;
+        let lastPos = { lat: 0, lng: 0 }, stopThreshold = 0.5;
+        let mapObj = null;
 
-        const timerEl = document.getElementById('timer-display');
-        const gateIdle = document.getElementById('gate-idle');
-        const gateStop = document.getElementById('gate-stop');
-        const forceBtn = document.getElementById('force-stop');
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
+            document.getElementById(`page-${pageId}`).classList.add('active-page');
+            document.getElementById(`btn-${pageId}`).classList.add('nav-btn-active');
+            if(pageId === 'map') initMap();
+            if(pageId === 'history') renderHistory();
+            if(pageId === 'leader') renderLeaderboard();
+        }
 
         function processLogic(pos) {
             const spd = pos.coords.speed || 0;
             const acc = pos.coords.accuracy || 0;
+            lastPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            document.getElementById('velocity-out').innerText = `SPEED: ${spd.toFixed(1)} M/S`;
+            document.getElementById('accuracy-box').innerText = `ACC: ${acc.toFixed(0)}M`;
             
-            document.getElementById('velocity-out').innerText = `Speed: ${spd.toFixed(2)} M/S`;
-            document.getElementById('accuracy-val').innerText = `${acc.toFixed(1)}M`;
+            if(acc < 25) {
+                document.getElementById('gps-indicator').classList.add('gps-active');
+                document.getElementById('gps-text').innerText = "GPS_LOCKED";
+            }
 
             if (!isArmed) return;
 
-            // TIMER START LOGIC (Speed drops below threshold)
             if (spd <= stopThreshold && !isIdling) {
                 isIdling = true;
                 startTime = Date.now();
-                timerEl.classList.add('recording');
-                gateStop.classList.add('gate-active');
-                gateIdle.classList.remove('gate-active');
-                forceBtn.classList.remove('hidden');
-                
+                document.getElementById('timer-display').classList.add('is-counting');
                 timerInterval = setInterval(() => {
-                    timerEl.innerText = ((Date.now() - startTime) / 1000).toFixed(1);
+                    document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
                 }, 100);
             } 
-            
-            // TIMER STOP LOGIC (Speed must break threshold + buffer to count as "moving")
-            // This buffer (0.5) is the secret to making it stop reliably.
-            else if (spd > (stopThreshold + 0.5) && isIdling) {
-                stopAndSave();
+            else if (spd > (stopThreshold + 0.6) && isIdling) {
+                isIdling = false;
+                clearInterval(timerInterval);
+                const dur = document.getElementById('timer-display').innerText;
+                document.getElementById('timer-display').classList.remove('is-counting');
+                if(parseFloat(dur) > 2.0) {
+                    db.push({ ts: Date.now(), dur: parseFloat(dur), lat: lastPos.lat, lng: lastPos.lng });
+                    localStorage.setItem('gravity_final_db', JSON.stringify(db));
+                }
+                document.getElementById('timer-display').innerText = "0.0";
             }
-        }
-
-        function stopAndSave() {
-            isIdling = false;
-            clearInterval(timerInterval);
-            timerEl.classList.remove('recording');
-            gateStop.classList.remove('gate-active');
-            gateIdle.classList.add('gate-active');
-            forceBtn.classList.add('hidden');
-
-            const finalTime = timerEl.innerText;
-            // Only save if it's a real stop (over 2 seconds)
-            if (parseFloat(finalTime) > 2.0) {
-                console.log("Logged Stop:", finalTime);
-                // Database save logic goes here
-            }
-            timerEl.innerText = "0.0";
         }
 
         document.getElementById('arm-btn').addEventListener('click', function() {
             isArmed = !isArmed;
-            this.classList.toggle('btn-armed', isArmed);
+            this.style.background = isArmed ? "var(--accent)" : "transparent";
+            this.style.color = isArmed ? "#000" : "var(--accent)";
             this.innerText = isArmed ? "STANDBY" : "ARM SYSTEM";
-            
             if (isArmed) {
-                gpsWatch = navigator.geolocation.watchPosition(processLogic, null, { 
-                    enableHighAccuracy: true, 
-                    maximumAge: 0 
-                });
+                gpsWatch = navigator.geolocation.watchPosition(processLogic, (e) => console.log(e), { enableHighAccuracy: true });
             } else {
                 navigator.geolocation.clearWatch(gpsWatch);
-                if (isIdling) stopAndSave();
             }
         });
 
-        forceBtn.addEventListener('click', stopAndSave);
+        function clearAllData() {
+            if(confirm("Permanently wipe all logs?")) {
+                db = [];
+                localStorage.setItem('gravity_final_db', JSON.stringify(db));
+                showPage('dash');
+            }
+        }
 
-        document.getElementById('sense-slider').addEventListener('input', (e) => {
-            stopThreshold = parseFloat(e.target.value);
-        });
-    </script>
-</body>
-</html>
+        function initMap() {
+            setTimeout(() => {
+                if(mapObj) mapObj.remove();
+                mapObj = L.map('map-canvas', { zoomControl: false }).setView([lastPos.lat || 0, lastPos.lng || 0], 15);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapObj);
+                db.forEach(entry => L.circle([entry.lat, entry.lng], { color: 'cyan', radius: 10 }).addTo(mapObj));
+            }, 200);
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = db.slice(-15).reverse().map(e => `
+                <div class="p-3 border-b border-zinc-900 flex justify-between">
+                    <span class="font-bold text-white">${e.dur}s</span>
+                    <span class="opacity-30 text-[8px] uppercase">${new Date(e.ts).toLocaleTimeString()}</span>
+                </div>
+            `).join('');
+        }
+
+        function renderLeaderboard() {
+            const list = document.getElementById('leader-list');
+            const sorted = [...db].sort((a,b) => b.dur - a.dur).slice(0, 5);
+            list.innerHTML = sorted.map((e, i) => `
+                <div class="p-4 bg-zinc-950 border-l-2 border-cyan-400 flex justify-between items-center">
+                    <div><p class="text-[8px] opacity-40 uppercase">Rank #0${i+1}</p><p class="text-xl font-black">${e.dur}s</p></div>
+                    <div class="text-[7px] opacity-20 text-right">${e.lat.toFixed
