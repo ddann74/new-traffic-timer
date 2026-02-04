@@ -21,8 +21,8 @@
         .safe-mode-overlay { position: fixed; inset: 0; background: black; z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; }
         .engage-btn { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
         .engage-btn.active { background: var(--active); color: black; box-shadow: 0 0 30px var(--active); border-color: var(--active); }
-        .recap-bar { background: rgba(255,255,255,0.05); height: 4px; border-radius: 2px; overflow: hidden; margin-top: 4px; }
-        .recap-fill { background: var(--active); height: 100%; transition: width 0.5s; }
+        .recap-bar { background: rgba(255,255,255,0.1); height: 6px; border-radius: 3px; overflow: hidden; margin-top: 8px; }
+        .recap-fill { background: var(--active); height: 100%; transition: width 0.8s ease-out; }
     </style>
 </head>
 <body>
@@ -36,11 +36,10 @@
     <div id="page-dash" class="page active-page p-6 justify-center">
         <div id="trip-recap-ui" class="hidden mb-6 p-4 bg-zinc-900/80 border border-zinc-700 rounded-lg">
             <div class="flex justify-between items-end">
-                <span class="text-[10px] font-bold uppercase tracking-widest">Trip Grade</span>
-                <span id="trip-grade" class="text-2xl font-black text-white">A-</span>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Current Trip Grade</span>
+                <span id="trip-grade" class="text-3xl font-black text-white">--</span>
             </div>
             <div class="recap-bar"><div id="grade-progress" class="recap-fill" style="width: 0%"></div></div>
-            <div class="text-[8px] opacity-50 mt-2 uppercase">Based on last 5 stops</div>
         </div>
 
         <div class="grid grid-cols-2 gap-4 mb-8">
@@ -75,12 +74,114 @@
     </nav>
 
     <script>
-        const DB_KEY = 'GRV_DB_V101';
+        const DB_KEY = 'GRV_DB_PRO_101';
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let isStopped = false, isArmed = false, startMark = 0, timerInterval = null;
         let mapInstance = null;
 
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const recognition = new SpeechRecognition();
+        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
         recognition.continuous = true;
-        recognition.lang = 'en-
+        recognition.lang = 'en-US';
+
+        function speak(text) {
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+        }
+
+        function calculateTripGrade() {
+            if (storage.length < 1) return;
+            document.getElementById('trip-recap-ui').classList.remove('hidden');
+            const lastFive = storage.slice(-5);
+            const avg = lastFive.reduce((a, b) => a + parseFloat(b.obj), 0) / lastFive.length;
+            const percent = (avg / 10) * 100;
+            
+            let grade = "C";
+            if (avg > 8.5) grade = "A+";
+            else if (avg > 7.5) grade = "A";
+            else if (avg > 6.5) grade = "B";
+            
+            document.getElementById('trip-grade').innerText = grade;
+            document.getElementById('grade-progress').style.width = percent + "%";
+        }
+
+        async function toggleSystem() {
+            const btn = document.getElementById('master-start');
+            if (!isArmed) {
+                if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                    await DeviceMotionEvent.requestPermission();
+                }
+                isArmed = true;
+                btn.innerText = "System Active";
+                btn.classList.add('active');
+                document.getElementById('voice-label').innerText = "Telemetry Online";
+                speak("Gravity Active.");
+                navigator.geolocation.watchPosition(handleGPS, null, { enableHighAccuracy: true });
+                recognition.start();
+                calculateTripGrade();
+            } else {
+                location.reload();
+            }
+        }
+
+        function handleGPS(pos) {
+            const speed = (pos.coords.speed || 0) * 3.6;
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            
+            document.getElementById('speed-val').innerText = Math.round(speed);
+            document.getElementById('safe-mode').style.display = speed > 10 ? 'flex' : 'none';
+
+            if (speed < 1.0 && !isStopped && isArmed) {
+                isStopped = true;
+                startMark = Date.now();
+                const local = storage.filter(d => Math.abs(d.lat - lat) < 0.0005 && Math.abs(d.lng - lng) < 0.0005);
+                if(local.length > 0) {
+                    const avg = local.reduce((a,b)=>a+b.d,0) / local.length;
+                    document.getElementById('avg-wait').innerText = Math.round(avg) + 's';
+                }
+                timerInterval = setInterval(() => {
+                    document.getElementById('timer-display').innerText = ((Date.now() - startMark)/1000).toFixed(1);
+                }, 100);
+            } 
+            else if (speed > 5 && isStopped) {
+                isStopped = false;
+                clearInterval(timerInterval);
+                const final = (Date.now() - startMark) / 1000;
+                const objScore = Math.min(10, (100 / final) * 2).toFixed(1);
+                storage.push({ d: final, ts: Date.now(), lat, lng, obj: objScore, subj: 0 });
+                localStorage.setItem(DB_KEY, JSON.stringify(storage));
+                document.getElementById('obj-score').innerText = objScore;
+                calculateTripGrade();
+                speak(`Move. Score ${objScore}. Rate it?`);
+                document.getElementById('timer-display').innerText = "0.0";
+            }
+        }
+
+        recognition.onresult = (e) => {
+            const cmd = e.results[e.results.length-1][0].transcript.toLowerCase();
+            if (isStopped && (cmd.includes("star") || !isNaN(parseInt(cmd)))) {
+                const n = cmd.match(/\d/) ? parseInt(cmd.match(/\d/)[0]) : 0;
+                if (n > 0 && storage.length > 0) {
+                    storage[storage.length-1].subj = n;
+                    localStorage.setItem(DB_KEY, JSON.stringify(storage));
+                    speak(`Rated ${n}.`);
+                }
+            }
+        };
+
+        function tab(n) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
+            document.getElementById('page-'+n).classList.add('active-page');
+            document.getElementById('tab-'+n).classList.add('nav-btn-active');
+            if(n === 'map') initMap();
+        }
+
+        function initMap() {
+            if (mapInstance) return;
+            mapInstance = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
+        }
+    </script>
+</body>
+</html>
