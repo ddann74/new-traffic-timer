@@ -3,148 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gravity Intel Pro V4</title>
+    <title>Gravity Intel Pro V4.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        :root { --accent: #00f2ff; --red: #ff4444; --orange: #ffaa00; }
-        body { font-family: 'JetBrains+Mono', monospace; background: #000; color: var(--accent); overflow: hidden; height: 100vh; }
-        .page { display: none; flex-direction: column; height: 100vh; width: 100vw; position: absolute; padding: 20px; box-sizing: border-box; background: #000; }
+        :root { --accent: #00f2ff; }
+        body { font-family: 'JetBrains+Mono', monospace; background: #000; color: var(--accent); overflow: hidden; height: 100vh; margin: 0; }
+        .page { display: none; flex-direction: column; height: 100vh; width: 100vw; position: absolute; padding: 25px; box-sizing: border-box; background: radial-gradient(circle at center, #001a1a 0%, #000 100%); }
         .active-page { display: flex; z-index: 50; }
-        #options-menu { transition: 0.2s; transform: translateY(-10px); opacity: 0; pointer-events: none; z-index: 200; }
+        
+        #options-menu { transition: all 0.2s ease; transform: translateY(-5px); opacity: 0; pointer-events: none; z-index: 200; }
         #options-menu.open { transform: translateY(0); opacity: 1; pointer-events: auto; }
-        .map-btn { background: rgba(0,0,0,0.8); border: 1px solid var(--accent); color: white; padding: 5px 10px; border-radius: 4px; z-index: 1000; font-size: 10px; }
-        #map-canvas { flex-grow: 1; border: 1px solid #111; }
-        .leaflet-tile-container { filter: invert(100%) hue-rotate(180deg) brightness(80%); }
+
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.2; transform: scale(0.8); } }
+        .pulse-active { animation: pulse-dot 1.2s infinite; background: #00f2ff; box-shadow: 0 0 10px var(--accent); }
+        
+        .gps-bar { width: 3px; background: currentColor; margin-left: 1px; }
+        .glow-text { text-shadow: 0 0 15px var(--accent); color: #fff; }
     </style>
 </head>
 <body>
 
     <div id="page-dash" class="page active-page">
-        <div class="flex justify-between items-start">
+        <div class="flex justify-between items-start z-[100]">
             <div>
                 <p class="text-[10px] font-black tracking-widest uppercase">System_Core</p>
-                <p class="text-[8px] opacity-60">V4.0_STABLE</p>
+                <p class="text-[8px] opacity-60 uppercase font-bold">Build: V4.1_STABLE</p>
             </div>
             
-            <div class="relative">
-                <button onclick="toggleMenu()" class="bg-cyan-950/50 border border-cyan-400/50 px-4 py-1 text-[10px] uppercase">Menu ▾</button>
-                <div id="options-menu" class="absolute right-0 mt-2 w-52 bg-black border border-cyan-400 p-2 rounded shadow-2xl">
-                    <button onclick="showPage('page-map')" class="w-full text-left py-2 text-[10px] uppercase hover:bg-cyan-900">Tactical Map</button>
-                    <button onclick="showPage('page-history')" class="w-full text-left py-2 text-[10px] uppercase hover:bg-cyan-900 border-t border-white/10">History</button>
-                    <button onclick="showPage('page-leaderboard')" class="w-full text-left py-2 text-[10px] uppercase hover:bg-cyan-900 border-t border-white/10">Leaderboard</button>
-                    <div class="p-2 border-t border-white/10 mt-2">
-                        <p class="text-[8px] mb-1 opacity-50 uppercase">Sensitivity (Stop Spd)</p>
-                        <input type="range" id="sense-stop" min="0.1" max="1.5" step="0.1" value="0.3" class="w-full accent-cyan-400">
+            <div class="relative text-right">
+                <button onclick="toggleMenu()" class="bg-cyan-950/50 border border-cyan-400/50 px-4 py-1 text-[10px] font-black uppercase">Options ▾</button>
+                <div id="options-menu" class="absolute right-0 mt-2 w-52 bg-black border border-cyan-400 p-3 rounded shadow-2xl text-left">
+                    <button onclick="showPage('page-map')" class="w-full py-2 text-[9px] uppercase hover:bg-cyan-900 text-left">Tactical Map</button>
+                    <button onclick="showPage('page-history')" class="w-full py-2 text-[9px] uppercase hover:bg-cyan-900 border-t border-white/10 text-left">History Matrix</button>
+                    
+                    <div class="mt-2 pt-2 border-t border-white/10">
+                        <p class="text-[7px] uppercase opacity-50 mb-1">Stop Sensitivity (M/S)</p>
+                        <input type="range" id="sense-threshold" min="0.1" max="2.0" step="0.1" value="0.4" class="w-full accent-cyan-400">
                     </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 mt-4">
+                    <div id="gps-indicator" class="flex items-end h-3 text-gray-700">
+                        <div class="gps-bar h-1"></div><div class="gps-bar h-2"></div><div class="gps-bar h-3"></div>
+                    </div>
+                    <div id="status-dot" class="w-2 h-2 rounded-full bg-gray-700"></div>
+                    <p id="status-text" class="text-[10px] font-black uppercase tracking-widest">Idle_</p>
                 </div>
             </div>
         </div>
 
         <div class="flex-1 flex flex-col items-center justify-center">
-            <div id="timer-display" class="text-[25vw] font-black tracking-tighter text-white">0.0</div>
-            <button id="arm-btn" class="mt-8 px-14 py-6 border-2 border-cyan-400 rounded-full font-black text-sm uppercase">Arm System</button>
-            <p id="speed-display" class="text-[10px] font-bold uppercase mt-10 opacity-40">Velocity: 0.0 M/S</p>
+            <div id="timer-display" class="text-[25vw] font-black tracking-tighter glow-text">0.0</div>
+            <button id="arm-btn" class="mt-8 px-14 py-6 border-2 border-cyan-400 rounded-full font-black text-sm uppercase transition-all">Arm System</button>
+            <p id="speed-display" class="text-[10px] font-bold uppercase tracking-[0.4em] mt-10 opacity-40">Velocity: 0.0 M/S</p>
         </div>
     </div>
 
     <div id="page-map" class="page">
-        <div class="flex justify-between items-center mb-2">
-            <div class="flex gap-2">
-                <select id="map-filter" class="bg-black text-[10px] border border-cyan-900 px-2 py-1 uppercase">
-                    <option value="all">All Time</option>
-                    <option value="week">This Week</option>
-                    <option value="custom">Top 10 Only</option>
-                </select>
-            </div>
-            <button onclick="showPage('page-dash')" class="border border-cyan-400 px-4 py-1 text-[10px]">Close</button>
-        </div>
-        <div id="map-canvas">
-            <button onclick="locateUser()" class="absolute bottom-4 right-4 map-btn">FIND ME</button>
-        </div>
-    </div>
-
-    <div id="page-history" class="page">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xs font-black uppercase">History_Matrix</h2>
-            <div class="flex gap-2">
-                <select onchange="sortHistory(this.value)" class="bg-black text-[10px] border border-cyan-900 px-2">
-                    <option value="date">Sort: Date</option>
-                    <option value="dur">Sort: Duration</option>
-                </select>
-                <button onclick="showPage('page-dash')" class="border border-cyan-400 px-4 py-1 text-[10px]">Back</button>
-            </div>
-        </div>
-        <div id="log-list" class="flex-1 overflow-y-auto space-y-2"></div>
+        <button onclick="showPage('page-dash')" class="border border-cyan-400 px-4 py-1 text-[10px] self-end mb-4">Close</button>
+        <div id="map-canvas" class="flex-1 bg-zinc-900 border border-cyan-900 rounded"></div>
     </div>
 
     <script>
         let db = JSON.parse(localStorage.getItem('gravity_db_v4') || '[]');
         let isArmed = false, isIdling = false, startTime, timerInterval;
-        let mapObj = null, userMarker = null, gpsWatch = null;
-        let lastPos = { lat: 0, lng: 0 };
-
-        // SETTINGS
-        let stopThreshold = 0.3;
+        let gpsWatch = null, lastPos = { lat: 0, lng: 0 };
+        
+        // SENSITIVITY SETTING
+        let stopThreshold = 0.4; 
 
         function toggleMenu() { document.getElementById('options-menu').classList.toggle('open'); }
         function showPage(id) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.getElementById(id).classList.add('active-page');
-            if(id === 'page-map') initMap();
-            if(id === 'page-history') renderHistory();
         }
 
-        // COLOR LOGIC
-        function getCircleColor(seconds) {
-            if (seconds >= 60) return '#ff4444'; // Red
-            if (seconds <= 10) return '#ffaa00'; // Orange
-            return '#00f2ff'; // Default Cyan
-        }
-
-        function initMap() {
-            setTimeout(() => {
-                if (mapObj) mapObj.remove();
-                const center = lastPos.lat ? [lastPos.lat, lastPos.lng] : [0,0];
-                mapObj = L.map('map-canvas', { zoomControl: false }).setView(center, 15);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapObj);
-                
-                db.forEach((entry, index) => {
-                    const circle = L.circle([entry.lat, entry.lng], {
-                        color: getCircleColor(entry.dur),
-                        radius: 15,
-                        fillOpacity: 0.6
-                    }).addTo(mapObj);
-                    
-                    circle.bindPopup(`Duration: ${entry.dur}s <br> <button onclick="deleteEntry(${index})" class="text-red-500">DELETE</button>`);
-                });
-
-                if(lastPos.lat) userMarker = L.circleMarker([lastPos.lat, lastPos.lng], { color: '#fff', radius: 6 }).addTo(mapObj);
-            }, 100);
-        }
-
-        function deleteEntry(index) {
-            db.splice(index, 1);
-            localStorage.setItem('gravity_db_v4', JSON.stringify(db));
-            initMap();
-        }
-
-        function locateUser() {
-            if (lastPos.lat) mapObj.flyTo([lastPos.lat, lastPos.lng], 18);
-        }
-
-        function renderHistory() {
-            const list = document.getElementById('log-list');
-            list.innerHTML = '';
-            db.forEach((entry, index) => {
-                const item = document.createElement('div');
-                item.className = "p-3 border border-cyan-900 bg-white/5 flex justify-between text-[10px]";
-                item.innerHTML = `<span>${new Date(entry.ts).toLocaleDateString()} - ${entry.dur}s</span>
-                                  <button onclick="deleteEntry(${index})" class="text-red-500">REMOVE</button>`;
-                list.appendChild(item);
-            });
+        function updateGPSUI(state) {
+            const bar = document.getElementById('gps-indicator');
+            const dot = document.getElementById('status-dot');
+            if(state === 'active') {
+                bar.classList.replace('text-gray-700', 'text-cyan-400');
+                dot.classList.add('pulse-active');
+            } else {
+                bar.classList.replace('text-cyan-400', 'text-gray-700');
+                dot.classList.remove('pulse-active');
+            }
         }
 
         function processLogic(lat, lng, spd) {
@@ -153,43 +99,56 @@
             document.getElementById('speed-display').innerText = `Velocity: ${currentSpeed.toFixed(1)} M/S`;
 
             if (isArmed) {
+                // START TIMER: Speed is 0
                 if (currentSpeed === 0 && !isIdling) {
                     isIdling = true;
                     startTime = Date.now();
+                    document.getElementById('status-text').innerText = "Tracking_";
                     timerInterval = setInterval(() => {
                         document.getElementById('timer-display').innerText = ((Date.now() - startTime) / 1000).toFixed(1);
                     }, 100);
-                } else if (currentSpeed > 0.8 && isIdling) {
+                } 
+                // STOP TIMER: Speed is clearly moving (Threshold + 0.5 buffer to prevent jitter)
+                else if (currentSpeed > (stopThreshold + 0.4) && isIdling) {
                     isIdling = false;
                     clearInterval(timerInterval);
-                    const dur = parseFloat(document.getElementById('timer-display').innerText);
-                    if (dur > 1) { // Only log if > 1 sec
-                        db.push({ ts: Date.now(), dur, lat, lng });
+                    const finalDur = document.getElementById('timer-display').innerText;
+                    
+                    if(parseFloat(finalDur) > 1.0) {
+                        db.push({ ts: Date.now(), dur: finalDur, lat, lng });
                         localStorage.setItem('gravity_db_v4', JSON.stringify(db));
                     }
+                    
                     document.getElementById('timer-display').innerText = "0.0";
+                    document.getElementById('status-text').innerText = "Armed_";
                 }
             }
         }
 
-        document.getElementById('sense-stop').addEventListener('input', (e) => {
-            stopThreshold = parseFloat(e.target.value);
-        });
-
         document.getElementById('arm-btn').addEventListener('click', function() {
             isArmed = !isArmed;
             this.innerText = isArmed ? "STANDBY" : "ARM SYSTEM";
-            this.style.backgroundColor = isArmed ? "var(--accent)" : "transparent";
+            this.style.background = isArmed ? "var(--accent)" : "transparent";
             this.style.color = isArmed ? "#000" : "var(--accent)";
-            
+            updateGPSUI(isArmed ? 'active' : 'idle');
+
             if (isArmed) {
                 gpsWatch = navigator.geolocation.watchPosition(
                     pos => processLogic(pos.coords.latitude, pos.coords.longitude, pos.coords.speed),
-                    null, { enableHighAccuracy: true }
+                    err => console.error(err),
+                    { enableHighAccuracy: true, maximumAge: 0 }
                 );
             } else {
                 navigator.geolocation.clearWatch(gpsWatch);
+                clearInterval(timerInterval);
+                isIdling = false;
+                document.getElementById('timer-display').innerText = "0.0";
+                document.getElementById('status-text').innerText = "Idle_";
             }
+        });
+
+        document.getElementById('sense-threshold').addEventListener('input', (e) => {
+            stopThreshold = parseFloat(e.target.value);
         });
     </script>
 </body>
