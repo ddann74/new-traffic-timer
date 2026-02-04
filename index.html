@@ -3,23 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V9.9</title>
+    <title>Gravity Intel V10.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/leaflet.heatmap@1.0.0/leaflet-heatmap.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        :root { --accent: #00f2ff; --bg: #050505; }
+        :root { --accent: #00f2ff; --bg: #050505; --active: #00ff88; }
         body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; }
         .page { display: none; height: calc(100vh - 90px); width: 100vw; flex-direction: column; overflow-y: auto; }
         .active-page { display: flex; }
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 90px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 1000; }
         .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 2px solid var(--accent); }
-        #timer-display { font-size: 26vw; font-weight: 800; color: white; line-height: 1; transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        #timer-display { font-size: 26vw; font-weight: 800; color: white; line-height: 1; }
         .safe-mode-overlay { position: fixed; inset: 0; background: black; z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; }
-        .metric-card { background: rgba(255,255,255,0.02); border: 1px solid #1a1a1a; border-radius: 8px; padding: 12px; }
+        .engage-btn { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .engage-btn.active { background: var(--active); color: black; box-shadow: 0 0 30px var(--active); border-color: var(--active); }
+        .recap-bar { background: rgba(255,255,255,0.05); height: 4px; border-radius: 2px; overflow: hidden; margin-top: 4px; }
+        .recap-fill { background: var(--active); height: 100%; transition: width 0.5s; }
     </style>
 </head>
 <body>
@@ -27,25 +30,38 @@
     <div id="safe-mode" class="safe-mode-overlay">
         <div class="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-6"></div>
         <h2 class="text-lg font-black tracking-widest text-white uppercase">Safe Mode</h2>
-        <p class="text-[9px] opacity-40 mt-1 uppercase">Visuals locked for safety</p>
+        <p class="text-[9px] opacity-40 mt-1 uppercase">Eyes on the Road</p>
     </div>
 
     <div id="page-dash" class="page active-page p-6 justify-center">
+        <div id="trip-recap-ui" class="hidden mb-6 p-4 bg-zinc-900/80 border border-zinc-700 rounded-lg">
+            <div class="flex justify-between items-end">
+                <span class="text-[10px] font-bold uppercase tracking-widest">Trip Grade</span>
+                <span id="trip-grade" class="text-2xl font-black text-white">A-</span>
+            </div>
+            <div class="recap-bar"><div id="grade-progress" class="recap-fill" style="width: 0%"></div></div>
+            <div class="text-[8px] opacity-50 mt-2 uppercase">Based on last 5 stops</div>
+        </div>
+
         <div class="grid grid-cols-2 gap-4 mb-8">
-            <div class="metric-card">
-                <span class="text-[8px] opacity-40 uppercase">Obj. Efficiency</span>
+            <div class="bg-zinc-900/50 p-3 rounded border border-zinc-800">
+                <span class="text-[8px] opacity-40 uppercase">Stop Efficiency</span>
                 <div id="obj-score" class="text-xl font-black text-white">--</div>
             </div>
-            <div class="metric-card">
-                <span class="text-[8px] opacity-40 uppercase">Local Avg</span>
+            <div class="bg-zinc-900/50 p-3 rounded border border-zinc-800">
+                <span class="text-[8px] opacity-40 uppercase">Route Average</span>
                 <div id="avg-wait" class="text-xl font-black text-white">--</div>
             </div>
         </div>
 
         <div class="text-center">
-            <div id="speed-val" class="text-5xl font-black opacity-10 mb-2">0</div>
+            <div id="speed-val" class="text-4xl font-black opacity-10 mb-2">0</div>
             <div id="timer-display">0.0</div>
-            <div id="voice-label" class="mt-6 text-[10px] tracking-widest text-cyan-400 opacity-80 uppercase animate-pulse">Waiting for "Start"</div>
+            
+            <button id="master-start" onclick="toggleSystem()" class="engage-btn mt-10 px-10 py-4 border-2 border-cyan-400 rounded-full font-black text-xs tracking-[0.2em] uppercase">
+                Start System
+            </button>
+            <div id="voice-label" class="mt-4 text-[9px] text-zinc-500 uppercase tracking-widest">Manual Start Required</div>
         </div>
     </div>
 
@@ -54,132 +70,17 @@
     <nav class="nav-bar">
         <button onclick="tab('dash')" id="tab-dash" class="nav-btn nav-btn-active">DASH</button>
         <button onclick="tab('map')" id="tab-map" class="nav-btn">HEATMAP</button>
-        <button onclick="tab('history')" id="tab-history" class="nav-btn">DATA</button>
-        <button onclick="location.reload()" class="nav-btn text-red-700">RELOAD</button>
+        <button onclick="tab('history')" id="tab-history" class="nav-btn">LOGS</button>
+        <button onclick="location.reload()" class="nav-btn text-red-700 uppercase">Reset</button>
     </nav>
 
     <script>
-        const DB_KEY = 'GRV_DB_V99';
+        const DB_KEY = 'GRV_DB_V101';
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let isStopped = false, isArmed = false, startMark = 0, timerInterval = null;
         let mapInstance = null;
 
-        // --- SPEECH ENGINE (Robust Implementation) ---
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const recognition = new SpeechRecognition();
-        recognition.continuous = false; // Set to false to prevent buffer bloat
-        recognition.lang = 'en-US';
-
-        function speak(text) {
-            window.speechSynthesis.cancel(); // Clear queue
-            const msg = new SpeechSynthesisUtterance(text);
-            msg.rate = 1.0;
-            window.speechSynthesis.speak(msg);
-        }
-
-        recognition.onresult = (e) => {
-            const cmd = e.results[0][0].transcript.toLowerCase();
-            document.getElementById('voice-label').innerText = `Heard: "${cmd}"`;
-            
-            if (cmd.includes("start")) {
-                isArmed = true;
-                speak("System armed. Monitoring telemetry.");
-                document.getElementById('voice-label').innerText = "System Armed";
-            } else if (isStopped && (cmd.includes("star") || !isNaN(parseInt(cmd)))) {
-                const rating = cmd.match(/\d/) ? parseInt(cmd.match(/\d/)[0]) : 0;
-                if (rating > 0 && storage.length > 0) {
-                    storage[storage.length-1].subj = rating;
-                    localStorage.setItem(DB_KEY, JSON.stringify(storage));
-                    speak(`Rated ${rating} stars.`);
-                }
-            }
-        };
-
-        // Restart recognition automatically when it stops
-        recognition.onend = () => { if(isArmed) recognition.start(); };
-
-        // --- SENSOR FUSION & GPS ---
-        function handleGPS(pos) {
-            const speed = (pos.coords.speed || 0) * 3.6;
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            
-            document.getElementById('speed-val').innerText = Math.round(speed);
-
-            // Safe Mode Trigger
-            document.getElementById('safe-mode').style.display = speed > 10 ? 'flex' : 'none';
-
-            // Detection Logic
-            if (speed < 1.0 && !isStopped && isArmed) {
-                isStopped = true;
-                startMark = Date.now();
-                
-                // Benchmarking Proximity Check (approx 50m)
-                const local = storage.filter(d => Math.abs(d.lat - lat) < 0.0005 && Math.abs(d.lng - lng) < 0.0005);
-                if(local.length > 0) {
-                    const avg = local.reduce((a,b)=>a+b.d,0) / local.length;
-                    document.getElementById('avg-wait').innerText = Math.round(avg) + 's';
-                    speak(`Average wait here is ${Math.round(avg)} seconds.`);
-                }
-
-                timerInterval = setInterval(() => {
-                    document.getElementById('timer-display').innerText = ((Date.now() - startMark)/1000).toFixed(1);
-                    document.getElementById('timer-display').style.transform = "scale(1.1)";
-                    setTimeout(() => document.getElementById('timer-display').style.transform = "scale(1)", 100);
-                }, 1000);
-            } 
-            else if (speed > 5 && isStopped) {
-                isStopped = false;
-                clearInterval(timerInterval);
-                const final = (Date.now() - startMark) / 1000;
-                const objScore = Math.min(10, (100 / final) * 2).toFixed(1); // Higher score for efficient lights
-                
-                storage.push({ d: final, ts: Date.now(), lat, lng, obj: objScore, subj: 0 });
-                localStorage.setItem(DB_KEY, JSON.stringify(storage));
-                
-                document.getElementById('obj-score').innerText = objScore;
-                speak(`Move detected. Efficiency ${objScore}. Rate this light?`);
-                document.getElementById('timer-display').innerText = "0.0";
-            }
-        }
-
-        // --- PERMISSIONS & INIT ---
-        async function init() {
-            // Request iOS Motion Permissions if necessary
-            if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                await DeviceMotionEvent.requestPermission();
-            }
-            
-            navigator.geolocation.watchPosition(handleGPS, null, {
-                enableHighAccuracy: true,
-                timeout: 5000,
-                maximumAge: 0
-            });
-
-            recognition.start();
-            speak("Gravity Intelligence initialized. Say start.");
-        }
-
-        function tab(n) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
-            document.getElementById('page-'+n).classList.add('active-page');
-            document.getElementById('tab-'+n).classList.add('nav-btn-active');
-            if(n === 'map') initMap();
-        }
-
-        function initMap() {
-            if (mapInstance) return;
-            mapInstance = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
-            if(storage.length > 0) {
-                const heatData = storage.map(i => [i.lat, i.lng, i.d / 20]);
-                L.heatLayer(heatData, {radius: 20}).addTo(mapInstance);
-                mapInstance.setView([storage[storage.length-1].lat, storage[storage.length-1].lng], 15);
-            }
-        }
-
-        document.body.onclick = () => { init(); document.body.onclick = null; };
-    </script>
-</body>
-</html>
+        recognition.continuous = true;
+        recognition.lang = 'en-
