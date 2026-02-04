@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V6.5</title>
+    <title>Gravity Intel V6.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -35,10 +35,9 @@
         .state-record { color: var(--warn) !important; animation: pulse-red 0.5s infinite; }
 
         @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-
+        
         #map-canvas { height: 100%; width: 100%; background: #000; border-radius: 8px; border: 1px solid #111; }
         .leaflet-tile-container { filter: invert(100%) hue-rotate(180deg) brightness(80%) contrast(1.2); }
-        .leaflet-popup-content-wrapper { background: #111; color: #fff; border: 1px solid var(--accent); font-family: 'JetBrains Mono'; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -46,7 +45,7 @@
     <div class="px-6 py-4 flex justify-between items-center bg-black/80 backdrop-blur-md sticky top-0 z-50">
         <div class="flex items-center gap-3">
             <div id="gps-dot" class="w-2 h-2 rounded-full bg-zinc-800"></div>
-            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v6.5_Final</span>
+            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v6.7_5MinSim</span>
         </div>
         <div id="acc-display" class="text-[9px] font-bold opacity-40 uppercase tracking-tighter">ACC: --</div>
     </div>
@@ -57,16 +56,18 @@
             <span class="text-[3vw] ml-1 opacity-60">KM/H</span>
         </div>
         <div id="timer-display">0.0</div>
-        <div id="status-sub" class="text-[10px] font-black opacity-30 mt-4 mb-12 tracking-widest uppercase">System Standby</div>
-        <button id="arm-trigger" class="border-2 border-cyan-400 px-16 py-5 rounded-full font-black uppercase text-xs active:scale-95 transition-all select-none">Arm System</button>
+        <div id="status-sub" class="text-[10px] font-black opacity-30 mt-4 mb-12 tracking-widest uppercase text-center">System Standby</div>
+        
+        <div class="flex flex-col gap-4 w-full items-center">
+            <button id="arm-trigger" class="w-64 border-2 border-cyan-400 py-5 rounded-full font-black uppercase text-xs active:scale-95 transition-all">Arm System</button>
+            <button onclick="startFiveMinSim()" class="text-[10px] text-cyan-400 font-bold border border-cyan-900/30 px-6 py-3 rounded-xl uppercase bg-cyan-950/20 hover:bg-cyan-900/40 transition-colors">
+                Launch 5-Minute Sim
+            </button>
+        </div>
     </div>
 
-    <div id="page-map" class="page">
-        <div id="map-canvas"></div>
-    </div>
-
+    <div id="page-map" class="page"><div id="map-canvas"></div></div>
     <div id="page-history" class="page"><div id="log-feed" class="flex flex-col gap-2"></div></div>
-
     <div id="page-rank" class="page"><div id="rank-feed" class="flex flex-col gap-3 mb-10"></div></div>
 
     <nav class="nav-bar">
@@ -77,20 +78,10 @@
     </nav>
 
     <script>
-        let storage = JSON.parse(localStorage.getItem('GRV_V65') || '[]');
+        let storage = JSON.parse(localStorage.getItem('GRV_V67') || '[]');
         let isArmed = false, isStopped = false, timerInterval = null, startMark = 0;
         let coords = { lat: 0, lng: 0 }, mapInstance = null, watchRef = null;
         let localAvg = 0, localMax = 0;
-
-        function tab(name) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
-            document.getElementById(`page-${name}`).classList.add('active-page');
-            document.getElementById(`tab-${name}`).classList.add('nav-btn-active');
-            if(name === 'map') initMap();
-            if(name === 'history') loadLogs();
-            if(name === 'rank') loadRanks();
-        }
 
         function getLocalStats(lat, lng) {
             const nearby = storage.filter(p => {
@@ -108,19 +99,49 @@
             const el = document.getElementById('timer-display');
             el.classList.remove('state-green', 'state-orange', 'state-red', 'state-record');
             if (localAvg === 0) return;
+            
+            // Logic: 33% increments based on the average
             if (sec > localMax) el.classList.add('state-record');
             else if (sec > (localAvg * 0.66)) el.classList.add('state-red');
             else if (sec > (localAvg * 0.33)) el.classList.add('state-orange');
             else el.classList.add('state-green');
         }
 
+        // --- THE 5-MINUTE SIMULATION ---
+        function startFiveMinSim() {
+            if(timerInterval) clearInterval(timerInterval);
+            isArmed = true;
+            isStopped = true;
+            
+            // Setting a 150s average for a clear 5-minute test
+            // Avg: 150s, Max: 200s
+            localAvg = 150; 
+            localMax = 200; 
+            
+            document.getElementById('status-sub').innerText = "5-MIN TEST: ACTIVE";
+            startMark = Date.now();
+            
+            timerInterval = setInterval(() => {
+                const elapsed = (Date.now() - startMark) / 1000;
+                
+                // End after 300 seconds (5 minutes)
+                if (elapsed >= 300) {
+                    clearInterval(timerInterval);
+                    document.getElementById('status-sub').innerText = "TEST COMPLETE";
+                    return;
+                }
+
+                document.getElementById('timer-display').innerText = elapsed.toFixed(1);
+                updateTimerColor(elapsed);
+            }, 100);
+        }
+
+        // --- GPS AND UI HANDLERS ---
         function handleGPS(pos) {
             if (!isArmed) return;
             const s = pos.coords.speed || 0;
             coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             document.getElementById('speed-readout').innerText = Math.round(s * 3.6);
-            document.getElementById('acc-display').innerText = `ACC: ${pos.coords.accuracy.toFixed(0)}M`;
-
             if(s <= 0.3 && !isStopped) {
                 isStopped = true; startMark = Date.now();
                 const stats = getLocalStats(coords.lat, coords.lng);
@@ -135,46 +156,14 @@
                 const dur = parseFloat(document.getElementById('timer-display').innerText);
                 if(dur > 1.5) {
                     storage.push({ d: dur, ts: Date.now(), lat: coords.lat, lng: coords.lng });
-                    localStorage.setItem('GRV_V65', JSON.stringify(storage));
+                    localStorage.setItem('GRV_V67', JSON.stringify(storage));
                 }
                 document.getElementById('timer-display').innerText = "0.0";
                 document.getElementById('timer-display').className = ""; 
             }
         }
 
-        function initMap() {
-            if (mapInstance) mapInstance.remove();
-            let center = storage.length ? [storage[storage.length-1].lat, storage[storage.length-1].lng] : [coords.lat, coords.lng];
-            mapInstance = L.map('map-canvas', {zoomControl: false, tap: true}).setView(center, 15);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
-            storage.forEach(p => {
-                const timeStr = new Date(p.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                L.circle([p.lat, p.lng], {color: '#00f2ff', radius: 12, weight: 2})
-                .bindPopup(`<div style="text-align:center"><b>${p.d}s</b><br>${timeStr}</div>`, {closeButton: false})
-                .addTo(mapInstance);
-            });
-        }
-
-        // SIMULATION LOGIC
-        let pressTimer;
-        const btn = document.getElementById('arm-trigger');
-        btn.onmousedown = () => pressTimer = setTimeout(simulateTraffic, 2000);
-        btn.onmouseup = () => clearTimeout(pressTimer);
-
-        function simulateTraffic() {
-            alert("🚦 SIMULATION MODE: 5-Minute Stop starting now.");
-            storage.push({ d: 30, ts: Date.now(), lat: 1, lng: 1 }); // Seed average
-            localAvg = 30; localMax = 35; isArmed = true; isStopped = true;
-            startMark = Date.now();
-            timerInterval = setInterval(() => {
-                const elapsed = (Date.now() - startMark) / 1000;
-                document.getElementById('timer-display').innerText = elapsed.toFixed(1);
-                updateTimerColor(elapsed);
-                if(elapsed > 300) clearInterval(timerInterval);
-            }, 100);
-        }
-
-        btn.onclick = function() {
+        document.getElementById('arm-trigger').onclick = function() {
             if(!isArmed) {
                 isArmed = true; this.innerText = "DISARM";
                 this.style.background = "var(--accent)"; this.style.color = "black";
@@ -182,8 +171,15 @@
             } else { location.reload(); }
         };
 
-        function loadLogs() { document.getElementById('log-feed').innerHTML = storage.slice(-10).reverse().map(l => `<div class="p-4 border-b border-zinc-900 flex justify-between"><span>${l.d}s</span><span class="opacity-20">${new Date(l.ts).toLocaleTimeString()}</span></div>`).join(''); }
-        function loadRanks() { const top = [...storage].sort((a,b) => b.d - a.d).slice(0, 5); document.getElementById('rank-feed').innerHTML = top.map((r, i) => `<div class="p-4 bg-zinc-950 border-l-4 border-cyan-400">RANK 0${i+1}: ${r.d}s</div>`).join(''); }
-    </script>
-</body>
-</html>
+        function tab(name) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
+            document.getElementById(`page-${name}`).classList.add('active-page');
+            document.getElementById(`tab-${name}`).classList.add('nav-btn-active');
+            if(name === 'map') initMap();
+            if(name === 'history') loadLogs();
+        }
+
+        function initMap() {
+            if (mapInstance) mapInstance.remove();
+            let center = storage.length ? [storage[storage.length-1].lat, storage[storage.length-
