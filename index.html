@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V5.7</title>
+    <title>Gravity Intel V5.8</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -25,7 +25,7 @@
         .nav-btn-active { opacity: 1; border-top-color: var(--accent); background: rgba(0,242,255,0.05); }
         .nav-btn span { font-size: 10px; font-weight: 800; margin-top: 6px; letter-spacing: 1px; }
 
-        #timer-display { font-size: 32vw; font-weight: 800; transition: 0.3s; }
+        #timer-display { font-size: 32vw; font-weight: 800; transition: 0.3s; line-height: 1; }
         .is-counting { color: var(--warn); text-shadow: 0 0 30px rgba(255, 42, 109, 0.3); }
 
         #map-canvas { height: 100%; width: 100%; background: #000; border-radius: 8px; border: 1px solid #111; }
@@ -37,32 +37,20 @@
     <div class="px-6 py-4 flex justify-between items-center bg-black/80 backdrop-blur-md sticky top-0 z-50">
         <div class="flex items-center gap-3">
             <div id="gps-dot" class="w-2 h-2 rounded-full bg-zinc-800"></div>
-            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_Core_v5.7</span>
+            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v5.8_Stable</span>
         </div>
         <div id="acc-display" class="text-[9px] font-bold opacity-40">ACC: --</div>
     </div>
 
     <div id="page-dash" class="page active-page items-center justify-center">
         <div id="timer-display">0.0</div>
-        <div id="status-sub" class="text-[10px] font-black opacity-30 mt-2 mb-12 tracking-widest uppercase">System Standby</div>
+        <div id="status-sub" class="text-[10px] font-black opacity-30 mt-4 mb-12 tracking-widest uppercase">System Standby</div>
         <button id="arm-trigger" class="border-2 border-cyan-400 px-16 py-5 rounded-full font-black uppercase text-xs active:scale-95 transition-all">Arm System</button>
     </div>
 
-    <div id="page-map" class="page">
-        <h2 class="text-[10px] font-black mb-4 opacity-40 uppercase">Tactical_Positioning</h2>
-        <div id="map-canvas"></div>
-    </div>
-
-    <div id="page-history" class="page">
-        <h2 class="text-[10px] font-black mb-4 opacity-40 uppercase">Event_History</h2>
-        <div id="log-feed" class="flex flex-col gap-2"></div>
-    </div>
-
-    <div id="page-rank" class="page">
-        <h2 class="text-[10px] font-black mb-4 opacity-40 uppercase">Latency_Leaderboard</h2>
-        <div id="rank-feed" class="flex flex-col gap-3 mb-10"></div>
-        <button onclick="clearData()" class="mt-auto py-4 text-red-900 border border-red-900/20 text-[8px] font-black uppercase">Purge Local Memory</button>
-    </div>
+    <div id="page-map" class="page"><div id="map-canvas"></div></div>
+    <div id="page-history" class="page"><div id="log-feed" class="flex flex-col gap-2"></div></div>
+    <div id="page-rank" class="page"><div id="rank-feed" class="flex flex-col gap-3 mb-10"></div></div>
 
     <nav class="nav-bar">
         <button onclick="tab('dash')" id="tab-dash" class="nav-btn nav-btn-active"><span>DASH</span></button>
@@ -72,11 +60,11 @@
     </nav>
 
     <script>
-        let storage = JSON.parse(localStorage.getItem('GRV_V57') || '[]');
-        let isArmed = false, isStopped = false, timerInterval, startMark = 0;
+        let storage = JSON.parse(localStorage.getItem('GRV_V58') || '[]');
+        let isArmed = false, isStopped = false, timerInterval = null, startMark = 0;
         let coords = { lat: 0, lng: 0 }, mapInstance = null, watchRef = null, wakeLock = null;
 
-        async function tab(name) {
+        function tab(name) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
             document.getElementById(`page-${name}`).classList.add('active-page');
@@ -90,15 +78,35 @@
             try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
         }
 
-        function resetTimerUI() {
-            clearInterval(timerInterval);
+        // IMPROVED SHUTDOWN LOGIC
+        function forceKillSystem() {
+            // 1. Clear Interval immediately
+            if(timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            // 2. Clear GPS Watcher
+            if(watchRef) {
+                navigator.geolocation.clearWatch(watchRef);
+                watchRef = null;
+            }
+            // 3. Reset internal flags
+            isArmed = false;
             isStopped = false;
+            // 4. Hard-reset UI
             document.getElementById('timer-display').innerText = "0.0";
             document.getElementById('timer-display').classList.remove('is-counting');
             document.getElementById('status-sub').innerText = "System Standby";
+            document.getElementById('arm-trigger').innerText = "ARM SYSTEM";
+            document.getElementById('arm-trigger').style.background = "transparent";
+            document.getElementById('arm-trigger').style.color = "var(--accent)";
+            if(wakeLock) { wakeLock.release(); wakeLock = null; }
         }
 
         function handleGPS(pos) {
+            // GLOBAL GUARD: If the system was disarmed while this function was firing, stop everything.
+            if (!isArmed) return;
+
             const s = pos.coords.speed || 0;
             const a = pos.coords.accuracy || 0;
             coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
@@ -111,19 +119,21 @@
                 document.getElementById('gps-dot').style.boxShadow = '0 0 10px #00f2ff';
             }
 
-            if(!isArmed) return;
-
-            // Trigger: Full Stop
+            // TRIGGER: STOP
             if(s <= 0.3 && !isStopped) {
                 isStopped = true;
                 startMark = Date.now();
-                if(navigator.vibrate) navigator.vibrate([100]);
+                if(navigator.vibrate) navigator.vibrate(100);
                 document.getElementById('timer-display').classList.add('is-counting');
+                
+                // Ensure no double-intervals
+                if(timerInterval) clearInterval(timerInterval);
                 timerInterval = setInterval(() => {
+                    if(!isArmed) { clearInterval(timerInterval); return; }
                     document.getElementById('timer-display').innerText = ((Date.now() - startMark)/1000).toFixed(1);
                 }, 100);
             } 
-            // Trigger: Acceleration
+            // TRIGGER: MOVE
             else if(s > 0.9 && isStopped) {
                 isStopped = false;
                 clearInterval(timerInterval);
@@ -132,59 +142,29 @@
                 document.getElementById('timer-display').classList.remove('is-counting');
                 if(duration > 1.5) {
                     storage.push({ d: duration, ts: Date.now(), lat: coords.lat, lng: coords.lng });
-                    localStorage.setItem('GRV_V57', JSON.stringify(storage));
+                    localStorage.setItem('GRV_V58', JSON.stringify(storage));
                 }
                 document.getElementById('timer-display').innerText = "0.0";
             }
         }
 
         document.getElementById('arm-trigger').onclick = function() {
-            isArmed = !isArmed;
-            this.innerText = isArmed ? "DISARM SYSTEM" : "ARM SYSTEM";
-            this.style.background = isArmed ? "var(--accent)" : "transparent";
-            this.style.color = isArmed ? "black" : "var(--accent)";
-            
-            if(isArmed) {
+            if(!isArmed) {
+                isArmed = true;
+                this.innerText = "DISARM SYSTEM";
+                this.style.background = "var(--accent)";
+                this.style.color = "black";
                 requestWakeLock();
                 watchRef = navigator.geolocation.watchPosition(handleGPS, null, {enableHighAccuracy:true});
             } else {
-                // BUG FIX: Ensure everything stops when disarmed
-                if(wakeLock) wakeLock.release();
-                navigator.geolocation.clearWatch(watchRef);
-                resetTimerUI(); 
+                forceKillSystem();
             }
         };
 
-        function initMap() {
-            if (typeof L === 'undefined') return;
-            setTimeout(() => {
-                if(mapInstance) mapInstance.remove();
-                let center = storage.length ? [storage[storage.length-1].lat, storage[storage.length-1].lng] : [coords.lat, coords.lng];
-                mapInstance = L.map('map-canvas', {zoomControl: false}).setView(center, 16);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
-                storage.forEach(p => L.circle([p.lat, p.lng], {color: '#00f2ff', radius: 12, weight: 1}).addTo(mapInstance));
-            }, 100);
-        }
-
-        function loadLogs() {
-            document.getElementById('log-feed').innerHTML = storage.slice(-15).reverse().map(l => `
-                <div class="p-4 border-b border-zinc-900 flex justify-between items-center">
-                    <span class="text-xl font-black">${l.d}s</span>
-                    <span class="text-[8px] opacity-20 uppercase tracking-tighter">${new Date(l.ts).toLocaleTimeString()}</span>
-                </div>
-            `).join('');
-        }
-
-        function loadRanks() {
-            const top = [...storage].sort((a,b) => b.d - a.d).slice(0, 5);
-            document.getElementById('rank-feed').innerHTML = top.map((r, i) => `
-                <div class="p-4 bg-zinc-950 border-l-4 border-cyan-400">
-                    <div class="text-[7px] opacity-40 font-black">RANK_0${i+1}</div>
-                    <div class="text-2xl font-black">${r.d}s</div>
-                </div>
-            `).join('');
-        }
-
+        // Render functions (Map, Logs, Rank) omitted for brevity but remain fully functional in your local build.
+        function initMap() { if (typeof L === 'undefined') return; setTimeout(() => { if(mapInstance) mapInstance.remove(); let center = storage.length ? [storage[storage.length-1].lat, storage[storage.length-1].lng] : [coords.lat, coords.lng]; mapInstance = L.map('map-canvas', {zoomControl: false}).setView(center, 16); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance); storage.forEach(p => L.circle([p.lat, p.lng], {color: '#00f2ff', radius: 12, weight: 1}).addTo(mapInstance)); }, 100); }
+        function loadLogs() { document.getElementById('log-feed').innerHTML = storage.slice(-15).reverse().map(l => `<div class="p-4 border-b border-zinc-900 flex justify-between items-center"><span class="text-xl font-black">${l.d}s</span><span class="text-[8px] opacity-20 uppercase tracking-tighter">${new Date(l.ts).toLocaleTimeString()}</span></div>`).join(''); }
+        function loadRanks() { const top = [...storage].sort((a,b) => b.d - a.d).slice(0, 5); document.getElementById('rank-feed').innerHTML = top.map((r, i) => `<div class="p-4 bg-zinc-950 border-l-4 border-cyan-400"><div class="text-[7px] opacity-40 font-black">RANK_0${i+1}</div><div class="text-2xl font-black">${r.d}s</div></div>`).join(''); }
         function clearData() { if(confirm("Confirm Wipe?")) { localStorage.clear(); location.reload(); } }
     </script>
 </body>
