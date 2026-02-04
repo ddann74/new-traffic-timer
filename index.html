@@ -3,155 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gravity Intel Pro V4.6</title>
+    <title>Gravity Intel Pro V4.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        :root { --accent: #00f2ff; --red: #ff4444; --bg: #050505; }
+        :root { --accent: #00f2ff; --bg: #050505; }
         body { font-family: 'JetBrains+Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; }
-        
-        /* HI-VIS STATUS BAR */
-        .system-bar { background: rgba(0, 20, 20, 0.8); border-bottom: 1px solid rgba(0, 242, 255, 0.2); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
-        
-        .gps-bar-container { display: flex; align-items: flex-end; gap: 2px; height: 12px; }
-        .bar { width: 3px; background: #333; transition: all 0.3s; }
-        .bar-active { background: var(--accent); box-shadow: 0 0 5px var(--accent); }
-
-        .page { display: none; height: calc(100vh - 50px); width: 100vw; flex-direction: column; padding: 20px; box-sizing: border-box; }
-        .active-page { display: flex; }
-        
-        #timer-display { font-size: 28vw; line-height: 1; font-weight: 800; text-shadow: 0 0 20px rgba(0, 242, 255, 0.4); }
-        .btn-main { border: 2px solid var(--accent); padding: 15px 40px; border-radius: 50px; font-weight: 800; text-transform: uppercase; transition: 0.2s; }
-        .btn-active { background: var(--accent); color: #000; box-shadow: 0 0 20px var(--accent); }
+        .system-bar { background: #000; border-bottom: 1px solid #111; padding: 12px; display: flex; justify-content: space-between; align-items: center; z-index: 100; }
+        .status-pill { font-size: 8px; border: 1px solid #222; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; }
+        .gate-active { color: #fff; background: #c00; border-color: #f00; }
+        #timer-display { font-size: 30vw; font-weight: 800; line-height: 1; transition: color 0.3s; }
+        .recording { color: #ff4444; text-shadow: 0 0 30px rgba(255, 0, 0, 0.4); }
+        .btn-main { border: 2px solid var(--accent); padding: 20px 50px; border-radius: 50px; font-weight: 800; text-transform: uppercase; }
+        .btn-armed { background: var(--accent); color: #000; }
     </style>
 </head>
 <body>
 
     <div class="system-bar">
-        <div class="flex items-center gap-3">
-            <div id="gps-bars" class="gps-bar-container">
-                <div class="bar h-2"></div><div class="bar h-3"></div><div class="bar h-4"></div>
-            </div>
-            <span id="gps-text" class="text-[9px] font-bold tracking-tighter opacity-50 uppercase">No Signal</span>
+        <div class="flex flex-col">
+            <span class="text-[9px] opacity-40">GPS_ACCURACY</span>
+            <span id="accuracy-val" class="text-[10px] font-bold">--</span>
         </div>
-        <div class="flex items-center gap-4">
-            <div id="status-light" class="w-2 h-2 rounded-full bg-zinc-800"></div>
-            <button onclick="toggleMenu()" class="text-[10px] font-black border border-cyan-800 px-3 py-1 uppercase">Menu</button>
+        <div class="flex gap-2">
+            <div id="gate-idle" class="status-pill">Moving</div>
+            <div id="gate-stop" class="status-pill">Stopped</div>
         </div>
     </div>
 
-    <div id="options-menu" class="hidden absolute right-4 top-14 w-48 bg-black border border-cyan-400 z-[1000] p-2 shadow-2xl">
-        <button onclick="showPage('page-dash')" class="w-full text-left p-3 text-[10px] uppercase hover:bg-cyan-900">Dashboard</button>
-        <button onclick="showPage('page-map')" class="w-full text-left p-3 text-[10px] uppercase hover:bg-cyan-900 border-t border-zinc-800">Tactical Map</button>
-        <button onclick="showPage('page-history')" class="w-full text-left p-3 text-[10px] uppercase hover:bg-cyan-900 border-t border-zinc-800">History</button>
-        <button onclick="showPage('page-leaderboard')" class="w-full text-left p-3 text-[10px] uppercase hover:bg-cyan-900 border-t border-zinc-800">Leaderboard</button>
-    </div>
-
-    <div id="page-dash" class="page active-page items-center justify-center">
+    <div class="flex flex-col items-center justify-center h-[80vh]">
         <div id="timer-display">0.0</div>
-        <button id="arm-btn" class="btn-main mt-10">Arm System</button>
-        <div class="mt-12 text-center">
-            <p id="velocity-out" class="text-[10px] tracking-[0.3em] font-bold opacity-40 uppercase">Velocity: 0.0 M/S</p>
+        <div id="velocity-out" class="text-xs font-bold mt-4 opacity-60 uppercase tracking-widest">Speed: 0.00 M/S</div>
+        
+        <div class="mt-10 flex flex-col items-center gap-4">
+            <button id="arm-btn" class="btn-main">Arm System</button>
+            <button id="force-stop" class="hidden text-[10px] text-red-500 underline uppercase">Force Save & Stop</button>
         </div>
-    </div>
 
-    <div id="page-map" class="page p-0">
-        <div id="map-canvas" class="h-full w-full"></div>
+        <div class="mt-8 w-64 p-4 border border-zinc-900 rounded-lg">
+            <p class="text-[8px] uppercase mb-2 opacity-50 text-center">Sensitivity (Stop at speed < X)</p>
+            <input type="range" id="sense-slider" min="0.1" max="1.5" step="0.1" value="0.5" class="w-full accent-cyan-400">
+            <div class="flex justify-between text-[8px] mt-1 opacity-40"><span>STRICT (0.1)</span><span>LOOSE (1.5)</span></div>
+        </div>
     </div>
 
     <script>
-        let db = JSON.parse(localStorage.getItem('gravity_db_v45') || '[]');
         let isArmed = false, isIdling = false, startTime, timerInterval, gpsWatch;
-        let lastPos = { lat: 0, lng: 0 };
-        let stopThreshold = 0.4;
+        let stopThreshold = 0.5;
 
-        function toggleMenu() { document.getElementById('options-menu').classList.toggle('hidden'); }
-        
-        function showPage(id) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
-            document.getElementById(id).classList.add('active-page');
-            document.getElementById('options-menu').classList.add('hidden');
-            if(id === 'page-map') initMap();
-        }
-
-        // GPS VISUAL FEEDBACK
-        function updateGPSBars(strength) {
-            const bars = document.querySelectorAll('.bar');
-            const text = document.getElementById('gps-text');
-            const light = document.getElementById('status-light');
-
-            bars.forEach((b, i) => {
-                if(i < strength) b.classList.add('bar-active');
-                else b.classList.remove('bar-active');
-            });
-
-            if(strength >= 3) {
-                text.innerText = "Locked_GPS";
-                text.classList.replace('opacity-50', 'opacity-100');
-                light.classList.replace('bg-zinc-800', 'bg-cyan-400');
-            } else {
-                text.innerText = "Searching...";
-                light.classList.replace('bg-cyan-400', 'bg-yellow-500');
-            }
-        }
+        const timerEl = document.getElementById('timer-display');
+        const gateIdle = document.getElementById('gate-idle');
+        const gateStop = document.getElementById('gate-stop');
+        const forceBtn = document.getElementById('force-stop');
 
         function processLogic(pos) {
-            const { latitude, longitude, speed, accuracy } = pos.coords;
-            lastPos = { lat: latitude, lng: longitude };
+            const spd = pos.coords.speed || 0;
+            const acc = pos.coords.accuracy || 0;
+            
+            document.getElementById('velocity-out').innerText = `Speed: ${spd.toFixed(2)} M/S`;
+            document.getElementById('accuracy-val').innerText = `${acc.toFixed(1)}M`;
 
-            // Set bars based on accuracy (lower number is better)
-            if(accuracy < 15) updateGPSBars(3);
-            else if(accuracy < 30) updateGPSBars(2);
-            else updateGPSBars(1);
+            if (!isArmed) return;
 
-            const curSpd = (speed === null || speed < stopThreshold) ? 0 : speed;
-            document.getElementById('velocity-out').innerText = `Velocity: ${curSpd.toFixed(1)} M/S`;
-
-            if (isArmed) {
-                if (curSpd === 0 && !isIdling) {
-                    isIdling = true;
-                    startTime = Date.now();
-                    timerInterval = setInterval(() => {
-                        document.getElementById('timer-display').innerText = ((Date.now() - startTime)/1000).toFixed(1);
-                    }, 100);
-                } else if (curSpd > (stopThreshold + 0.4) && isIdling) {
-                    isIdling = false;
-                    clearInterval(timerInterval);
-                    const dur = document.getElementById('timer-display').innerText;
-                    if(parseFloat(dur) > 1.5) {
-                        db.push({ ts: Date.now(), dur, lat: latitude, lng: longitude });
-                        localStorage.setItem('gravity_db_v45', JSON.stringify(db));
-                    }
-                    document.getElementById('timer-display').innerText = "0.0";
-                }
+            // TIMER START LOGIC (Speed drops below threshold)
+            if (spd <= stopThreshold && !isIdling) {
+                isIdling = true;
+                startTime = Date.now();
+                timerEl.classList.add('recording');
+                gateStop.classList.add('gate-active');
+                gateIdle.classList.remove('gate-active');
+                forceBtn.classList.remove('hidden');
+                
+                timerInterval = setInterval(() => {
+                    timerEl.innerText = ((Date.now() - startTime) / 1000).toFixed(1);
+                }, 100);
+            } 
+            
+            // TIMER STOP LOGIC (Speed must break threshold + buffer to count as "moving")
+            // This buffer (0.5) is the secret to making it stop reliably.
+            else if (spd > (stopThreshold + 0.5) && isIdling) {
+                stopAndSave();
             }
+        }
+
+        function stopAndSave() {
+            isIdling = false;
+            clearInterval(timerInterval);
+            timerEl.classList.remove('recording');
+            gateStop.classList.remove('gate-active');
+            gateIdle.classList.add('gate-active');
+            forceBtn.classList.add('hidden');
+
+            const finalTime = timerEl.innerText;
+            // Only save if it's a real stop (over 2 seconds)
+            if (parseFloat(finalTime) > 2.0) {
+                console.log("Logged Stop:", finalTime);
+                // Database save logic goes here
+            }
+            timerEl.innerText = "0.0";
         }
 
         document.getElementById('arm-btn').addEventListener('click', function() {
             isArmed = !isArmed;
-            this.classList.toggle('btn-active', isArmed);
-            this.innerText = isArmed ? "Standby" : "Arm System";
+            this.classList.toggle('btn-armed', isArmed);
+            this.innerText = isArmed ? "STANDBY" : "ARM SYSTEM";
             
             if (isArmed) {
-                updateGPSBars(1); // Searching start
-                gpsWatch = navigator.geolocation.watchPosition(processLogic, 
-                    (err) => { 
-                        document.getElementById('gps-text').innerText = "Error: Check Permissions";
-                        updateGPSBars(0);
-                    }, 
-                    { enableHighAccuracy: true, maximumAge: 0 }
-                );
+                gpsWatch = navigator.geolocation.watchPosition(processLogic, null, { 
+                    enableHighAccuracy: true, 
+                    maximumAge: 0 
+                });
             } else {
                 navigator.geolocation.clearWatch(gpsWatch);
-                updateGPSBars(0);
-                document.getElementById('gps-text').innerText = "No Signal";
-                document.getElementById('status-light').className = "w-2 h-2 rounded-full bg-zinc-800";
+                if (isIdling) stopAndSave();
             }
         });
 
-        // Map and Leaderboard functions (as per V4.5) omitted for brevity but remain compatible
+        forceBtn.addEventListener('click', stopAndSave);
+
+        document.getElementById('sense-slider').addEventListener('input', (e) => {
+            stopThreshold = parseFloat(e.target.value);
+        });
     </script>
 </body>
 </html>
