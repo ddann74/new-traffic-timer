@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V6.1</title>
+    <title>Gravity Intel V6.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -25,7 +25,6 @@
         .nav-btn-active { opacity: 1; border-top-color: var(--accent); background: rgba(0,242,255,0.05); }
         .nav-btn span { font-size: 10px; font-weight: 800; margin-top: 6px; letter-spacing: 1px; }
 
-        /* SPEED READOUT STYLE */
         #speed-readout { font-size: 12vw; font-weight: 800; opacity: 0.5; line-height: 1; margin-bottom: -10px; }
         #speed-unit { font-size: 3vw; vertical-align: middle; margin-left: 5px; opacity: 0.6; }
 
@@ -41,7 +40,7 @@
     <div class="px-6 py-4 flex justify-between items-center bg-black/80 backdrop-blur-md sticky top-0 z-50">
         <div class="flex items-center gap-3">
             <div id="gps-dot" class="w-2 h-2 rounded-full bg-zinc-800"></div>
-            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v6.1_Velocity</span>
+            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v6.2_KPH</span>
         </div>
         <div id="acc-display" class="text-[9px] font-bold opacity-40 uppercase tracking-tighter">ACC: --</div>
     </div>
@@ -49,7 +48,7 @@
     <div id="page-dash" class="page active-page items-center justify-center">
         <div id="speed-container" class="flex items-baseline">
             <div id="speed-readout">0</div>
-            <span id="speed-unit">MPH</span>
+            <span id="speed-unit">KM/H</span>
         </div>
         
         <div id="timer-display">0.0</div>
@@ -75,7 +74,7 @@
     </nav>
 
     <script>
-        let storage = JSON.parse(localStorage.getItem('GRV_V61') || '[]');
+        let storage = JSON.parse(localStorage.getItem('GRV_V62') || '[]');
         let isArmed = false, isStopped = false, timerInterval = null, startMark = 0;
         let coords = { lat: 0, lng: 0 }, mapInstance = null, watchRef = null, wakeLock = null;
         let signalLayer = L.layerGroup();
@@ -142,18 +141,16 @@
             if (!isArmed) return;
             const s = pos.coords.speed || 0;
             const a = pos.coords.accuracy || 0;
-            const mph = Math.round(s * 2.237); // Convert m/s to MPH
+            const kph = Math.round(s * 3.6); // Updated for Metric
             
             coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             
-            // UPDATE SPEED READOUT
-            document.getElementById('speed-readout').innerText = mph;
+            document.getElementById('speed-readout').innerText = kph;
             document.getElementById('acc-display').innerText = `ACC: ${a.toFixed(0)}M`;
-            document.getElementById('status-sub').innerText = s > 0.4 ? `${(s * 2.237).toFixed(1)} MPH` : "STATIONARY";
+            document.getElementById('status-sub').innerText = s > 0.4 ? `${(s * 3.6).toFixed(1)} KM/H` : "STATIONARY";
             
             if(a < 20) document.getElementById('gps-dot').style.background = '#00f2ff';
 
-            // TRIGGER: STOP
             if(s <= 0.3 && !isStopped) {
                 isStopped = true; startMark = Date.now();
                 if(navigator.vibrate) navigator.vibrate(100);
@@ -163,16 +160,14 @@
                     if(!isArmed) { clearInterval(timerInterval); return; }
                     document.getElementById('timer-display').innerText = ((Date.now() - startMark)/1000).toFixed(1);
                 }, 100);
-            } 
-            // TRIGGER: MOVE
-            else if(s > 0.9 && isStopped) {
+            } else if(s > 0.9 && isStopped) {
                 isStopped = false; clearInterval(timerInterval);
                 if(navigator.vibrate) navigator.vibrate([50, 50]);
                 const duration = parseFloat(document.getElementById('timer-display').innerText);
                 document.getElementById('timer-display').classList.remove('is-counting');
                 if(duration > 1.5) {
                     storage.push({ d: duration, ts: Date.now(), lat: coords.lat, lng: coords.lng });
-                    localStorage.setItem('GRV_V61', JSON.stringify(storage));
+                    localStorage.setItem('GRV_V62', JSON.stringify(storage));
                 }
                 document.getElementById('timer-display').innerText = "0.0";
             }
@@ -189,7 +184,6 @@
 
         function loadLogs() { document.getElementById('log-feed').innerHTML = storage.slice(-15).reverse().map(l => `<div class="p-4 border-b border-zinc-900 flex justify-between items-center"><span class="text-xl font-black">${l.d}s</span><span class="text-[8px] opacity-20 uppercase tracking-tighter">${new Date(l.ts).toLocaleTimeString()}</span></div>`).join(''); }
         function loadRanks() { const top = [...storage].sort((a,b) => b.d - a.d).slice(0, 5); document.getElementById('rank-feed').innerHTML = top.map((r, i) => `<div class="p-4 bg-zinc-950 border-l-4 border-cyan-400"><div class="text-[7px] opacity-40 font-black">RANK_0${i+1}</div><div class="text-2xl font-black">${r.d}s</div></div>`).join(''); }
-        function clearData() { if(confirm("Confirm Wipe?")) { localStorage.clear(); location.reload(); } }
     </script>
 </body>
 </html>
