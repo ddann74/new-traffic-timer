@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V5.6</title>
+    <title>Gravity Intel V5.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -15,7 +15,6 @@
         .page { display: none; height: calc(100vh - 95px); width: 100vw; flex-direction: column; padding: 20px; box-sizing: border-box; overflow-y: auto; }
         .active-page { display: flex; }
         
-        /* NAV STYLING - HIGH VISIBILITY */
         .nav-bar { 
             position: fixed; bottom: 0; left: 0; width: 100%; height: 90px; 
             background: #050505; border-top: 1px solid #222; 
@@ -38,7 +37,7 @@
     <div class="px-6 py-4 flex justify-between items-center bg-black/80 backdrop-blur-md sticky top-0 z-50">
         <div class="flex items-center gap-3">
             <div id="gps-dot" class="w-2 h-2 rounded-full bg-zinc-800"></div>
-            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_Core_v5.6</span>
+            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_Core_v5.7</span>
         </div>
         <div id="acc-display" class="text-[9px] font-bold opacity-40">ACC: --</div>
     </div>
@@ -46,7 +45,7 @@
     <div id="page-dash" class="page active-page items-center justify-center">
         <div id="timer-display">0.0</div>
         <div id="status-sub" class="text-[10px] font-black opacity-30 mt-2 mb-12 tracking-widest uppercase">System Standby</div>
-        <button id="arm-trigger" class="border-2 border-cyan-400 px-16 py-5 rounded-full font-black uppercase text-xs active:bg-cyan-400 active:text-black transition-all">Arm System</button>
+        <button id="arm-trigger" class="border-2 border-cyan-400 px-16 py-5 rounded-full font-black uppercase text-xs active:scale-95 transition-all">Arm System</button>
     </div>
 
     <div id="page-map" class="page">
@@ -73,8 +72,8 @@
     </nav>
 
     <script>
-        let storage = JSON.parse(localStorage.getItem('GRV_V56') || '[]');
-        let isArmed = false, isStopped = false, timer, startMark = 0;
+        let storage = JSON.parse(localStorage.getItem('GRV_V57') || '[]');
+        let isArmed = false, isStopped = false, timerInterval, startMark = 0;
         let coords = { lat: 0, lng: 0 }, mapInstance = null, watchRef = null, wakeLock = null;
 
         async function tab(name) {
@@ -89,6 +88,14 @@
 
         async function requestWakeLock() {
             try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
+        }
+
+        function resetTimerUI() {
+            clearInterval(timerInterval);
+            isStopped = false;
+            document.getElementById('timer-display').innerText = "0.0";
+            document.getElementById('timer-display').classList.remove('is-counting');
+            document.getElementById('status-sub').innerText = "System Standby";
         }
 
         function handleGPS(pos) {
@@ -110,22 +117,22 @@
             if(s <= 0.3 && !isStopped) {
                 isStopped = true;
                 startMark = Date.now();
-                if(navigator.vibrate) navigator.vibrate([100]); // Haptic thump
+                if(navigator.vibrate) navigator.vibrate([100]);
                 document.getElementById('timer-display').classList.add('is-counting');
-                timer = setInterval(() => {
+                timerInterval = setInterval(() => {
                     document.getElementById('timer-display').innerText = ((Date.now() - startMark)/1000).toFixed(1);
                 }, 100);
             } 
             // Trigger: Acceleration
             else if(s > 0.9 && isStopped) {
                 isStopped = false;
-                clearInterval(timer);
-                if(navigator.vibrate) navigator.vibrate([50, 50]); // Double thump
+                clearInterval(timerInterval);
+                if(navigator.vibrate) navigator.vibrate([50, 50]);
                 const duration = parseFloat(document.getElementById('timer-display').innerText);
                 document.getElementById('timer-display').classList.remove('is-counting');
                 if(duration > 1.5) {
                     storage.push({ d: duration, ts: Date.now(), lat: coords.lat, lng: coords.lng });
-                    localStorage.setItem('GRV_V56', JSON.stringify(storage));
+                    localStorage.setItem('GRV_V57', JSON.stringify(storage));
                 }
                 document.getElementById('timer-display').innerText = "0.0";
             }
@@ -133,15 +140,18 @@
 
         document.getElementById('arm-trigger').onclick = function() {
             isArmed = !isArmed;
-            this.innerText = isArmed ? "SYSTEM_ARMED" : "ARM SYSTEM";
+            this.innerText = isArmed ? "DISARM SYSTEM" : "ARM SYSTEM";
             this.style.background = isArmed ? "var(--accent)" : "transparent";
             this.style.color = isArmed ? "black" : "var(--accent)";
+            
             if(isArmed) {
                 requestWakeLock();
                 watchRef = navigator.geolocation.watchPosition(handleGPS, null, {enableHighAccuracy:true});
             } else {
+                // BUG FIX: Ensure everything stops when disarmed
                 if(wakeLock) wakeLock.release();
                 navigator.geolocation.clearWatch(watchRef);
+                resetTimerUI(); 
             }
         };
 
