@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V8.2</title>
+    <title>Gravity Intel V8.4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -28,8 +28,8 @@
         .phase-record { color: var(--warn) !important; animation: pulse-record 0.6s infinite; text-shadow: 0 0 30px rgba(255,42,109,0.5); }
 
         @keyframes pulse-record {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.05); opacity: 0.8; }
+            0%, 100% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.05); filter: brightness(1.5); }
         }
 
         /* Map & UI */
@@ -44,7 +44,7 @@
     <div class="px-6 py-4 flex justify-between items-center bg-black/90 sticky top-0 z-[10002] border-b border-zinc-900">
         <div class="flex items-center gap-3">
             <div id="gps-dot" class="w-2 h-2 rounded-full bg-zinc-700"></div>
-            <span class="text-[10px] font-black tracking-widest uppercase">Gravity_v8.2</span>
+            <span class="text-[10px] font-black tracking-widest uppercase">Gravity_v8.4_Stable</span>
         </div>
         <div id="acc-display" class="text-[10px] font-bold opacity-60 uppercase">GPS: Standby</div>
     </div>
@@ -59,6 +59,10 @@
         
         <button id="arm-trigger" class="w-full max-w-xs border-2 border-cyan-400 py-6 rounded-full font-black uppercase text-sm tracking-widest active:scale-95 transition-all">
             Engage System
+        </button>
+
+        <button onclick="runLocalStressTest()" class="mt-8 text-[9px] opacity-20 uppercase font-bold tracking-[0.3em] hover:opacity-100 transition-all">
+            Execute Logic Stress-Test
         </button>
     </div>
 
@@ -85,25 +89,27 @@
     </nav>
 
     <script>
-        const DB_KEY = 'GRV_DB_V82';
+        const DB_KEY = 'GRV_DB_V84';
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let mapInstance = null, watchRef = null, isArmed = false, isStopped = false;
         let timerInterval = null, startMark = 0, currentLocalStats = null;
-        let lastCoords = { lat: 0, lng: 0 };
+        let lastCoords = { lat: -34.397, lng: 150.899 }; // Default fallback
 
+        // Tab Navigation
         function tab(name) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
             document.getElementById(`page-${name}`).classList.add('active-page');
             document.getElementById(`tab-${name}`).classList.add('nav-btn-active');
-            if(name === 'map') setTimeout(() => { initMap(); renderMarkers(); }, 100);
+            if(name === 'map') setTimeout(() => { initMap(); renderMarkers(); }, 150);
             if(name === 'history') loadLogs();
             if(name === 'rank') loadRanks();
         }
 
+        // Map Logic
         function initMap() {
             if (mapInstance) { mapInstance.invalidateSize(); return; }
-            const center = storage.length > 0 ? [storage[storage.length-1].lat, storage[storage.length-1].lng] : [0,0];
+            const center = storage.length > 0 ? [storage[storage.length-1].lat, storage[storage.length-1].lng] : [lastCoords.lat, lastCoords.lng];
             mapInstance = L.map('map-canvas', { zoomControl: false }).setView(center, 15);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
         }
@@ -116,6 +122,7 @@
             });
         }
 
+        // Statistics Logic
         function getLocalStats(lat, lng) {
             const matches = storage.filter(p => Math.abs(p.lat - lat) < 0.00045 && Math.abs(p.lng - lng) < 0.00045);
             if (matches.length < 3) return null;
@@ -147,11 +154,14 @@
             }
         }
 
+        // GPS Handler
         function handleGPS(pos) {
             const s = pos.coords.speed || 0;
             const kmh = Math.round(s * 3.6);
             const lat = pos.coords.latitude;
             const lng = pos.coords.longitude;
+            
+            lastCoords = { lat, lng }; // Update global position
             
             document.getElementById('speed-readout').innerText = kmh;
             document.getElementById('gps-dot').style.background = "#00ff88";
@@ -177,6 +187,7 @@
             }
         }
 
+        // Interaction Handlers
         document.getElementById('arm-trigger').onclick = function() {
             if(!isArmed) {
                 isArmed = true; this.innerText = "DISENGAGE";
@@ -197,7 +208,9 @@
         }
 
         function loadLogs() {
-            document.getElementById('log-feed').innerHTML = storage.slice(-20).reverse().map(l => `
+            const container = document.getElementById('log-feed');
+            if(storage.length === 0) { container.innerHTML = '<div class="opacity-20 text-center py-20">NO DATA</div>'; return; }
+            container.innerHTML = storage.slice(-20).reverse().map(l => `
                 <div class="log-entry flex justify-between items-center" onclick="jumpToLog(${l.lat}, ${l.lng}, ${l.d})">
                     <div><div class="text-xl font-black">${l.d}s</div><div class="text-[9px] opacity-40">${new Date(l.ts).toLocaleTimeString()}</div></div>
                     <span class="view-tag">VIEW</span>
@@ -211,6 +224,17 @@
                     <span class="text-[10px] font-black opacity-30">#0${i+1}</span>
                     <span class="text-2xl font-black">${r.d}s</span>
                 </div>`).join('');
+        }
+
+        async function runLocalStressTest() {
+            if(isArmed) return alert("Disengage before testing.");
+            const seeds = [10.2, 12.5, 11.0]; // Baseline average: ~11.2s
+            seeds.forEach(v => {
+                storage.push({ d: v, ts: Date.now(), lat: lastCoords.lat, lng: lastCoords.lng });
+            });
+            localStorage.setItem(DB_KEY, JSON.stringify(storage));
+            document.getElementById('status-sub').innerText = "PACER READY: AVG 11.2s";
+            tab('history');
         }
 
         function clearData() { if(confirm("Purge?")) { localStorage.removeItem(DB_KEY); location.reload(); } }
