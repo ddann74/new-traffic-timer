@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V6.7</title>
+    <title>Gravity Intel V6.9</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -28,15 +28,14 @@
         #speed-readout { font-size: 12vw; font-weight: 800; opacity: 0.5; line-height: 1; }
         #timer-display { font-size: 32vw; font-weight: 800; transition: 0.3s; line-height: 1; color: var(--accent); }
         
-        /* DYNAMIC COLOR STATES */
         .state-green { color: var(--go) !important; }
         .state-orange { color: var(--wait) !important; }
         .state-red { color: var(--warn) !important; }
         .state-record { color: var(--warn) !important; animation: pulse-red 0.5s infinite; }
 
         @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        
-        #map-canvas { height: 100%; width: 100%; background: #000; border-radius: 8px; border: 1px solid #111; }
+
+        #map-canvas { height: 100%; width: 100%; background: #000; border-radius: 8px; border: 1px solid #111; min-height: 300px; }
         .leaflet-tile-container { filter: invert(100%) hue-rotate(180deg) brightness(80%) contrast(1.2); }
     </style>
 </head>
@@ -45,18 +44,28 @@
     <div class="px-6 py-4 flex justify-between items-center bg-black/80 backdrop-blur-md sticky top-0 z-50">
         <div class="flex items-center gap-3">
             <div id="gps-dot" class="w-2 h-2 rounded-full bg-zinc-800"></div>
-            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v6.7_5MinSim</span>
+            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v6.9_Final</span>
         </div>
         <div id="acc-display" class="text-[9px] font-bold opacity-40 uppercase tracking-tighter">ACC: --</div>
     </div>
 
     <div id="page-dash" class="page active-page items-center justify-center">
+        <div id="sim-indicator" class="hidden absolute top-24 flex items-center gap-2">
+            <span class="w-3 h-3 bg-red-600 rounded-full animate-pulse"></span>
+            <span class="text-red-500 font-black text-[10px] tracking-widest">SIMULATION ACTIVE</span>
+        </div>
+
         <div class="flex items-baseline mb-[-10px]">
             <div id="speed-readout">0</div>
             <span class="text-[3vw] ml-1 opacity-60">KM/H</span>
         </div>
+
         <div id="timer-display">0.0</div>
-        <div id="status-sub" class="text-[10px] font-black opacity-30 mt-4 mb-12 tracking-widest uppercase text-center">System Standby</div>
+        <div id="status-sub" class="text-[10px] font-black opacity-30 mt-4 mb-6 tracking-widest uppercase text-center">System Standby</div>
+
+        <div id="sim-progress-container" class="hidden w-64 h-1 bg-zinc-900 rounded-full mb-10 overflow-hidden">
+            <div id="sim-progress-bar" class="h-full bg-cyan-500 transition-all duration-300" style="width: 0%"></div>
+        </div>
         
         <div class="flex flex-col gap-4 w-full items-center">
             <button id="arm-trigger" class="w-64 border-2 border-cyan-400 py-5 rounded-full font-black uppercase text-xs active:scale-95 transition-all">Arm System</button>
@@ -78,21 +87,23 @@
     </nav>
 
     <script>
-        let storage = JSON.parse(localStorage.getItem('GRV_V67') || '[]');
+        // Use a consistent key for storage
+        const DB_KEY = 'GRV_V69_STABLE';
+        let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let isArmed = false, isStopped = false, timerInterval = null, startMark = 0;
         let coords = { lat: 0, lng: 0 }, mapInstance = null, watchRef = null;
         let localAvg = 0, localMax = 0;
 
-        function getLocalStats(lat, lng) {
-            const nearby = storage.filter(p => {
-                const dist = Math.sqrt(Math.pow(lat - p.lat, 2) + Math.pow(lng - p.lng, 2));
-                return dist < 0.0005; 
-            });
-            if (nearby.length === 0) return { avg: 0, max: 0 };
-            return {
-                avg: nearby.reduce((a, b) => a + b.d, 0) / nearby.length,
-                max: Math.max(...nearby.map(p => p.d))
-            };
+        function tab(name) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
+            const target = document.getElementById(`page-${name}`);
+            if(target) target.classList.add('active-page');
+            document.getElementById(`tab-${name}`).classList.add('nav-btn-active');
+            
+            if(name === 'map') setTimeout(initMap, 100);
+            if(name === 'history') loadLogs();
+            if(name === 'rank') loadRanks();
         }
 
         function updateTimerColor(sec) {
@@ -100,86 +111,127 @@
             el.classList.remove('state-green', 'state-orange', 'state-red', 'state-record');
             if (localAvg === 0) return;
             
-            // Logic: 33% increments based on the average
             if (sec > localMax) el.classList.add('state-record');
             else if (sec > (localAvg * 0.66)) el.classList.add('state-red');
             else if (sec > (localAvg * 0.33)) el.classList.add('state-orange');
             else el.classList.add('state-green');
         }
 
-        // --- THE 5-MINUTE SIMULATION ---
         function startFiveMinSim() {
             if(timerInterval) clearInterval(timerInterval);
+            
+            document.getElementById('sim-indicator').classList.remove('hidden');
+            document.getElementById('sim-progress-container').classList.remove('hidden');
+            
             isArmed = true;
             isStopped = true;
-            
-            // Setting a 150s average for a clear 5-minute test
-            // Avg: 150s, Max: 200s
             localAvg = 150; 
             localMax = 200; 
             
-            document.getElementById('status-sub').innerText = "5-MIN TEST: ACTIVE";
             startMark = Date.now();
             
             timerInterval = setInterval(() => {
                 const elapsed = (Date.now() - startMark) / 1000;
+                const percent = Math.min((elapsed / 300) * 100, 100);
                 
-                // End after 300 seconds (5 minutes)
+                document.getElementById('sim-progress-bar').style.width = percent + "%";
+                document.getElementById('timer-display').innerText = elapsed.toFixed(1);
+                
+                if (elapsed < 50) document.getElementById('status-sub').innerText = "PHASE 1: GREEN";
+                else if (elapsed < 100) document.getElementById('status-sub').innerText = "PHASE 2: ORANGE";
+                else if (elapsed < 200) document.getElementById('status-sub').innerText = "PHASE 3: RED";
+                else document.getElementById('status-sub').innerText = "PHASE 4: RECORD BREAKING";
+
+                updateTimerColor(elapsed);
+
                 if (elapsed >= 300) {
                     clearInterval(timerInterval);
-                    document.getElementById('status-sub').innerText = "TEST COMPLETE";
-                    return;
+                    document.getElementById('status-sub').innerText = "SIM COMPLETE";
+                    document.getElementById('sim-indicator').classList.add('hidden');
                 }
-
-                document.getElementById('timer-display').innerText = elapsed.toFixed(1);
-                updateTimerColor(elapsed);
             }, 100);
         }
 
-        // --- GPS AND UI HANDLERS ---
         function handleGPS(pos) {
             if (!isArmed) return;
             const s = pos.coords.speed || 0;
             coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            
+            document.getElementById('gps-dot').style.background = "#00ff88";
             document.getElementById('speed-readout').innerText = Math.round(s * 3.6);
+            document.getElementById('acc-display').innerText = `ACC: ${Math.round(pos.coords.accuracy)}M`;
+
             if(s <= 0.3 && !isStopped) {
-                isStopped = true; startMark = Date.now();
-                const stats = getLocalStats(coords.lat, coords.lng);
-                localAvg = stats.avg; localMax = stats.max;
+                isStopped = true; 
+                startMark = Date.now();
+                // Logic to find average from history
+                const nearby = storage.filter(p => {
+                    const d = Math.sqrt(Math.pow(coords.lat - p.lat, 2) + Math.pow(coords.lng - p.lng, 2));
+                    return d < 0.0005; 
+                });
+                localAvg = nearby.length ? nearby.reduce((a, b) => a + b.d, 0) / nearby.length : 0;
+                localMax = nearby.length ? Math.max(...nearby.map(p => p.d)) : 0;
+
                 timerInterval = setInterval(() => {
                     const elapsed = (Date.now() - startMark) / 1000;
                     document.getElementById('timer-display').innerText = elapsed.toFixed(1);
                     updateTimerColor(elapsed);
                 }, 100);
             } else if(s > 0.9 && isStopped) {
-                isStopped = false; clearInterval(timerInterval);
-                const dur = parseFloat(document.getElementById('timer-display').innerText);
-                if(dur > 1.5) {
-                    storage.push({ d: dur, ts: Date.now(), lat: coords.lat, lng: coords.lng });
-                    localStorage.setItem('GRV_V67', JSON.stringify(storage));
+                isStopped = false; 
+                clearInterval(timerInterval);
+                const finalDur = parseFloat(document.getElementById('timer-display').innerText);
+                if(finalDur > 2.0) {
+                    storage.push({ d: finalDur, ts: Date.now(), lat: coords.lat, lng: coords.lng });
+                    localStorage.setItem(DB_KEY, JSON.stringify(storage));
                 }
                 document.getElementById('timer-display').innerText = "0.0";
-                document.getElementById('timer-display').className = ""; 
+                document.getElementById('timer-display').className = "";
             }
         }
 
         document.getElementById('arm-trigger').onclick = function() {
             if(!isArmed) {
-                isArmed = true; this.innerText = "DISARM";
-                this.style.background = "var(--accent)"; this.style.color = "black";
-                watchRef = navigator.geolocation.watchPosition(handleGPS, null, {enableHighAccuracy:true});
+                if (!navigator.geolocation) return alert("GPS Not Supported");
+                isArmed = true; 
+                this.innerText = "DISARM";
+                this.style.background = "var(--accent)"; 
+                this.style.color = "black";
+                watchRef = navigator.geolocation.watchPosition(handleGPS, (err) => {
+                    console.error(err);
+                    document.getElementById('gps-dot').style.background = "#ff2a6d";
+                }, {enableHighAccuracy:true});
             } else { location.reload(); }
         };
 
-        function tab(name) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
-            document.getElementById(`page-${name}`).classList.add('active-page');
-            document.getElementById(`tab-${name}`).classList.add('nav-btn-active');
-            if(name === 'map') initMap();
-            if(name === 'history') loadLogs();
+        function initMap() {
+            const container = document.getElementById('map-canvas');
+            if (!container || mapInstance) return;
+            let center = storage.length ? [storage[storage.length-1].lat, storage[storage.length-1].lng] : [0,0];
+            mapInstance = L.map('map-canvas', {zoomControl: false}).setView(center, 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
         }
 
-        function initMap() {
-            if (mapInstance) mapInstance.remove();
-            let center = storage.length ? [storage[storage.length-1].lat, storage[storage.length-
+        function loadLogs() { 
+            const feed = document.getElementById('log-feed');
+            feed.innerHTML = storage.slice(-10).reverse().map(l => `
+                <div class="p-4 border-b border-zinc-900 flex justify-between">
+                    <span>${l.d.toFixed(1)}s</span>
+                    <span class="opacity-20 text-[10px]">${new Date(l.ts).toLocaleTimeString()}</span>
+                </div>
+            `).join(''); 
+        }
+
+        function loadRanks() { 
+            const feed = document.getElementById('rank-feed');
+            const top = [...storage].sort((a,b) => b.d - a.d).slice(0, 5); 
+            feed.innerHTML = top.map((r, i) => `
+                <div class="p-4 bg-zinc-950 border-l-4 border-cyan-400 flex justify-between">
+                    <span>RANK 0${i+1}</span>
+                    <span class="font-bold">${r.d.toFixed(1)}s</span>
+                </div>
+            `).join(''); 
+        }
+    </script>
+</body>
+</html>
