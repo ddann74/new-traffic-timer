@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V5.8</title>
+    <title>Gravity Intel V6.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        :root { --accent: #00f2ff; --bg: #000; --warn: #ff2a6d; }
+        :root { --accent: #00f2ff; --bg: #000; --warn: #ff2a6d; --signal: #ffcf2a; }
         body { font-family: 'JetBrains+Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; }
         
         .page { display: none; height: calc(100vh - 95px); width: 100vw; flex-direction: column; padding: 20px; box-sizing: border-box; overflow-y: auto; }
@@ -37,9 +37,9 @@
     <div class="px-6 py-4 flex justify-between items-center bg-black/80 backdrop-blur-md sticky top-0 z-50">
         <div class="flex items-center gap-3">
             <div id="gps-dot" class="w-2 h-2 rounded-full bg-zinc-800"></div>
-            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v5.8_Stable</span>
+            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v6.0_Signals</span>
         </div>
-        <div id="acc-display" class="text-[9px] font-bold opacity-40">ACC: --</div>
+        <div id="acc-display" class="text-[9px] font-bold opacity-40 uppercase tracking-tighter">Signal: Searching...</div>
     </div>
 
     <div id="page-dash" class="page active-page items-center justify-center">
@@ -48,7 +48,14 @@
         <button id="arm-trigger" class="border-2 border-cyan-400 px-16 py-5 rounded-full font-black uppercase text-xs active:scale-95 transition-all">Arm System</button>
     </div>
 
-    <div id="page-map" class="page"><div id="map-canvas"></div></div>
+    <div id="page-map" class="page">
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="text-[10px] font-black opacity-40 uppercase">Tactical_Grid</h2>
+            <span id="light-count" class="text-[8px] font-black text-amber-400">SIGNALS: 0</span>
+        </div>
+        <div id="map-canvas"></div>
+    </div>
+
     <div id="page-history" class="page"><div id="log-feed" class="flex flex-col gap-2"></div></div>
     <div id="page-rank" class="page"><div id="rank-feed" class="flex flex-col gap-3 mb-10"></div></div>
 
@@ -60,9 +67,11 @@
     </nav>
 
     <script>
-        let storage = JSON.parse(localStorage.getItem('GRV_V58') || '[]');
+        let storage = JSON.parse(localStorage.getItem('GRV_V60') || '[]');
         let isArmed = false, isStopped = false, timerInterval = null, startMark = 0;
         let coords = { lat: 0, lng: 0 }, mapInstance = null, watchRef = null, wakeLock = null;
+        let signalLayer = L.layerGroup();
+        let lastScanCoord = null;
 
         function tab(name) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
@@ -74,26 +83,47 @@
             if(name === 'rank') loadRanks();
         }
 
-        async function requestWakeLock() {
-            try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
+        async function fetchTrafficLights(lat, lng) {
+            // Only scan if we've moved > 500m or never scanned
+            if (lastScanCoord) {
+                const dist = Math.sqrt(Math.pow(lat - lastScanCoord.lat, 2) + Math.pow(lng - lastScanCoord.lng, 2));
+                if (dist < 0.005) return; 
+            }
+            
+            const query = `[out:json];node["highway"="traffic_signals"](around:1200,${lat},${lng});out;`;
+            const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                signalLayer.clearLayers();
+                data.elements.forEach(node => {
+                    L.circleMarker([node.lat, node.lon], {
+                        radius: 5, fillColor: "#ffcf2a", color: "#000", weight: 1, fillOpacity: 0.9
+                    }).addTo(signalLayer);
+                });
+                document.getElementById('light-count').innerText = `SIGNALS: ${data.elements.length}`;
+                lastScanCoord = {lat, lng};
+            } catch (e) { console.error("Signal API Error"); }
         }
 
-        // IMPROVED SHUTDOWN LOGIC
+        function initMap() {
+            if (typeof L === 'undefined') return;
+            setTimeout(() => {
+                if(mapInstance) mapInstance.remove();
+                let center = storage.length ? [storage[storage.length-1].lat, storage[storage.length-1].lng] : [coords.lat, coords.lng];
+                mapInstance = L.map('map-canvas', {zoomControl: false}).setView(center, 15);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
+                signalLayer.addTo(mapInstance);
+                fetchTrafficLights(center[0], center[1]);
+                storage.forEach(p => L.circle([p.lat, p.lng], {color: '#00f2ff', radius: 10, weight: 1}).addTo(mapInstance));
+            }, 100);
+        }
+
         function forceKillSystem() {
-            // 1. Clear Interval immediately
-            if(timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-            // 2. Clear GPS Watcher
-            if(watchRef) {
-                navigator.geolocation.clearWatch(watchRef);
-                watchRef = null;
-            }
-            // 3. Reset internal flags
-            isArmed = false;
-            isStopped = false;
-            // 4. Hard-reset UI
+            if(timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+            if(watchRef) { navigator.geolocation.clearWatch(watchRef); watchRef = null; }
+            isArmed = false; isStopped = false;
             document.getElementById('timer-display').innerText = "0.0";
             document.getElementById('timer-display').classList.remove('is-counting');
             document.getElementById('status-sub').innerText = "System Standby";
@@ -104,45 +134,32 @@
         }
 
         function handleGPS(pos) {
-            // GLOBAL GUARD: If the system was disarmed while this function was firing, stop everything.
             if (!isArmed) return;
-
             const s = pos.coords.speed || 0;
             const a = pos.coords.accuracy || 0;
             coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-
             document.getElementById('acc-display').innerText = `ACC: ${a.toFixed(0)}M`;
             document.getElementById('status-sub').innerText = s > 0.4 ? `${(s * 2.237).toFixed(1)} MPH` : "STATIONARY";
             
-            if(a < 20) {
-                document.getElementById('gps-dot').style.background = '#00f2ff';
-                document.getElementById('gps-dot').style.boxShadow = '0 0 10px #00f2ff';
-            }
+            if(a < 20) document.getElementById('gps-dot').style.background = '#00f2ff';
 
-            // TRIGGER: STOP
             if(s <= 0.3 && !isStopped) {
-                isStopped = true;
-                startMark = Date.now();
+                isStopped = true; startMark = Date.now();
                 if(navigator.vibrate) navigator.vibrate(100);
                 document.getElementById('timer-display').classList.add('is-counting');
-                
-                // Ensure no double-intervals
                 if(timerInterval) clearInterval(timerInterval);
                 timerInterval = setInterval(() => {
                     if(!isArmed) { clearInterval(timerInterval); return; }
                     document.getElementById('timer-display').innerText = ((Date.now() - startMark)/1000).toFixed(1);
                 }, 100);
-            } 
-            // TRIGGER: MOVE
-            else if(s > 0.9 && isStopped) {
-                isStopped = false;
-                clearInterval(timerInterval);
+            } else if(s > 0.9 && isStopped) {
+                isStopped = false; clearInterval(timerInterval);
                 if(navigator.vibrate) navigator.vibrate([50, 50]);
                 const duration = parseFloat(document.getElementById('timer-display').innerText);
                 document.getElementById('timer-display').classList.remove('is-counting');
                 if(duration > 1.5) {
                     storage.push({ d: duration, ts: Date.now(), lat: coords.lat, lng: coords.lng });
-                    localStorage.setItem('GRV_V58', JSON.stringify(storage));
+                    localStorage.setItem('GRV_V60', JSON.stringify(storage));
                 }
                 document.getElementById('timer-display').innerText = "0.0";
             }
@@ -150,19 +167,13 @@
 
         document.getElementById('arm-trigger').onclick = function() {
             if(!isArmed) {
-                isArmed = true;
-                this.innerText = "DISARM SYSTEM";
-                this.style.background = "var(--accent)";
-                this.style.color = "black";
-                requestWakeLock();
+                isArmed = true; this.innerText = "DISARM SYSTEM";
+                this.style.background = "var(--accent)"; this.style.color = "black";
+                if ('wakeLock' in navigator) navigator.wakeLock.request('screen').then(w => wakeLock = w);
                 watchRef = navigator.geolocation.watchPosition(handleGPS, null, {enableHighAccuracy:true});
-            } else {
-                forceKillSystem();
-            }
+            } else { forceKillSystem(); }
         };
 
-        // Render functions (Map, Logs, Rank) omitted for brevity but remain fully functional in your local build.
-        function initMap() { if (typeof L === 'undefined') return; setTimeout(() => { if(mapInstance) mapInstance.remove(); let center = storage.length ? [storage[storage.length-1].lat, storage[storage.length-1].lng] : [coords.lat, coords.lng]; mapInstance = L.map('map-canvas', {zoomControl: false}).setView(center, 16); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance); storage.forEach(p => L.circle([p.lat, p.lng], {color: '#00f2ff', radius: 12, weight: 1}).addTo(mapInstance)); }, 100); }
         function loadLogs() { document.getElementById('log-feed').innerHTML = storage.slice(-15).reverse().map(l => `<div class="p-4 border-b border-zinc-900 flex justify-between items-center"><span class="text-xl font-black">${l.d}s</span><span class="text-[8px] opacity-20 uppercase tracking-tighter">${new Date(l.ts).toLocaleTimeString()}</span></div>`).join(''); }
         function loadRanks() { const top = [...storage].sort((a,b) => b.d - a.d).slice(0, 5); document.getElementById('rank-feed').innerHTML = top.map((r, i) => `<div class="p-4 bg-zinc-950 border-l-4 border-cyan-400"><div class="text-[7px] opacity-40 font-black">RANK_0${i+1}</div><div class="text-2xl font-black">${r.d}s</div></div>`).join(''); }
         function clearData() { if(confirm("Confirm Wipe?")) { localStorage.clear(); location.reload(); } }
