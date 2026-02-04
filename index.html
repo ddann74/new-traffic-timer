@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V7.5</title>
+    <title>Gravity Intel V7.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        :root { --accent: #00f2ff; --bg: #000; --warn: #ff2a6d; --go: #00ff88; --wait: #ff8800; }
+        :root { --accent: #00f2ff; --bg: #000; --warn: #ff2a6d; --go: #00ff88; }
         body { font-family: 'JetBrains+Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; }
         
-        .page { display: none; height: calc(100vh - 95px); width: 100vw; flex-direction: column; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        .page { display: none; height: calc(100vh - 90px); width: 100vw; flex-direction: column; box-sizing: border-box; overflow-y: auto; }
         .active-page { display: flex; }
         
         .nav-bar { 
@@ -21,75 +21,69 @@
             display: grid; grid-template-columns: repeat(4, 1fr); z-index: 10000;
             padding-bottom: env(safe-area-inset-bottom);
         }
-        .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.25; transition: 0.2s; border-top: 3px solid transparent; }
-        .nav-btn-active { opacity: 1; border-top-color: var(--accent); background: rgba(0,242,255,0.05); }
-        .nav-btn span { font-size: 10px; font-weight: 800; margin-top: 6px; letter-spacing: 1px; }
+        .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.25; transition: 0.2s; }
+        .nav-btn-active { opacity: 1; border-top: 3px solid var(--accent); background: rgba(0,242,255,0.05); }
 
-        #speed-readout { font-size: 12vw; font-weight: 800; opacity: 0.5; line-height: 1; }
-        #timer-display { font-size: 32vw; font-weight: 800; transition: 0.3s; line-height: 1; color: var(--accent); }
-        
-        .state-green { color: var(--go) !important; }
-        .state-orange { color: var(--wait) !important; }
-        .state-red { color: var(--warn) !important; }
-        .state-record { color: var(--warn) !important; animation: pulse-red 0.5s infinite; }
-
-        @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-
-        #map-canvas { height: 100%; width: 100%; background: #000; border-radius: 8px; border: 1px solid #111; min-height: 300px; }
+        #map-canvas { height: 100%; width: 100%; background: #000; }
         .leaflet-tile-container { filter: invert(100%) hue-rotate(180deg) brightness(80%) contrast(1.2); }
         
-        .map-overlay-btn {
-            position: absolute; bottom: 30px; right: 20px; z-index: 1000;
-            background: #000; border: 2px solid var(--accent); color: var(--accent);
-            padding: 12px; border-radius: 50%; box-shadow: 0 0 15px rgba(0,242,255,0.4);
+        .locate-fab {
+            position: absolute; bottom: 110px; right: 20px; z-index: 10001;
+            background: #111; border: 2px solid var(--accent); color: var(--accent);
+            width: 55px; height: 55px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 20px rgba(0,242,255,0.4);
         }
-        
-        .leaflet-popup-content-wrapper { background: #0a0a0a !important; color: var(--accent) !important; border: 1px solid #333; }
-        .leaflet-popup-tip { background: #0a0a0a !important; }
+        .locate-fab:active { transform: scale(0.9); background: var(--accent); color: #000; }
+
+        #timer-display { font-size: 30vw; font-weight: 800; line-height: 1; }
+        .log-entry { border-left: 3px solid var(--accent); background: rgba(255,255,255,0.03); margin-bottom: 8px; padding: 12px; }
     </style>
 </head>
 <body>
 
-    <div class="px-6 py-4 flex justify-between items-center bg-black/80 backdrop-blur-md sticky top-0 z-50">
+    <div class="px-6 py-4 flex justify-between items-center bg-black/90 backdrop-blur-md sticky top-0 z-[10002] border-b border-zinc-900">
         <div class="flex items-center gap-3">
-            <div id="gps-dot" class="w-2 h-2 rounded-full bg-zinc-800"></div>
-            <span class="text-[9px] font-black opacity-40 tracking-tighter uppercase">Gravity_v7.5_Final</span>
+            <div id="gps-dot" class="w-2 h-2 rounded-full bg-red-600 animate-pulse"></div>
+            <span class="text-[10px] font-black uppercase tracking-widest">Gravity_v7.7</span>
         </div>
-        <div id="acc-display" class="text-[9px] font-bold opacity-40 uppercase tracking-tighter">ACC: --</div>
+        <div id="acc-display" class="text-[10px] font-bold opacity-60">SIGNAL: SEARCHING</div>
     </div>
 
-    <div id="page-dash" class="page active-page items-center justify-center">
-        <div id="sim-indicator" class="hidden absolute top-24 flex items-center gap-2">
-            <span class="w-3 h-3 bg-red-600 rounded-full animate-pulse"></span>
-            <span class="text-red-500 font-black text-[10px] tracking-widest uppercase">Live Mapping Active</span>
-        </div>
-        <div class="flex items-baseline mb-[-10px]">
-            <div id="speed-readout">0</div>
-            <span class="text-[3vw] ml-1 opacity-60">KM/H</span>
+    <div id="page-dash" class="page active-page items-center justify-center p-6 text-center">
+        <div class="flex items-baseline gap-1 opacity-40 mb-[-10px]">
+            <span id="speed-readout" class="text-6xl font-black">0</span>
+            <span class="text-sm font-bold">KM/H</span>
         </div>
         <div id="timer-display">0.0</div>
-        <div id="status-sub" class="text-[10px] font-black opacity-30 mt-4 mb-6 tracking-widest uppercase text-center">System Standby</div>
-        <div id="sim-progress-container" class="hidden w-64 h-1 bg-zinc-900 rounded-full mb-10 overflow-hidden">
-            <div id="sim-progress-bar" class="h-full bg-cyan-500 transition-all duration-300" style="width: 0%"></div>
-        </div>
-        <div class="flex flex-col gap-4 w-full items-center">
-            <button id="arm-trigger" class="w-64 border-2 border-cyan-400 py-5 rounded-full font-black uppercase text-xs active:scale-95 transition-all">Arm System</button>
-            <button onclick="startMultiStopSim()" class="text-[10px] text-cyan-400 font-bold border border-cyan-900/30 px-6 py-3 rounded-xl uppercase bg-cyan-950/20 active:bg-cyan-900/40">Launch 5-Stop Sim</button>
-        </div>
-    </div>
-
-    <div id="page-map" class="page relative p-0">
-        <div id="map-canvas"></div>
-        <button onclick="findMyLocation()" class="map-overlay-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3m0 14v3m10-10h-3M5 12H2"></path></svg>
+        <div id="status-sub" class="text-[10px] opacity-40 uppercase tracking-[0.3em] mb-12">System Disarmed</div>
+        
+        <button id="arm-trigger" class="w-64 border-2 border-cyan-400 py-5 rounded-full font-black uppercase text-xs tracking-widest transition-all active:bg-cyan-400 active:text-black">
+            Engage System
+        </button>
+        <button onclick="startMultiStopSim()" class="mt-6 text-[9px] opacity-40 uppercase font-bold tracking-widest border border-zinc-800 px-4 py-2 rounded">
+            Run Path Simulation
         </button>
     </div>
 
-    <div id="page-history" class="page"><div id="log-feed" class="flex flex-col gap-2"></div></div>
-    
-    <div id="page-rank" class="page">
-        <div id="rank-feed" class="flex flex-col gap-3 mb-6"></div>
-        <button onclick="clearAllData()" class="mt-auto mb-10 text-[10px] text-red-500 font-black opacity-40 border border-red-900/20 py-4 rounded-lg uppercase tracking-widest active:opacity-100">Purge Local Data</button>
+    <div id="page-map" class="page relative">
+        <div id="map-canvas"></div>
+        <button onclick="findMyLocation()" class="locate-fab">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle><path d="M12 2v3m0 14v3m10-10h-3M5 12H2"></path>
+            </svg>
+        </button>
+    </div>
+
+    <div id="page-history" class="page p-6">
+        <h2 class="text-[10px] font-black opacity-30 uppercase tracking-widest mb-6">Activity Feed</h2>
+        <div id="log-feed"></div>
+    </div>
+
+    <div id="page-rank" class="page p-6">
+        <h2 class="text-[10px] font-black opacity-30 uppercase tracking-widest mb-6">Top Records</h2>
+        <div id="rank-feed" class="flex flex-col gap-3"></div>
+        <button onclick="clearData()" class="mt-auto mb-6 text-[10px] text-red-500 font-bold opacity-30 uppercase">Wipe Memory</button>
     </div>
 
     <nav class="nav-bar">
@@ -100,11 +94,11 @@
     </nav>
 
     <script>
-        const DB_KEY = 'GRV_V75_STABLE';
+        const DB_KEY = 'GRV_V77_STORAGE';
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
-        let isArmed = false, isStopped = false, timerInterval = null, startMark = 0;
-        let coords = { lat: 0, lng: 0 }, mapInstance = null, watchRef = null;
-        let markers = [];
+        let mapInstance = null, markers = [], watchRef = null, isArmed = false;
+        let isStopped = false, timerInterval = null, startMark = 0;
+        let lastCoords = { lat: -34.39, lng: 150.89 };
 
         function tab(name) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
@@ -115,7 +109,7 @@
             if(name === 'map') {
                 setTimeout(() => {
                     initMap();
-                    renderStoredMarkers();
+                    renderMarkers();
                 }, 100);
             }
             if(name === 'history') loadLogs();
@@ -123,97 +117,62 @@
         }
 
         function initMap() {
-            if (mapInstance) return;
-            const startPoint = storage.length > 0 ? [storage[storage.length-1].lat, storage[storage.length-1].lng] : [-34.39, 150.89];
-            mapInstance = L.map('map-canvas', {zoomControl: false}).setView(startPoint, 14);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
+            if (mapInstance) {
+                mapInstance.invalidateSize();
+                return;
+            }
+            try {
+                mapInstance = L.map('map-canvas', { zoomControl: false }).setView([lastCoords.lat, lastCoords.lng], 14);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
+            } catch (e) { console.error("Map Init Error:", e); }
         }
 
-        function renderStoredMarkers() {
+        function renderMarkers() {
             if(!mapInstance) return;
             markers.forEach(m => mapInstance.removeLayer(m));
             markers = [];
-            storage.forEach(point => {
-                const ts = new Date(point.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                const m = L.circleMarker([point.lat, point.lng], {
-                    radius: 7, fillColor: "#00f2ff", color: "#fff", weight: 1, fillOpacity: 0.7
-                }).addTo(mapInstance).bindPopup(`<div style="text-align:center"><b>${point.d.toFixed(1)}s</b><br><span style="font-size:10px">${ts}</span></div>`);
+            storage.forEach(p => {
+                const m = L.circleMarker([p.lat, p.lng], {
+                    radius: 7, fillColor: "#00f2ff", color: "#fff", weight: 1, fillOpacity: 0.6
+                }).addTo(mapInstance).bindPopup(`<b>${p.d.toFixed(1)}s</b><br>${new Date(p.ts).toLocaleTimeString()}`);
                 markers.push(m);
             });
         }
 
         function findMyLocation() {
+            document.getElementById('acc-display').innerText = "LOCATING...";
             navigator.geolocation.getCurrentPosition((pos) => {
-                const lat = pos.coords.latitude, lng = pos.coords.longitude;
-                if (mapInstance) {
-                    mapInstance.flyTo([lat, lng], 16);
-                    const pulse = L.circle([lat, lng], { radius: 20, color: '#00ff88' }).addTo(mapInstance);
+                lastCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                document.getElementById('acc-display').innerText = `ACC: ${Math.round(pos.coords.accuracy)}M`;
+                if(mapInstance) {
+                    mapInstance.flyTo([lastCoords.lat, lastCoords.lng], 16);
+                    const pulse = L.circleMarker([lastCoords.lat, lastCoords.lng], { radius: 15, color: '#00ff88' }).addTo(mapInstance);
                     setTimeout(() => mapInstance.removeLayer(pulse), 3000);
                 }
-            });
-        }
-
-        async function startMultiStopSim() {
-            if(isArmed) return alert("Disarm real GPS first.");
-            document.getElementById('sim-indicator').classList.remove('hidden');
-            document.getElementById('sim-progress-container').classList.remove('hidden');
-            
-            // Start sim at current location if available
-            let sLat = coords.lat || -34.39, sLng = coords.lng || 150.89;
-
-            for (let i = 1; i <= 5; i++) {
-                document.getElementById('status-sub').innerText = `DRIVING TO STOP ${i}...`;
-                document.getElementById('speed-readout').innerText = "52";
-                sLat += (Math.random() - 0.5) * 0.005;
-                sLng += (Math.random() - 0.5) * 0.005;
-                await new Promise(r => setTimeout(r, 2000)); 
-
-                let wait = Math.floor(Math.random() * 40) + 15;
-                document.getElementById('speed-readout').innerText = "0";
-                
-                await new Promise(resolve => {
-                    isStopped = true;
-                    let start = Date.now();
-                    timerInterval = setInterval(() => {
-                        let elap = (Date.now() - start) / 1000;
-                        document.getElementById('timer-display').innerText = elap.toFixed(1);
-                        document.getElementById('sim-progress-bar').style.width = (i / 5 * 100) + "%";
-
-                        if (elap >= wait) {
-                            clearInterval(timerInterval);
-                            storage.push({ d: wait, ts: Date.now(), lat: sLat, lng: sLng });
-                            localStorage.setItem(DB_KEY, JSON.stringify(storage));
-                            if(mapInstance) {
-                                L.circleMarker([sLat, sLng], {radius: 10, fillColor: "#ff2a6d", color: "#fff"}).addTo(mapInstance).bindPopup(`SIM: ${wait}s`).openPopup();
-                                mapInstance.panTo([sLat, sLng]);
-                            }
-                            resolve();
-                        }
-                    }, 100);
-                });
-            }
-            document.getElementById('sim-indicator').classList.add('hidden');
-            document.getElementById('status-sub').innerText = "SIMULATION COMPLETE";
+            }, (err) => alert("GPS error: " + err.message));
         }
 
         function handleGPS(pos) {
-            coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             const s = pos.coords.speed || 0;
-            document.getElementById('gps-dot').style.background = "#00ff88";
-            document.getElementById('speed-readout').innerText = Math.round(s * 3.6);
-            document.getElementById('acc-display').innerText = `ACC: ${Math.round(pos.coords.accuracy)}M`;
+            const kmh = Math.round(s * 3.6);
+            lastCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             
-            if(s <= 0.3 && !isStopped) {
-                isStopped = true; startMark = Date.now();
+            document.getElementById('speed-readout').innerText = kmh;
+            document.getElementById('gps-dot').style.background = "#00ff88";
+            document.getElementById('acc-display').innerText = `ACC: ${Math.round(pos.coords.accuracy)}M`;
+
+            if(kmh <= 1 && !isStopped) {
+                isStopped = true;
+                startMark = Date.now();
                 timerInterval = setInterval(() => {
-                    let elap = (Date.now() - startMark) / 1000;
-                    document.getElementById('timer-display').innerText = elap.toFixed(1);
+                    document.getElementById('timer-display').innerText = ((Date.now() - startMark)/1000).toFixed(1);
                 }, 100);
-            } else if(s > 0.8 && isStopped) {
-                isStopped = false; clearInterval(timerInterval);
-                let dur = parseFloat(document.getElementById('timer-display').innerText);
-                if(dur > 3) {
-                    storage.push({ d: dur, ts: Date.now(), lat: coords.lat, lng: coords.lng });
+            } else if(kmh > 3 && isStopped) {
+                isStopped = false;
+                clearInterval(timerInterval);
+                const dur = parseFloat(document.getElementById('timer-display').innerText);
+                if(dur > 2) {
+                    storage.push({ d: dur, ts: Date.now(), lat: lastCoords.lat.toFixed(6), lng: lastCoords.lng.toFixed(6) });
                     localStorage.setItem(DB_KEY, JSON.stringify(storage));
                 }
                 document.getElementById('timer-display').innerText = "0.0";
@@ -222,36 +181,58 @@
 
         document.getElementById('arm-trigger').onclick = function() {
             if(!isArmed) {
-                isArmed = true; this.innerText = "DISARM";
+                isArmed = true; this.innerText = "DISENGAGE";
+                this.classList.replace('border-cyan-400', 'border-red-500');
+                document.getElementById('status-sub').innerText = "System Live";
                 watchRef = navigator.geolocation.watchPosition(handleGPS, null, {enableHighAccuracy:true});
-            } else { location.reload(); }
-        };
-
-        function clearAllData() {
-            if(confirm("Wipe all logs and map markers?")) {
-                localStorage.removeItem(DB_KEY);
+            } else {
+                navigator.geolocation.clearWatch(watchRef);
                 location.reload();
             }
+        };
+
+        async function startMultiStopSim() {
+            if(isArmed) return alert("Disarm real GPS first.");
+            const simPath = [
+                {la: -34.391, lo: 150.891, d: 12.5},
+                {la: -34.395, lo: 150.895, d: 45.2},
+                {la: -34.401, lo: 150.901, d: 22.8}
+            ];
+            for (let stop of simPath) {
+                document.getElementById('status-sub').innerText = "SIM: MOVING...";
+                await new Promise(r => setTimeout(r, 1500));
+                document.getElementById('status-sub').innerText = "SIM: STOPPED";
+                storage.push({ d: stop.d, ts: Date.now(), lat: stop.la, lng: stop.lo });
+                localStorage.setItem(DB_KEY, JSON.stringify(storage));
+                document.getElementById('timer-display').innerText = stop.d.toFixed(1);
+            }
+            document.getElementById('status-sub').innerText = "SIM COMPLETE";
+            tab('map');
         }
 
-        function loadLogs() { 
-            document.getElementById('log-feed').innerHTML = storage.slice(-15).reverse().map(l => `
-                <div class="p-4 border-b border-zinc-900 flex justify-between">
-                    <span>${l.d.toFixed(1)}s</span>
-                    <span class="opacity-20 text-[10px]">${new Date(l.ts).toLocaleTimeString()}</span>
+        function loadLogs() {
+            document.getElementById('log-feed').innerHTML = storage.slice(-20).reverse().map(l => `
+                <div class="log-entry flex justify-between items-center">
+                    <div>
+                        <div class="text-lg font-bold">${l.d.toFixed(1)}s</div>
+                        <div class="text-[9px] opacity-40">${new Date(l.ts).toLocaleString()}</div>
+                    </div>
+                    <div class="text-[8px] opacity-20 text-right">${l.lat}<br>${l.lng}</div>
                 </div>
-            `).join(''); 
+            `).join('');
         }
 
-        function loadRanks() { 
-            const top = [...storage].sort((a,b) => b.d - a.d).slice(0, 5); 
-            document.getElementById('rank-feed').innerHTML = top.map((r, i) => `
-                <div class="p-4 bg-zinc-950 border-l-4 border-cyan-400 flex justify-between items-center">
-                    <span class="text-[10px] opacity-40">RANK 0${i+1}</span>
-                    <span class="font-bold text-xl">${r.d.toFixed(1)}s</span>
+        function loadRanks() {
+            const sorted = [...storage].sort((a,b) => b.d - a.d).slice(0, 5);
+            document.getElementById('rank-feed').innerHTML = sorted.map((r, i) => `
+                <div class="p-4 bg-zinc-900 flex justify-between items-center rounded">
+                    <span class="text-cyan-400 font-black">#0${i+1}</span>
+                    <span class="text-2xl font-bold">${r.d.toFixed(1)}s</span>
                 </div>
-            `).join(''); 
+            `).join('');
         }
+
+        function clearData() { if(confirm("Wipe logs?")) { localStorage.removeItem(DB_KEY); location.reload(); } }
     </script>
 </body>
 </html>
