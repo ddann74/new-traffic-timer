@@ -3,40 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V9.2</title>
+    <title>Gravity Intel V9.3</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="data:application/json;base64,ewogICJub21lIjogIkdyYXZpdHkgSW50ZWwiLAogICJzaG9ydF9uYW1lIjogIkdyYXZpdHkiLAogICJzdGFydF91cmwiOiAiLiIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiIzAwMDAwMCIsCiAgInRoZW1lX2NvbG9yIjogIiMwMGYyZmYiCn0=">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        :root { --accent: #00f2ff; --bg: #000; --warn: #ff2a6d; --go: #00ff88; --mid: #ff9500; }
+        :root { --accent: #00f2ff; --bg: #000; --warn: #ff2a6d; --go: #00ff88; }
         body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; }
         .page { display: none; height: calc(100vh - 90px); width: 100vw; flex-direction: column; box-sizing: border-box; overflow-y: auto; }
         .active-page { display: flex; }
         .nav-bar { position: fixed; bottom: 0; left: 0; width: 100%; height: 90px; background: #050505; border-top: 1px solid #222; display: grid; grid-template-columns: repeat(4, 1fr); z-index: 10000; padding-bottom: env(safe-area-inset-bottom); }
-        .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.25; transition: 0.2s; }
+        .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.25; }
         .nav-btn-active { opacity: 1; border-top: 2px solid var(--accent); background: rgba(0,242,255,0.05); }
         #timer-display { font-size: 28vw; font-weight: 800; line-height: 1; color: white; text-align: center; font-variant-numeric: tabular-nums; letter-spacing: -0.05em; }
         .phase-record { color: var(--warn) !important; animation: pulse-record 0.4s infinite; text-shadow: 0 0 40px rgba(255,42,109,0.7); }
         @keyframes pulse-record { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
         #map-canvas { height: 100%; width: 100%; background: #000; }
         .leaflet-tile-container { filter: invert(100%) hue-rotate(180deg) brightness(80%) contrast(1.2); }
-        .log-entry { border-left: 3px solid var(--accent); background: rgba(255,255,255,0.03); margin-bottom: 10px; padding: 15px; border-radius: 0 8px 8px 0; }
-        #nosleep-video { position: absolute; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+        .log-entry { border-left: 3px solid var(--accent); background: rgba(255,255,255,0.03); margin-bottom: 10px; padding: 15px; }
+        #nosleep-video { position: absolute; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; }
         .gps-active { animation: blink 0.5s ease-out; }
         @keyframes blink { from { transform: scale(2.5); opacity: 1; } to { transform: scale(1); opacity: 0.5; } }
     </style>
 </head>
 <body>
 
-    <video id="nosleep-video" playsinline loop muted title="Persistence Track"></video>
+    <video id="nosleep-video" playsinline loop muted></video>
 
     <div class="px-6 py-4 flex justify-between items-center bg-black/90 sticky top-0 z-[10002] border-b border-zinc-900">
         <div class="flex items-center gap-3">
-            <div id="gps-dot" class="w-2 h-2 rounded-full bg-zinc-700 transition-colors duration-500"></div>
-            <span class="text-[10px] font-black tracking-widest uppercase">Gravity_v9.2_Max</span>
+            <div id="gps-dot" class="w-2 h-2 rounded-full bg-zinc-700 transition-colors"></div>
+            <span class="text-[10px] font-black tracking-widest uppercase">Gravity_v9.3_Pro</span>
         </div>
-        <div id="acc-display" class="text-[10px] font-bold opacity-60 uppercase">GPS: Standby</div>
+        <div class="flex flex-col items-end">
+            <div id="acc-display" class="text-[9px] font-bold opacity-60 uppercase">GPS: Standby</div>
+            <div id="pwa-status" class="text-[7px] text-cyan-500 opacity-40">WEB_MODE</div>
+        </div>
     </div>
 
     <div id="page-dash" class="page active-page items-center justify-center p-8">
@@ -46,7 +53,18 @@
         </div>
         <div id="timer-display">0.0</div>
         <div id="status-sub" class="text-[10px] opacity-40 uppercase tracking-[0.4em] mb-12 text-center">System Disarmed</div>
-        <button id="arm-trigger" class="w-full max-w-xs border-2 border-cyan-400 py-6 rounded-full font-black uppercase text-sm tracking-widest active:scale-95 transition-all">Engage System</button>
+        
+        <div class="w-full max-w-xs flex flex-col gap-4">
+            <button id="arm-trigger" class="w-full border-2 border-cyan-400 py-6 rounded-full font-black uppercase text-sm tracking-widest active:scale-95 transition-all">Engage System</button>
+            <div class="flex justify-between items-center px-4">
+                <span class="text-[9px] opacity-40 uppercase">Stop Sensitivity</span>
+                <select id="sensitivity" class="bg-black text-[10px] border border-zinc-800 rounded px-2 py-1">
+                    <option value="0.8">0.8 KM/H (Precise)</option>
+                    <option value="1.5" selected>1.5 KM/H (Balanced)</option>
+                    <option value="2.5">2.5 KM/H (High Noise)</option>
+                </select>
+            </div>
+        </div>
     </div>
 
     <div id="page-map" class="page relative"><div id="map-canvas"></div></div>
@@ -61,12 +79,17 @@
     </nav>
 
     <script>
-        const DB_KEY = 'GRV_DB_V92';
+        const DB_KEY = 'GRV_DB_V93';
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let mapInstance = null, markerGroup = null, watchRef = null, isArmed = false, isStopped = false;
         let timerInterval = null, startMark = 0, currentLocalStats = null, wakeLock = null;
         let lastCoords = { lat: -34.397, lng: 150.899 };
-        let speedBuffer = [0, 0, 0]; // For smoothing
+        let speedBuffer = [0, 0, 0, 0, 0]; 
+
+        // Check if running as PWA
+        if (window.matchMedia('(display-mode: standalone)').matches) {
+            document.getElementById('pwa-status').innerText = "NATIVE_STANDALONE";
+        }
 
         function tab(name) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
@@ -99,10 +122,9 @@
             el.innerText = elapsed.toFixed(1);
             if (currentLocalStats) {
                 const { avg, max } = currentLocalStats;
-                if (elapsed > max) { el.className = 'phase-record'; document.getElementById('status-sub').innerText = "RECORD PACE!"; }
+                if (elapsed > max) el.className = 'phase-record';
                 else if (elapsed > (avg * 0.7)) el.className = 'text-[#ff2a6d]';
-                else if (elapsed > (avg * 0.4)) el.className = 'text-[#ff9500]';
-                else el.className = 'text-[#00ff88]';
+                else el.className = 'text-white';
             }
         }
 
@@ -112,6 +134,7 @@
             speedBuffer.shift();
             const smoothedSpeed = speedBuffer.reduce((a, b) => a + b) / speedBuffer.length;
             const kmh = Math.round(smoothedSpeed * 3.6);
+            const threshold = parseFloat(document.getElementById('sensitivity').value);
             
             const lat = pos.coords.latitude;
             const lng = pos.coords.longitude;
@@ -126,21 +149,26 @@
             document.getElementById('speed-readout').innerText = kmh;
             document.getElementById('acc-display').innerText = `ACC: ${Math.round(pos.coords.accuracy)}M`;
 
-            if (kmh <= 1 && !isStopped) {
+            if (kmh <= threshold && !isStopped) {
                 isStopped = true;
                 startMark = Date.now();
+                if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]); // "Stopped" alert
+                
                 const matches = storage.filter(p => Math.abs(p.lat - lat) < 0.00045 && Math.abs(p.lng - lng) < 0.00045);
                 if (matches.length >= 3) {
                     const times = matches.map(m => m.d);
                     currentLocalStats = { avg: times.reduce((a,b) => a+b, 0) / times.length, max: Math.max(...times) };
-                } else { currentLocalStats = null; }
+                }
                 
                 if (timerInterval) clearInterval(timerInterval);
                 timerInterval = setInterval(updateTimerUI, 50);
+                document.getElementById('status-sub').innerText = "TIMING ACTIVE";
             } 
-            else if (kmh > 3 && isStopped) {
+            else if (kmh > (threshold + 1) && isStopped) {
                 isStopped = false;
                 clearInterval(timerInterval);
+                if ("vibrate" in navigator) navigator.vibrate(400); // "Moving" alert
+                
                 const final = (Date.now() - startMark) / 1000;
                 if (final > 1.5) {
                     storage.push({ d: parseFloat(final.toFixed(1)), ts: Date.now(), lat: parseFloat(lat.toFixed(6)), lng: parseFloat(lng.toFixed(6)) });
@@ -154,14 +182,13 @@
 
         async function startPersistence() {
             const video = document.getElementById('nosleep-video');
-            video.src = "https://raw.githubusercontent.com/anars/blank-audio/master/10-seconds-of-silence.mp3"; // Better source for iOS compatibility
+            video.src = "data:video/mp4;base64,AAAAHGZ0eXBpc29tAAAAAGlzb21tcDQyAAAACHV1aWRreG1sAAAAAGFwcGw6ZGF0YQAAABh0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAYmxlAAAAFm1kaWEAAAAgbWRoZAAAAAD663pA+ut6QAAAAAAAV+EAAAAA";
             try {
                 await video.play();
                 if ('wakeLock' in navigator && !wakeLock) {
                     wakeLock = await navigator.wakeLock.request('screen');
-                    wakeLock.addEventListener('release', () => { wakeLock = null; });
                 }
-            } catch (e) { console.warn("Persistence re-syncing..."); }
+            } catch (e) { console.warn("Syncing..."); }
         }
 
         document.getElementById('arm-trigger').onclick = async function() {
@@ -169,35 +196,35 @@
                 isArmed = true; 
                 this.innerText = "DISENGAGE";
                 this.classList.replace('border-cyan-400', 'border-red-500');
-                document.getElementById('status-sub').innerText = "SYSTEM ARMED";
+                if ("vibrate" in navigator) navigator.vibrate(100); // UI feedback
                 await startPersistence();
-                // Persistence Loop: re-check every 30s
-                setInterval(async () => { if(isArmed) await startPersistence(); }, 30000);
                 
                 watchRef = navigator.geolocation.watchPosition(handleGPS, (e) => {
                     document.getElementById('gps-dot').style.backgroundColor = "#ff2a6d";
-                    document.getElementById('acc-display').innerText = "GPS LOST";
+                    document.getElementById('acc-display').innerText = "GPS_ERROR";
                 }, {enableHighAccuracy:true, maximumAge:0, timeout: 5000});
+                
+                setInterval(() => { if(isArmed) startPersistence(); }, 20000);
             } else { location.reload(); }
         };
 
         function loadLogs() {
             const feed = document.getElementById('log-feed');
-            if(!storage.length) { feed.innerHTML = '<div class="opacity-20 text-center py-20 uppercase">No Data</div>'; return; }
-            feed.innerHTML = storage.slice(-15).reverse().map(l => `<div class="log-entry flex justify-between items-center"><div><div class="text-xl font-black">${l.d}s</div><div class="text-[9px] opacity-40 uppercase">${new Date(l.ts).toLocaleTimeString()}</div></div><div class="text-[8px] opacity-30">${l.lat.toFixed(3)}, ${l.lng.toFixed(3)}</div></div>`).join('');
+            if(!storage.length) { feed.innerHTML = '<div class="opacity-10 text-center py-20">NO DATA</div>'; return; }
+            feed.innerHTML = storage.slice(-15).reverse().map(l => `<div class="log-entry flex justify-between items-center"><div><div class="text-xl font-black">${l.d}s</div><div class="text-[9px] opacity-40">${new Date(l.ts).toLocaleTimeString()}</div></div><div class="text-[8px] opacity-30">${l.lat.toFixed(3)}, ${l.lng.toFixed(3)}</div></div>`).join('');
         }
 
         function loadRanks() {
             const top = [...storage].sort((a,b) => b.d - a.d).slice(0, 5);
-            document.getElementById('rank-feed').innerHTML = top.map((r, i) => `<div class="p-5 bg-zinc-900/50 flex justify-between items-center rounded-lg border-l-2 border-cyan-400"><span class="text-[10px] font-black opacity-30">RANK #0${i+1}</span><span class="text-2xl font-black">${r.d}s</span></div>`).join('');
+            document.getElementById('rank-feed').innerHTML = top.map((r, i) => `<div class="p-5 bg-zinc-900/50 flex justify-between items-center rounded-lg border-l-2 border-cyan-400"><span class="text-[10px] font-black opacity-30">#0${i+1}</span><span class="text-2xl font-black">${r.d}s</span></div>`).join('');
         }
 
-        function clearData() { if(confirm("Purge all data?")) { localStorage.removeItem(DB_KEY); location.reload(); } }
+        function clearData() { if(confirm("Purge?")) { localStorage.removeItem(DB_KEY); location.reload(); } }
 
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && isArmed && isStopped) {
+            if (document.visibilityState === 'visible' && isArmed) {
                 updateTimerUI();
-                startPersistence(); // Ensure wake lock returns on app resume
+                startPersistence();
             }
         });
     </script>
