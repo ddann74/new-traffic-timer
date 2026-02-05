@@ -3,235 +3,210 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V10.4</title>
+    <title>Gravity Intel V11.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        :root { --accent: #00f2ff; --bg: #050505; --active: #00ff88; }
-        body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; transition: opacity 0.5s; }
-        .page { display: none; height: calc(100vh - 90px); width: 100vw; flex-direction: column; overflow-y: auto; }
+        :root { --accent: #00f2ff; --bg: #050505; --active: #00ff88; --warn: #ffcc00; --error: #ff3333; }
+        body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; padding-top: env(safe-area-inset-top); }
+        
+        .status-bar { height: 35px; background: #111; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #222; font-size: 10px; font-weight: 800; }
+        .gps-active { color: var(--active); }
+        .gps-searching { color: var(--error); animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.3; } }
+        
+        .page { display: none; width: 100vw; flex-direction: column; height: calc(100vh - 125px); overflow-y: auto; }
         .active-page { display: flex; }
-        .nav-bar { position: fixed; bottom: 0; width: 100%; height: 90px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 1000; }
-        .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; border: none; background: none; color: inherit; }
+        
+        #map-canvas { height: 100%; width: 100%; background: #000; }
+        .nav-bar { position: fixed; bottom: 0; width: 100%; height: 90px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); }
+        .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; color: inherit; border: none; background: none; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 2px solid var(--accent); }
-        #timer-display { font-size: 26vw; font-weight: 800; color: white; line-height: 1; }
-        .safe-mode-overlay { position: fixed; inset: 0; background: black; z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; }
-        .engage-btn { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
-        .engage-btn.active { background: var(--active); color: black; box-shadow: 0 0 30px var(--active); border-color: var(--active); }
-        .locate-btn { position: absolute; bottom: 110px; right: 20px; z-index: 2000; background: black; border: 2px solid var(--accent); color: var(--accent); padding: 12px; border-radius: 50%; }
-        .low-batt-warn { color: #ff3333; font-size: 8px; font-weight: bold; animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        
+        #timer-display { font-size: 26vw; font-weight: 800; color: white; line-height: 1; text-shadow: 0 0 30px rgba(0,242,255,0.2); }
+        .map-tiles { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(85%); }
     </style>
 </head>
 <body>
 
-    <div id="safe-mode" class="safe-mode-overlay">
-        <div class="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-6"></div>
-        <h2 class="text-lg font-black tracking-widest text-white uppercase">Safe Mode</h2>
+    <div class="status-bar" id="status-line">
+        <span id="gps-status-text" class="gps-searching">GPS: INITIALIZING</span>
     </div>
 
     <div id="page-dash" class="page active-page p-6 justify-center">
-        <div class="flex justify-between items-center mb-4">
-            <span id="batt-status" class="hidden low-batt-warn">LOW POWER MODE ACTIVE</span>
-            <button onclick="resetTrip()" class="text-[8px] border border-zinc-700 px-2 py-1 rounded text-zinc-500 uppercase">New Trip</button>
+        <div id="local-intel" class="mb-4 text-center opacity-0 transition-opacity">
+            <span class="text-[10px] bg-cyan-900/30 border border-cyan-500/50 px-3 py-1 rounded-full text-cyan-400 font-bold uppercase">
+                Area Match: <span id="local-avg-val">0.0</span>s Avg
+            </span>
         </div>
-
-        <div id="trip-recap-ui" class="hidden mb-6 p-4 bg-zinc-900/80 border border-zinc-700 rounded-lg">
-            <div class="flex justify-between items-end">
-                <span class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Trip Grade</span>
-                <span id="trip-grade" class="text-3xl font-black text-white">--</span>
-            </div>
-            <div class="h-1.5 bg-zinc-800 rounded-full mt-2 overflow-hidden">
-                <div id="grade-progress" class="bg-cyan-400 h-full transition-all duration-500" style="width: 0%"></div>
-            </div>
-        </div>
-
         <div class="grid grid-cols-2 gap-4 mb-8">
-            <div class="bg-zinc-900/50 p-3 rounded border border-zinc-800">
-                <span class="text-[8px] opacity-40 uppercase">Stop Efficiency</span>
+            <div class="bg-zinc-900/40 p-3 rounded border border-zinc-800">
+                <span class="text-[8px] opacity-40 uppercase">Stop Score</span>
                 <div id="obj-score" class="text-xl font-black text-white">--</div>
             </div>
-            <div class="bg-zinc-900/50 p-3 rounded border border-zinc-800">
-                <span class="text-[8px] opacity-40 uppercase">Trip Average</span>
+            <div class="bg-zinc-900/40 p-3 rounded border border-zinc-800">
+                <span class="text-[8px] opacity-40 uppercase">Trip Avg</span>
                 <div id="avg-wait" class="text-xl font-black text-white">--</div>
             </div>
         </div>
-
         <div class="text-center">
             <div id="speed-val" class="text-4xl font-black opacity-10 mb-2">0</div>
             <div id="timer-display">0.0</div>
-            <button id="master-start" onclick="toggleSystem()" class="engage-btn mt-10 px-10 py-4 border-2 border-cyan-400 rounded-full font-black text-xs tracking-[0.2em] uppercase">
-                Start System
-            </button>
+            <button id="master-start" onclick="toggleSystem()" class="mt-10 px-10 py-4 border-2 border-cyan-400 rounded-full font-black text-xs uppercase tracking-widest">Initialize</button>
         </div>
     </div>
 
-    <div id="page-map" class="page relative">
-        <div id="map-canvas" class="h-full w-full bg-zinc-900"></div>
-        <button onclick="locateUser()" class="locate-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
-        </button>
+    <div id="page-map" class="page">
+        <div id="map-canvas"></div>
     </div>
 
     <div id="page-history" class="page p-6">
-        <h2 class="text-xs font-black tracking-widest mb-4 uppercase">Stop History</h2>
-        <div id="history-list" class="space-y-2 text-[10px]"></div>
+        <div id="stats-header" class="mb-6 p-4 border border-zinc-800 rounded bg-zinc-900/30 hidden">
+            <span class="text-[8px] opacity-40 uppercase">Lifetime Avg</span>
+            <div id="life-avg" class="text-2xl font-black text-cyan-400">0.0s</div>
+        </div>
+        <div id="history-list" class="space-y-2"></div>
+    </div>
+
+    <div id="page-about" class="page p-8">
+        <div class="mb-8">
+            <h1 class="text-white text-xl font-black italic">GRAVITY INTEL</h1>
+            <p class="text-[10px] opacity-50 uppercase tracking-widest">Performance Stop Tracker</p>
+        </div>
+
+        <div class="space-y-6">
+            <div class="border-l-2 border-cyan-500 pl-4">
+                <div class="text-[8px] opacity-40 uppercase">Build Version</div>
+                <div class="text-lg font-bold text-white">V11.0_PRO</div>
+            </div>
+            <div class="border-l-2 border-zinc-800 pl-4">
+                <div class="text-[8px] opacity-40 uppercase">System Time</div>
+                <div id="sys-clock" class="text-lg font-bold text-white">00:00:00</div>
+            </div>
+            <div class="border-l-2 border-zinc-800 pl-4">
+                <div class="text-[8px] opacity-40 uppercase">Calendar Date</div>
+                <div id="sys-date" class="text-lg font-bold text-white">--/--/--</div>
+            </div>
+            <div class="pt-10">
+                <button onclick="location.reload()" class="w-full py-4 border border-red-900 text-red-500 text-[10px] font-black uppercase tracking-[0.3em]">Full System Reboot</button>
+            </div>
+        </div>
     </div>
 
     <nav class="nav-bar">
         <button onclick="tab('dash')" id="tab-dash" class="nav-btn nav-btn-active">DASH</button>
-        <button onclick="tab('map')" id="tab-map" class="nav-btn">HEATMAP</button>
+        <button onclick="tab('map')" id="tab-map" class="nav-btn">MAP</button>
         <button onclick="tab('history')" id="tab-history" class="nav-btn">LOGS</button>
-        <button onclick="location.reload()" class="nav-btn text-red-700 uppercase">Reset</button>
+        <button onclick="tab('about')" id="tab-about" class="nav-btn">SYSTEM</button>
     </nav>
 
     <script>
-        const DB_KEY = 'GRV_DB_PRO_104';
+        const DB_KEY = 'GRV_DB_PRO_106';
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
-        let tripData = []; 
-        let isStopped = false, isArmed = false, startMark = 0, timerInterval = null, lastPos = null;
-        let mapInstance = null;
-        let markerLayer = null;
+        let tripData = [], isStopped = false, isArmed = false, startMark = 0, timerInterval = null, lastPos = null;
+        let mapInstance = null, markerLayer = null;
 
-        function speak(text) {
-            if (!window.speechSynthesis) return;
-            window.speechSynthesis.cancel();
-            window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
-        }
-
-        // Battery Logic
-        if ('getBattery' in navigator) {
-            navigator.getBattery().then(batt => {
-                const updateBattUI = () => {
-                    const isLow = batt.level < 0.20 && !batt.charging;
-                    document.body.style.opacity = isLow ? "0.6" : "1";
-                    document.getElementById('batt-status').classList.toggle('hidden', !isLow);
-                };
-                batt.addEventListener('levelchange', updateBattUI);
-                batt.addEventListener('chargingchange', updateBattUI);
-                updateBattUI();
-            });
-        }
-
-        function resetTrip() {
-            tripData = [];
-            document.getElementById('trip-recap-ui').classList.add('hidden');
-            document.getElementById('obj-score').innerText = "--";
-            document.getElementById('avg-wait').innerText = "--";
-            speak("Trip data cleared.");
-        }
-
-        async function toggleSystem() {
-            if (!isArmed) {
-                try {
-                    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-                        await DeviceMotionEvent.requestPermission();
-                    }
-                    isArmed = true;
-                    const btn = document.getElementById('master-start');
-                    btn.classList.add('active');
-                    btn.innerText = "System Active";
-                    speak("System Online.");
-                    navigator.geolocation.watchPosition(handleGPS, (err) => console.error(err), { enableHighAccuracy: true });
-                } catch (e) { alert("Permission denied or error: " + e); }
-            } else { location.reload(); }
-        }
-
-        function handleGPS(pos) {
-            lastPos = [pos.coords.latitude, pos.coords.longitude];
-            const speed = (pos.coords.speed || 0) * 3.6;
-            document.getElementById('speed-val').innerText = Math.round(speed);
-            
-            // Safe Mode Trigger
-            document.getElementById('safe-mode').style.display = speed > 12 ? 'flex' : 'none';
-
-            if (speed < 1.0 && !isStopped && isArmed) {
-                isStopped = true;
-                startMark = Date.now();
-                timerInterval = setInterval(() => {
-                    document.getElementById('timer-display').innerText = ((Date.now() - startMark)/1000).toFixed(1);
-                }, 100);
-            } 
-            else if (speed > 5 && isStopped) {
-                isStopped = false;
-                clearInterval(timerInterval);
-                const dur = (Date.now() - startMark) / 1000;
-                const score = Math.min(10, (100 / dur) * 2).toFixed(1);
-                
-                const entry = { d: dur, ts: Date.now(), lat: lastPos[0], lng: lastPos[1], obj: score };
-                storage.push(entry);
-                tripData.push(entry);
-                localStorage.setItem(DB_KEY, JSON.stringify(storage));
-                
-                updateDashUI(score);
-                speak(`Efficiency ${score}`);
-                document.getElementById('timer-display').innerText = "0.0";
-            }
-        }
-
-        function updateDashUI(score) {
-            document.getElementById('obj-score').innerText = score;
-            document.getElementById('trip-recap-ui').classList.remove('hidden');
-            const avg = tripData.reduce((a, b) => a + parseFloat(b.obj), 0) / tripData.length;
-            document.getElementById('avg-wait').innerText = avg.toFixed(1);
-            
-            const grade = avg > 8.5 ? "A+" : avg > 7.5 ? "A" : avg > 6.5 ? "B" : "C";
-            document.getElementById('trip-grade').innerText = grade;
-            document.getElementById('grade-progress').style.width = (avg * 10) + "%";
-        }
+        // Clock Logic
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('sys-clock').innerText = now.toLocaleTimeString();
+            document.getElementById('sys-date').innerText = now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }, 1000);
 
         function tab(n) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
             document.getElementById('page-'+n).classList.add('active-page');
             document.getElementById('tab-'+n).classList.add('nav-btn-active');
-            
-            if(n === 'map') {
-                setTimeout(initMap, 100); 
-            } else if (n === 'history') {
-                renderHistory();
-            }
+            if(n === 'map') setTimeout(initMap, 100);
+            if(n === 'history') renderHistory();
         }
 
         function initMap() {
             if (!mapInstance) {
-                mapInstance = L.map('map-canvas', { zoomControl: false }).setView(lastPos || [0,0], 13);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    className: 'map-tiles'
-                }).addTo(mapInstance);
+                mapInstance = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView(lastPos || [0,0], 15);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance);
                 markerLayer = L.layerGroup().addTo(mapInstance);
             }
-            
+            setTimeout(() => { mapInstance.invalidateSize(); if(lastPos) mapInstance.panTo(lastPos); }, 200);
             markerLayer.clearLayers();
-            storage.forEach(point => {
-                const color = point.obj > 7 ? '#00ff88' : point.obj > 4 ? '#ffff00' : '#ff3333';
-                L.circle([point.lat, point.lng], { radius: 20, color: color, fillOpacity: 0.6 }).addTo(markerLayer);
+            storage.forEach(p => {
+                const color = p.obj > 7 ? '#00ff88' : p.obj > 4 ? '#ffff00' : '#ff3333';
+                L.circle([p.lat, p.lng], { radius: 12, color: color, weight: 1, fillOpacity: 0.5 }).addTo(markerLayer);
             });
-            
-            if(lastPos) mapInstance.panTo(lastPos);
-            mapInstance.invalidateSize();
         }
 
-        function locateUser() {
-            if (lastPos && mapInstance) mapInstance.setView(lastPos, 16);
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3;
+            const dLat = (lat2-lat1) * Math.PI/180;
+            const dLon = (lon2-lon1) * Math.PI/180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        }
+
+        function toggleSystem() {
+            if (!isArmed) {
+                isArmed = true;
+                document.getElementById('master-start').style.display = 'none';
+                navigator.geolocation.watchPosition(handleGPS, null, { enableHighAccuracy: true });
+            }
+        }
+
+        function handleGPS(pos) {
+            lastPos = [pos.coords.latitude, pos.coords.longitude];
+            document.getElementById('gps-status-text').innerText = `GPS: LOCKED (±${pos.coords.accuracy.toFixed(0)}m)`;
+            document.getElementById('gps-status-text').className = "gps-active";
+            const speed = (pos.coords.speed || 0) * 3.6;
+            document.getElementById('speed-val').innerText = Math.round(speed);
+
+            if (speed < 1.0 && !isStopped && isArmed) {
+                isStopped = true;
+                startMark = Date.now();
+                const nearby = storage.filter(p => getDistance(lastPos[0], lastPos[1], p.lat, p.lng) < 30);
+                if (nearby.length > 0) {
+                    const localAvg = nearby.reduce((a,b) => a + b.d, 0) / nearby.length;
+                    document.getElementById('local-avg-val').innerText = localAvg.toFixed(1);
+                    document.getElementById('local-intel').style.opacity = "1";
+                }
+                timerInterval = setInterval(() => {
+                    document.getElementById('timer-display').innerText = ((Date.now() - startMark)/1000).toFixed(1);
+                }, 100);
+            } 
+            else if (speed > 5 && isStopped) {
+                const dur = (Date.now() - startMark) / 1000;
+                isStopped = false;
+                clearInterval(timerInterval);
+                document.getElementById('local-intel').style.opacity = "0";
+                if (dur > 2.5) {
+                    const score = Math.min(10, (100 / dur) * 2).toFixed(1);
+                    storage.push({ d: dur, ts: Date.now(), lat: lastPos[0], lng: lastPos[1], obj: score });
+                    tripData.push({ d: dur, obj: score });
+                    localStorage.setItem(DB_KEY, JSON.stringify(storage));
+                    document.getElementById('obj-score').innerText = score;
+                    const tripAvg = tripData.reduce((a,b) => a + parseFloat(b.obj), 0) / tripData.length;
+                    document.getElementById('avg-wait').innerText = tripAvg.toFixed(1);
+                }
+                document.getElementById('timer-display').innerText = "0.0";
+            }
         }
 
         function renderHistory() {
             const list = document.getElementById('history-list');
-            list.innerHTML = storage.slice().reverse().map(h => `
-                <div class="flex justify-between border-b border-zinc-800 pb-2">
-                    <span>${new Date(h.ts).toLocaleTimeString()}</span>
+            if (storage.length >= 1) {
+                const avg = storage.reduce((a,b) => a + b.d, 0) / storage.length;
+                document.getElementById('life-avg').innerText = avg.toFixed(1) + "s";
+                document.getElementById('stats-header').classList.remove('hidden');
+            }
+            list.innerHTML = storage.slice(-20).reverse().map(h => `
+                <div class="flex justify-between border-b border-zinc-800 py-3 text-[10px]">
+                    <span class="opacity-40 uppercase">${new Date(h.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                     <span class="font-bold text-white">${h.d.toFixed(1)}s</span>
-                    <span class="${h.obj > 7 ? 'text-green-400' : 'text-red-400'}">${h.obj}pts</span>
+                    <span class="${h.obj > 7 ? 'text-green-400' : 'text-red-400'}">${h.obj}</span>
                 </div>
             `).join('');
         }
     </script>
-    <style>
-        /* Grayscale Map Filter for HUD look */
-        .map-tiles { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }
-    </style>
 </body>
 </html>
