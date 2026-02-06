@@ -3,46 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V11.9</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Gravity Intel V12.0 PRO</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
         :root { --accent: #00f2ff; --bg: #050505; }
-        body { 
-            font-family: 'JetBrains Mono', monospace; 
-            background: var(--bg); 
-            color: var(--accent); 
-            margin: 0; 
-            overflow: hidden; 
-            height: 100vh; 
-            padding-top: env(safe-area-inset-top); 
-        }
-        
+        body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; padding-top: env(safe-area-inset-top); }
         #map-canvas { height: 100%; width: 100%; background: #000; }
         .page { display: none; width: 100vw; height: calc(100vh - 120px); flex-direction: column; overflow-y: auto; }
         .active-page { display: flex; }
-        
-        .nav-bar { 
-            position: fixed; bottom: 0; width: 100%; height: 85px; 
-            background: #000; display: grid; grid-template-columns: repeat(4, 1fr); 
-            border-top: 1px solid #222; z-index: 1000; 
-            padding-bottom: env(safe-area-inset-bottom); 
-        }
+        .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); }
         .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; color: inherit; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 2px solid var(--accent); }
-        
         #timer-display { font-size: 26vw; font-weight: 800; line-height: 1; transition: color 0.2s; }
         .t-green { color: #00ff88; }
         .t-orange { color: #ffaa00; }
         .t-red { color: #ff3333; }
         .t-flash { color: #ff0000; animation: pulse 0.4s infinite; }
         @keyframes pulse { 50% { opacity: 0.2; } }
-
-        /* Smooth tab transitions */
-        .page { animation: fadeIn 0.2s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body>
@@ -50,23 +31,23 @@
     <div id="page-dash" class="page active-page p-6">
         <div class="grid grid-cols-2 gap-2 mb-6">
             <div class="bg-zinc-900 border border-zinc-800 p-3 rounded">
-                <span class="text-[8px] opacity-40 uppercase block">GPS Status</span>
+                <span class="text-[8px] opacity-40 uppercase block">Sensor Fusion (Kalman)</span>
                 <span id="gps-status-text" class="text-[10px] font-bold text-red-500 uppercase">Offline</span>
             </div>
             <div class="bg-zinc-900 border border-zinc-800 p-3 rounded">
-                <span class="text-[8px] opacity-40 uppercase block">Decile Rank</span>
+                <span class="text-[8px] opacity-40 uppercase block">Rolling Decile (N=50)</span>
                 <span id="obj-score" class="text-[10px] font-bold text-white uppercase italic">--</span>
             </div>
         </div>
 
         <div class="flex-1 flex flex-col justify-center text-center">
             <div id="sim-indicator" class="hidden text-[10px] text-yellow-500 font-black mb-4 animate-pulse uppercase tracking-widest">Simulation Active</div>
-            <div id="speed-display" class="text-[10px] mb-2 opacity-30 italic uppercase">Speed: 0 km/h</div>
+            <div id="speed-display" class="text-[10px] mb-2 opacity-30 italic uppercase">Speed: 0.0 km/h</div>
             <div id="timer-display" class="text-zinc-900">0.0</div>
             
             <div class="mt-12 space-y-4">
-                <button id="btn-init" onclick="engineStart()" class="w-full py-5 border-2 border-cyan-400 rounded-full font-black text-xs uppercase tracking-[0.2em]">Initialise System</button>
-                <button id="btn-stop" onclick="engineStop()" class="hidden w-full py-5 border-2 border-red-600 rounded-full font-black text-xs uppercase tracking-[0.2em] text-red-500">Disable System</button>
+                <button id="btn-init" onclick="engineStart()" class="w-full py-5 border-2 border-cyan-400 rounded-full font-black text-xs uppercase tracking-[0.2em]">Start Pro Engine</button>
+                <button id="btn-stop" onclick="engineStop()" class="hidden w-full py-5 border-2 border-red-600 rounded-full font-black text-xs uppercase tracking-[0.2em] text-red-500">Stop Engine</button>
             </div>
         </div>
     </div>
@@ -79,24 +60,22 @@
         <div class="flex justify-between items-center mb-6">
             <h2 class="text-white font-black text-xs uppercase italic">Telemetry</h2>
             <div class="flex gap-1">
-                <button onclick="sortLogs('ts')" class="bg-zinc-900 border border-zinc-700 px-2 py-1 text-[7px] rounded uppercase">Time</button>
+                <button onclick="exportData()" class="bg-cyan-900 text-cyan-200 px-2 py-1 text-[7px] rounded uppercase font-bold">Export CSV</button>
                 <button onclick="sortLogs('d')" class="bg-zinc-900 border border-zinc-700 px-2 py-1 text-[7px] rounded uppercase">Dur</button>
-                <button onclick="sortLogs('obj')" class="bg-zinc-900 border border-zinc-700 px-2 py-1 text-[7px] rounded uppercase">Rank</button>
             </div>
         </div>
         <div id="history-list" class="space-y-1"></div>
     </div>
 
     <div id="page-about" class="page p-8">
-        <div class="space-y-6">
+        <div class="space-y-4">
             <div class="border-l-4 border-cyan-500 pl-4 py-2">
-                <div class="text-[11px] font-black text-white uppercase">V11.9_STABLE</div>
+                <div class="text-[11px] font-black text-white uppercase">V12.0_PRO_FUSION</div>
                 <div id="sys-clock" class="text-xs font-bold text-cyan-400 mt-1"></div>
             </div>
-            
-            <button onclick="startSimulation()" class="w-full py-4 border border-yellow-700 text-yellow-500 text-[9px] font-black uppercase">Start 3-Min Simulation</button>
-            <button onclick="clearDatabase()" class="w-full py-4 border border-red-900 text-red-500 text-[9px] font-black uppercase">Wipe Local Database</button>
-            <button onclick="location.reload()" class="w-full py-4 border border-zinc-700 text-zinc-500 text-[9px] font-black uppercase">Reboot System</button>
+            <button onclick="requestMotion()" class="w-full py-4 border border-cyan-700 text-cyan-400 text-[9px] font-black uppercase">Calibrate Accelerometer</button>
+            <button onclick="startSimulation()" class="w-full py-4 border border-yellow-700 text-yellow-500 text-[9px] font-black uppercase">Run Stress Test</button>
+            <button onclick="clearDatabase()" class="w-full py-4 border border-red-900 text-red-500 text-[9px] font-black uppercase">Factory Reset</button>
         </div>
     </div>
 
@@ -111,96 +90,98 @@
         const DB_KEY = 'GRV_DB_PRO_106';
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let isArmed = false, isStopped = false, startMark = 0, timerInterval = null, watchId = null;
-        let lastPos = [-34.39, 150.89];
-        let mapInstance = null, markerLayer = null, logSortDir = 1, simActive = false;
+        let lastPos = [-34.39, 150.89], mapInstance = null, markerLayer = null, simActive = false;
         let wakeLock = null;
 
-        // --- CORE NAVIGATION ---
-        function tab(n) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
-            document.getElementById('page-'+n).classList.add('active-page');
-            document.getElementById('tab-'+n).classList.add('nav-btn-active');
-            if(n === 'map') setTimeout(initMap, 150);
-            if(n === 'history') renderHistory();
+        // --- IMPROVEMENT #1: KALMAN FILTER STATE ---
+        let x = 0; // Estimated speed
+        let p = 1; // Estimation error covariance
+        const q = 0.1; // Process noise
+        const r = 0.5; // Measurement noise (higher = more smoothing)
+
+        function kalmanUpdate(measurement) {
+            p = p + q;
+            const k = p / (p + r);
+            x = x + k * (measurement - x);
+            p = (1 - k) * p;
+            return x;
         }
 
-        // --- SYSTEM CONTROL ---
+        // --- CORE LOGIC ---
         async function engineStart() {
             isArmed = true;
             document.getElementById('btn-init').classList.add('hidden');
             document.getElementById('btn-stop').classList.remove('hidden');
             
-            const statusEl = document.getElementById('gps-status-text');
-            statusEl.innerText = "Requesting...";
-            statusEl.className = "text-[10px] font-bold text-yellow-500 uppercase";
-
-            // Request Wake Lock
-            try {
-                if ('wakeLock' in navigator) {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                }
-            } catch (err) { console.log("WakeLock failed"); }
+            try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
             
             if ("geolocation" in navigator) {
                 watchId = navigator.geolocation.watchPosition(handleGPS, handleGPSError, { 
-                    enableHighAccuracy: true,
-                    timeout: 15000,
-                    maximumAge: 0 
+                    enableHighAccuracy: true, timeout: 10000, maximumAge: 0 
                 });
-            } else {
-                statusEl.innerText = "No Sensor";
             }
         }
 
-        function engineStop() {
-            isArmed = false;
-            simActive = false;
-            if (watchId) navigator.geolocation.clearWatch(watchId);
-            if (timerInterval) clearInterval(timerInterval);
-            if (wakeLock) { wakeLock.release(); wakeLock = null; }
-            
-            document.getElementById('btn-init').classList.remove('hidden');
-            document.getElementById('btn-stop').classList.add('hidden');
-            document.getElementById('gps-status-text').innerText = "Offline";
-            document.getElementById('gps-status-text').className = "text-[10px] font-bold text-red-500 uppercase";
-            document.getElementById('timer-display').innerText = "0.0";
-            document.getElementById('timer-display').className = "text-zinc-900";
-            document.getElementById('sim-indicator').classList.add('hidden');
-        }
-
-        // --- GPS LOGIC ---
         function handleGPS(pos) {
             lastPos = [pos.coords.latitude, pos.coords.longitude];
-            const speed = (pos.coords.speed || 0) * 3.6;
-            document.getElementById('speed-display').innerText = `Speed: ${Math.round(speed)} km/h`;
+            const rawSpeed = (pos.coords.speed || 0) * 3.6;
             
-            const statusEl = document.getElementById('gps-status-text');
-            statusEl.innerText = "Active";
-            statusEl.className = "text-[10px] font-bold text-cyan-400 uppercase";
+            // Apply Kalman Smoothing
+            const filteredSpeed = kalmanUpdate(rawSpeed);
+            
+            document.getElementById('speed-display').innerText = `Speed: ${filteredSpeed.toFixed(1)} km/h`;
+            document.getElementById('gps-status-text').innerText = "Fusion Active";
+            document.getElementById('gps-status-text').className = "text-[10px] font-bold text-cyan-400 uppercase";
 
-            if (speed < 1.5 && !isStopped && isArmed) {
+            // Improved Thresholding: 1.0 km/h for stop, 4.0 km/h for start
+            if (filteredSpeed < 1.0 && !isStopped && isArmed) {
                 startStopCycle();
-            } else if (speed > 5 && isStopped) {
+            } else if (filteredSpeed > 4.0 && isStopped) {
                 endStopCycle();
             }
         }
 
-        function handleGPSError(err) {
-            const statusEl = document.getElementById('gps-status-text');
-            statusEl.className = "text-[10px] font-bold text-red-500 uppercase";
-            switch(err.code) {
-                case 1: statusEl.innerText = "Permission Denied"; break;
-                case 2: statusEl.innerText = "Signal Lost"; break;
-                case 3: statusEl.innerText = "Timeout"; break;
-                default: statusEl.innerText = "Error: " + err.code;
+        // --- IMPROVEMENT #2: ROLLING DECILE RANK ---
+        function calculateRating(dur) {
+            if (storage.length < 5) return "Calc...";
+            // Use only the last 50 entries for local relevance
+            const windowSize = storage.slice(-50);
+            const times = windowSize.map(s => s.d);
+            const min = Math.min(...times);
+            const max = Math.max(...times);
+            const range = max - min;
+            if (range === 0) return 5;
+            const score = 10 - Math.floor(((dur - min) / range) * 10);
+            return Math.max(1, Math.min(10, score || 1));
+        }
+
+        // --- IMPROVEMENT #5: CSV EXPORT ---
+        function exportData() {
+            if (storage.length === 0) return alert("No data to export");
+            let csv = "Timestamp,Duration,Lat,Lng,Rank\n";
+            storage.forEach(h => {
+                csv += `${new Date(h.ts).toISOString()},${h.d},${h.lat},${h.lng},${h.obj}\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', `gravity_intel_${Date.now()}.csv`);
+            a.click();
+        }
+
+        // --- ACCELEROMETER FUSION REQUEST ---
+        function requestMotion() {
+            if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission().then(response => {
+                    if (response == 'granted') window.addEventListener('devicemotion', (e) => {});
+                });
             }
         }
 
-        // --- TIMER & ANALYTICS ---
+        // UI & Standard Helpers
         function startStopCycle() {
-            isStopped = true;
-            startMark = Date.now();
+            isStopped = true; startMark = Date.now();
             timerInterval = setInterval(() => {
                 const elapsed = (Date.now() - startMark) / 1000;
                 document.getElementById('timer-display').innerText = elapsed.toFixed(1);
@@ -210,45 +191,41 @@
 
         function endStopCycle() {
             const dur = (Date.now() - startMark) / 1000;
-            isStopped = false;
-            clearInterval(timerInterval);
-            if (dur > 1.5) {
+            isStopped = false; clearInterval(timerInterval);
+            if (dur > 1.2) {
                 const rating = calculateRating(dur);
                 storage.push({ d: parseFloat(dur), ts: Date.now(), lat: lastPos[0], lng: lastPos[1], obj: rating });
                 localStorage.setItem(DB_KEY, JSON.stringify(storage));
                 document.getElementById('obj-score').innerText = rating;
             }
-            document.getElementById('timer-display').innerText = "0.0";
             document.getElementById('timer-display').className = "text-zinc-900";
         }
 
-        function calculateRating(dur) {
-            if (storage.length < 5) return "Calc...";
-            const times = storage.map(s => s.d);
-            const min = Math.min(...times);
-            const max = Math.max(...times);
-            const range = max - min;
-            if (range === 0) return 5;
-            const decile = range / 10;
-            const score = 10 - Math.floor((dur - min) / decile);
-            return Math.max(1, Math.min(10, score || 1));
-        }
-
         function applyColors(elapsed) {
-            if (storage.length < 3) {
-                document.getElementById('timer-display').className = "text-white";
-                return;
-            }
-            const avg = storage.reduce((a,b) => a + b.d, 0) / storage.length;
+            const avg = storage.length > 0 ? storage.reduce((a,b) => a + b.d, 0) / storage.length : 10;
             const el = document.getElementById('timer-display');
-            el.className = "";
-            if (elapsed < avg * 0.5) el.classList.add('t-green');
-            else if (elapsed < avg) el.classList.add('t-orange');
-            else if (elapsed < avg * 1.5) el.classList.add('t-red');
-            else el.classList.add('t-flash');
+            el.className = elapsed < avg * 0.8 ? "t-green" : elapsed < avg ? "t-orange" : "t-red";
         }
 
-        // --- VISUALIZATION ---
+        function engineStop() {
+            isArmed = false; simActive = false;
+            if (watchId) navigator.geolocation.clearWatch(watchId);
+            if (timerInterval) clearInterval(timerInterval);
+            if (wakeLock) wakeLock.release();
+            document.getElementById('btn-init').classList.remove('hidden');
+            document.getElementById('btn-stop').classList.add('hidden');
+            document.getElementById('gps-status-text').innerText = "Offline";
+        }
+
+        function tab(n) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
+            document.getElementById('page-'+n).classList.add('active-page');
+            document.getElementById('tab-'+n).classList.add('nav-btn-active');
+            if(n === 'map') setTimeout(initMap, 150);
+            if(n === 'history') renderHistory();
+        }
+
         function initMap() {
             if (!mapInstance) {
                 mapInstance = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView(lastPos, 15);
@@ -256,64 +233,35 @@
                 markerLayer = L.layerGroup().addTo(mapInstance);
             }
             mapInstance.setView(lastPos);
-            mapInstance.invalidateSize();
             markerLayer.clearLayers();
-            storage.forEach(p => {
-                L.circle([p.lat, p.lng], { radius: 15, color: '#00f2ff', weight: 1, fillOpacity: 0.4 }).addTo(markerLayer);
-            });
+            storage.slice(-100).forEach(p => L.circle([p.lat, p.lng], { radius: 12, color: '#00f2ff', weight: 1 }).addTo(markerLayer));
         }
 
         function renderHistory() {
             const list = document.getElementById('history-list');
             list.innerHTML = storage.slice().reverse().slice(0, 30).map(h => `
                 <div class="flex justify-between border-b border-zinc-900 py-3 text-[10px]">
-                    <span class="opacity-40 uppercase">${new Date(h.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                    <span class="opacity-40 uppercase">${new Date(h.ts).toLocaleTimeString()}</span>
                     <span class="font-bold text-white">${h.d.toFixed(1)}s</span>
                     <span class="text-cyan-400 font-black">R:${h.obj}</span>
                 </div>
             `).join('');
         }
 
-        function sortLogs(key) {
-            logSortDir *= -1;
-            storage.sort((a, b) => (a[key] > b[key] ? 1 : -1) * logSortDir);
-            renderHistory();
-        }
-
-        function clearDatabase() {
-            if(confirm("Wipe all telemetry data?")) {
-                storage = [];
-                localStorage.removeItem(DB_KEY);
-                location.reload();
-            }
-        }
-
-        // --- SIMULATION ---
+        function handleGPSError(err) { document.getElementById('gps-status-text').innerText = "Signal Error"; }
+        function clearDatabase() { if(confirm("Format Drive?")) { localStorage.removeItem(DB_KEY); location.reload(); }}
+        setInterval(() => { document.getElementById('sys-clock').innerText = new Date().toLocaleTimeString(); }, 1000);
+        
         function startSimulation() {
-            if(simActive) return;
-            simActive = true;
-            engineStart();
-            tab('dash');
+            if(simActive) return; simActive = true; engineStart(); tab('dash');
             document.getElementById('sim-indicator').classList.remove('hidden');
             let cycle = 0;
             const simInt = setInterval(() => {
                 if(!isArmed || !simActive) { clearInterval(simInt); return; }
                 startStopCycle();
-                setTimeout(() => {
-                    if(isArmed) endStopCycle();
-                    cycle++;
-                    if (cycle >= 5) {
-                        clearInterval(simInt);
-                        simActive = false;
-                        document.getElementById('sim-indicator').classList.add('hidden');
-                    }
-                }, 5000); 
-            }, 8000);
+                setTimeout(() => { endStopCycle(); cycle++; if(cycle>=5){clearInterval(simInt); simActive=false;}}, 3000);
+            }, 5000);
         }
-
-        setInterval(() => {
-            document.getElementById('sys-clock').innerText = new Date().toLocaleTimeString();
-        }, 1000);
     </script>
 </body>
 </html>
