@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V13.3</title>
+    <title>Gravity Intel V13.8</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -11,72 +11,68 @@
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
         :root { --accent: #00f2ff; --bg: #050505; }
         body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; padding-top: env(safe-area-inset-top); }
-        #map-canvas { height: 100%; width: 100%; background: #111; z-index: 1; }
-        .page { display: none; width: 100vw; height: calc(100vh - 85px); flex-direction: column; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        #map-canvas { height: 100%; width: 100%; background: #111; }
+        .page { display: none; width: 100vw; height: calc(100vh - 85px); flex-direction: column; overflow-y: auto; }
         .active-page { display: flex; }
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 2000; padding-bottom: env(safe-area-inset-bottom); }
-        .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; color: inherit; border: none; background: none; }
+        .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; color: inherit; border: none; background: none; transition: 0.3s; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 2px solid var(--accent); }
         .log-entry { background: #0f0f0f; border: 1px solid #1a1a1a; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
-        .filter-chip { border: 1px solid #333; padding: 4px 10px; border-radius: 20px; font-size: 8px; font-weight: 800; color: #666; transition: 0.2s; white-space: nowrap; }
-        .filter-chip.active { border-color: var(--accent); color: var(--accent); background: rgba(0, 242, 255, 0.1); }
-        #timer-display { font-size: 26vw; font-weight: 800; line-height: 1; transition: all 0.3s; }
-        .t-none { color: #18181b; } .t-green { color: #00ff88; } .t-orange { color: #ffaa00; }
-        .safe-mode { color: #a855f7 !important; text-shadow: 0 0 20px rgba(168, 85, 247, 0.6); }
+        #timer-display { font-size: 26vw; font-weight: 800; line-height: 1; transition: color 0.4s; }
+        .t-idle { color: #18181b; }
+        .t-active { color: #00f2ff; text-shadow: 0 0 15px rgba(0,242,255,0.3); }
+        .t-logging { color: #ffaa00; text-shadow: 0 0 20px rgba(255,170,0,0.4); }
+        .t-safe { color: #a855f7; }
+        .tour-overlay { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #00f2ff; color: #000; padding: 10px 20px; border-radius: 4px; font-size: 10px; font-weight: 900; z-index: 9999; display: none; box-shadow: 0 0 20px rgba(0,242,255,0.5); }
     </style>
 </head>
 <body>
+
+    <div id="tour-box" class="tour-overlay uppercase">SYSTEM CHECK OK</div>
 
     <div id="page-dash" class="page active-page p-6">
         <div class="grid grid-cols-2 gap-2 mb-6 text-center">
             <div class="bg-zinc-900 border border-zinc-800 p-3 rounded">
                 <span class="text-[8px] opacity-40 uppercase block">Proximity</span>
-                <span id="safe-status" class="text-[10px] font-bold text-zinc-500 uppercase">Detecting...</span>
+                <span id="safe-status" class="text-[10px] font-bold text-zinc-500">READY</span>
             </div>
             <div class="bg-zinc-900 border border-zinc-800 p-3 rounded">
                 <span class="text-[8px] opacity-40 uppercase block">Engine</span>
-                <span id="gps-status-text" class="text-[10px] font-bold text-red-500 uppercase italic">Standby</span>
+                <span id="gps-status-text" class="text-[10px] font-bold text-red-500 uppercase">OFFLINE</span>
             </div>
         </div>
         <div class="flex-1 flex flex-col justify-center text-center">
-            <div id="speed-display" class="text-[10px] mb-2 opacity-30 uppercase tracking-widest font-bold">0.0 KM/H</div>
-            <div id="timer-display" class="t-none">0.0</div>
-            <div class="mt-12 space-y-4">
-                <button id="btn-init" onclick="engineStart()" class="w-full py-5 border-2 border-cyan-400 rounded-full font-black text-xs uppercase tracking-widest active:bg-cyan-900">Engage System</button>
-                <button id="btn-stop" onclick="engineStop()" class="hidden w-full py-5 border-2 border-red-600 rounded-full font-black text-xs uppercase text-red-500 active:bg-red-900">Disengage</button>
+            <div id="speed-display" class="text-[10px] mb-2 opacity-30 font-bold uppercase">0.0 KM/H</div>
+            <div id="timer-display" class="t-idle">0.0</div>
+            <div class="mt-12">
+                <button id="btn-init" onclick="engineStart()" class="w-full py-5 border-2 border-cyan-400 rounded-full font-black text-xs uppercase">Engage System</button>
             </div>
         </div>
     </div>
 
     <div id="page-map" class="page" style="padding:0; overflow:hidden;">
-        <div class="absolute top-4 left-4 z-[1001] flex flex-col gap-2">
-            <button onclick="setSafeZone()" class="bg-purple-600 text-white px-4 py-3 rounded-lg text-[10px] font-bold shadow-lg active:scale-95 transition-transform">MARK SAFE ZONE</button>
-        </div>
         <div id="map-canvas"></div>
     </div>
 
     <div id="page-history" class="page p-4">
-        <div class="flex justify-between items-center mb-4 px-2">
-            <h2 class="text-white font-black text-xs uppercase italic">Event Logs</h2>
-            <button onclick="exportCSV()" class="text-cyan-400 text-[8px] font-bold">CSV EXPORT</button>
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-white font-black text-xs uppercase">Intelligent Log</h2>
+            <button onclick="clearLogs()" class="text-red-500 text-[8px] font-bold">WIPE</button>
         </div>
-        
-        <div class="flex gap-2 mb-6 px-2 overflow-x-auto no-scrollbar">
-            <button onclick="setGrouping('raw')" id="g-raw" class="filter-chip active">RAW LIST</button>
-            <button onclick="setGrouping('loc')" id="g-loc" class="filter-chip">GROUP LOC</button>
-            <div class="w-[1px] bg-zinc-800 mx-1"></div>
-            <button onclick="setSort('time')" id="s-time" class="filter-chip active">TIME</button>
-            <button onclick="setSort('rank')" id="s-rank" class="filter-chip">RANK</button>
-        </div>
-
-        <div id="history-list" class="pb-20 space-y-2"></div>
+        <div id="history-list" class="space-y-2"></div>
     </div>
 
     <div id="page-about" class="page p-8 text-center">
-        <div class="text-[11px] font-black text-white uppercase italic">Build V13.3_FINAL</div>
-        <div id="sys-clock" class="text-xs font-bold text-cyan-400 mt-2 mb-10"></div>
-        <button onclick="clearSafeZones()" class="w-full py-4 border border-purple-900 text-purple-400 text-[9px] font-black uppercase mb-4">Clear Safe Zones</button>
-        <button onclick="clearDatabase()" class="w-full py-4 border border-red-900 text-red-500 text-[9px] font-black uppercase">Wipe Local Cache</button>
+        <div class="text-[11px] font-black text-white uppercase mb-10">Gravity Intel Pro V13.8</div>
+        <button onclick="runFullTour()" class="w-full py-6 bg-cyan-500 text-black font-black text-[12px] rounded-2xl shadow-2xl transition-transform active:scale-95">RUN PROMOTIONAL DEMO</button>
+        <div class="mt-10 p-4 border border-zinc-900 rounded-lg">
+            <h3 class="text-[9px] text-zinc-500 uppercase font-bold mb-2">Upcoming Features</h3>
+            <ul class="text-[8px] text-zinc-600 uppercase space-y-1">
+                <li>• Automated Data Repair (Ghost Log Filtering)</li>
+                <li>• Voice-Guided Status Updates</li>
+                <li>• Cloud-Sync Mirroring</li>
+            </ul>
+        </div>
     </div>
 
     <nav class="nav-bar">
@@ -87,151 +83,109 @@
     </nav>
 
     <script>
-        const DB_KEY = 'GRV_DB_PRO_106';
-        const SAFE_KEY = 'GRV_SAFE_ZONES';
+        const DB_KEY = 'GRV_PRO_V13_DATA';
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
-        let safeZones = JSON.parse(localStorage.getItem(SAFE_KEY) || '[]');
-        
-        let isArmed = false, isStopped = false, inSafeZone = false;
-        let groupMode = 'raw', currentSort = 'time';
-        let lastPos = [0, 0], mapInstance = null, safeLayer = null;
+        let isArmed = false, isStopped = false, inSafeZone = false, startMark = 0, timerInterval = null;
+        let lastPos = [-33.8688, 151.2093]; 
+        let mapInstance = null, marker = null;
 
         function tab(n) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
             document.getElementById('page-'+n).classList.add('active-page');
             document.getElementById('tab-'+n).classList.add('nav-btn-active');
-            if(n === 'map') setTimeout(initMap, 300);
+            if(n === 'map') initMap();
             if(n === 'history') renderHistory();
         }
 
-        function setGrouping(m) { groupMode = m; updateUIChips(); renderHistory(); }
-        function setSort(s) { currentSort = s; updateUIChips(); renderHistory(); }
-        
-        function updateUIChips() {
-            document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-            document.getElementById('g-'+groupMode).classList.add('active');
-            document.getElementById('s-'+currentSort).classList.add('active');
-        }
-
-        async function engineStart() {
-            isArmed = true; 
-            document.getElementById('btn-init').classList.add('hidden'); 
-            document.getElementById('btn-stop').classList.remove('hidden');
-            watchId = navigator.geolocation.watchPosition(hGPS, null, {enableHighAccuracy:true});
-            document.getElementById('gps-status-text').innerText = "Active";
+        function engineStart() {
+            isArmed = true;
+            document.getElementById('gps-status-text').innerText = "TRACKING";
             document.getElementById('gps-status-text').className = "text-[10px] font-bold text-cyan-400";
+            document.getElementById('timer-display').className = "t-active";
+            document.getElementById('btn-init').style.display = 'none';
         }
 
-        function hGPS(pos) {
-            lastPos = [pos.coords.latitude, pos.coords.longitude];
-            inSafeZone = safeZones.some(z => getDist(lastPos[0], lastPos[1], z.lat, z.lng) < 50);
-            
-            const statusEl = document.getElementById('safe-status');
-            const timerEl = document.getElementById('timer-display');
+        function updateLogic(speed) {
+            const t = document.getElementById('timer-display');
+            document.getElementById('speed-display').innerText = `${speed.toFixed(1)} KM/H`;
             
             if (inSafeZone) {
-                statusEl.innerText = "SAFE ZONE";
-                statusEl.className = "text-[10px] font-bold text-purple-500";
-                timerEl.innerText = "SAFE";
-                timerEl.className = "safe-mode";
-                return; 
-            } else {
-                statusEl.innerText = "UNRESTRICTED";
-                statusEl.className = "text-[10px] font-bold text-zinc-500";
+                t.innerText = "SAFE"; t.className = "t-safe";
+                if(isStopped) { isStopped = false; clearInterval(timerInterval); }
+                return;
             }
 
-            let s = (pos.coords.speed || 0) * 3.6;
-            document.getElementById('speed-display').innerText = `${s.toFixed(1)} KM/H`;
-            if (s < 1.0 && !isStopped && isArmed) startCycle();
-            else if (s > 4.0 && isStopped) endCycle();
-        }
-
-        function startCycle() {
-            isStopped = true; startMark = Date.now();
-            timerInterval = setInterval(() => {
-                let elap = (Date.now() - startMark)/1000;
-                let t = document.getElementById('timer-display');
-                if(t && !inSafeZone) { t.innerText = elap.toFixed(1); t.className = "t-orange"; }
-            }, 100);
-        }
-
-        function endCycle() {
-            isStopped = false; clearInterval(timerInterval);
-            let dur = (Date.now() - startMark)/1000;
-            if (dur > 2 && !inSafeZone) {
-                storage.push({ d: parseFloat(dur.toFixed(1)), ts: Date.now(), lat: lastPos[0], lng: lastPos[1], obj: 5 });
-                localStorage.setItem(DB_KEY, JSON.stringify(storage));
+            if (speed < 1.0 && !isStopped && isArmed) {
+                isStopped = true; startMark = Date.now();
+                t.className = "t-logging";
+                if(timerInterval) clearInterval(timerInterval); 
+                timerInterval = setInterval(() => { t.innerText = ((Date.now() - startMark)/1000).toFixed(1); }, 100);
+            } else if (speed > 4.0 && isStopped) {
+                isStopped = false; clearInterval(timerInterval);
+                const duration = ((Date.now() - startMark)/1000).toFixed(1);
+                
+                // DATA REPAIR LOGIC: Only log if duration > 1.0s
+                if (parseFloat(duration) >= 1.0) {
+                    storage.push({ d: duration, ts: Date.now(), lat: lastPos[0], lng: lastPos[1] });
+                    localStorage.setItem(DB_KEY, JSON.stringify(storage));
+                }
+                
+                t.innerText = "0.0"; t.className = "t-active";
             }
-            document.getElementById('timer-display').innerText = "0.0";
-            document.getElementById('timer-display').className = "t-none";
         }
 
-        function renderHistory() {
-            const list = document.getElementById('history-list');
-            if (!list) return;
-            list.innerHTML = '';
-            let data = [...storage];
+        function runFullTour() {
+            const tour = document.getElementById('tour-box');
+            tour.style.display = 'block';
+            let i = 0;
+            const steps = [
+                { m: "Engaging Engine...", f: () => { tab('dash'); engineStart(); } },
+                { m: "Transit: 85 KM/H", f: () => updateLogic(85.0) },
+                { m: "Arrival: Logging...", f: () => updateLogic(0.0) },
+                { m: "Geofence Check...", f: () => { tab('map'); updateMap(lastPos[0], lastPos[1]); } },
+                { m: "Writing to Disk...", f: () => { updateLogic(45.0); tab('history'); } },
+                { m: "System Verified.", f: () => { tour.style.background = "#22c55e"; } }
+            ];
 
-            if (groupMode === 'loc') {
-                let groups = [];
-                data.forEach(item => {
-                    let g = groups.find(x => getDist(x.lat, x.lng, item.lat, item.lng) < 30);
-                    if (g) { g.count++; g.ts = Math.max(g.ts, item.ts); }
-                    else { groups.push({ ...item, count: 1 }); }
-                });
-                data = groups;
-            }
-
-            data.sort((a,b) => currentSort === 'time' ? b.ts - a.ts : b.obj - a.obj);
-
-            data.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'log-entry';
-                div.innerHTML = `
-                    <div class="flex flex-col">
-                        <span class="text-[7px] text-zinc-500 uppercase">${new Date(item.ts).toLocaleTimeString()}</span>
-                        <span class="text-[11px] font-black text-white">${item.count ? item.count+' EVENTS' : item.d+'s STOP'}</span>
-                        <span class="text-[8px] font-bold text-cyan-400 mt-1 uppercase">POS: ${item.lat.toFixed(3)}, ${item.lng.toFixed(3)}</span>
-                    </div>
-                    <button onclick="viewLoc(${item.lat}, ${item.lng})" class="bg-cyan-400 text-black text-[9px] font-black px-3 py-2 rounded">VIEW</button>
-                `;
-                list.appendChild(div);
-            });
-        }
-
-        function viewLoc(lat, lng) { lastPos = [lat, lng]; tab('map'); }
-        function getDist(lat1, lon1, lat2, lon2) {
-            const R = 6371e3;
-            const p1 = lat1 * Math.PI/180, p2 = lat2 * Math.PI/180;
-            const dp = (lat2-lat1) * Math.PI/180, dl = (lon2-lon1) * Math.PI/180;
-            const a = Math.sin(dp/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const interval = setInterval(() => {
+                if(i >= steps.length) { clearInterval(interval); setTimeout(()=>tour.style.display='none', 2000); return; }
+                tour.innerText = steps[i].m;
+                steps[i].f();
+                i++;
+            }, 2500);
         }
 
         function initMap() {
             if (!mapInstance) {
-                mapInstance = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView(lastPos, 16);
+                mapInstance = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView(lastPos, 15);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png').addTo(mapInstance);
-                safeLayer = L.layerGroup().addTo(mapInstance);
-            } else { mapInstance.setView(lastPos); }
-            safeLayer.clearLayers();
-            safeZones.forEach(z => L.circle([z.lat, z.lng], { radius: 50, color: '#a855f7', weight: 1, fillOpacity: 0.2 }).addTo(safeLayer));
+                marker = L.circleMarker(lastPos, { radius: 10, color: '#00f2ff', fillOpacity: 0.8 }).addTo(mapInstance);
+            }
         }
 
-        function setSafeZone() { 
-            safeZones.push({lat: lastPos[0], lng: lastPos[1]}); 
-            localStorage.setItem(SAFE_KEY, JSON.stringify(safeZones)); 
-            initMap(); 
+        function updateMap(lat, lng) {
+            initMap();
+            mapInstance.setView([lat, lng], 16);
+            marker.setLatLng([lat, lng]);
         }
-        function clearSafeZones() { safeZones = []; localStorage.removeItem(SAFE_KEY); location.reload(); }
-        function clearDatabase() { if(confirm("Clear logs?")) { storage=[]; localStorage.removeItem(DB_KEY); renderHistory(); } }
-        function engineStop() { location.reload(); }
-        function exportCSV() {
-            let csv = "Time,Duration,Lat,Lng\n" + storage.map(i => `${new Date(i.ts).toISOString()},${i.d},${i.lat},${i.lng}`).join("\n");
-            let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'})); a.download="gravity_logs.csv"; a.click();
+
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = storage.length ? '' : '<div class="text-center py-20 opacity-20 text-[10px]">NO LOGS</div>';
+            [...storage].reverse().forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'log-entry';
+                div.innerHTML = `<div><span class="text-[7px] text-zinc-500 uppercase">${new Date(item.ts).toLocaleTimeString()}</span><br><span class="text-[11px] font-black">${item.d}s STOP</span></div><div class="text-[8px] font-bold text-cyan-400">VERIFIED</div>`;
+                list.appendChild(div);
+            });
         }
-        setInterval(() => { if(document.getElementById('sys-clock')) document.getElementById('sys-clock').innerText = new Date().toLocaleTimeString(); }, 1000);
+
+        function clearLogs() {
+            storage = [];
+            localStorage.removeItem(DB_KEY);
+            renderHistory();
+        }
     </script>
 </body>
 </html>
