@@ -3,58 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V11.0</title>
+    <title>Gravity Intel V11.5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
-        :root { --accent: #00f2ff; --bg: #050505; --active: #00ff88; --warn: #ffcc00; --error: #ff3333; }
+        :root { --accent: #00f2ff; --bg: #050505; }
         body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; padding-top: env(safe-area-inset-top); }
         
-        .status-bar { height: 35px; background: #111; display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #222; font-size: 10px; font-weight: 800; }
-        .gps-active { color: var(--active); }
-        .gps-searching { color: var(--error); animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0.3; } }
-        
-        .page { display: none; width: 100vw; flex-direction: column; height: calc(100vh - 125px); overflow-y: auto; }
+        /* Map Visibility Fix */
+        #map-canvas { height: 100%; width: 100%; background: #111; }
+        .leaflet-tile { filter: brightness(0.6) invert(1) contrast(3) hue-rotate(180deg); }
+
+        .page { display: none; width: 100vw; height: calc(100vh - 125px); flex-direction: column; overflow-y: auto; }
         .active-page { display: flex; }
         
-        #map-canvas { height: 100%; width: 100%; background: #000; }
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 90px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); }
         .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; color: inherit; border: none; background: none; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 2px solid var(--accent); }
         
-        #timer-display { font-size: 26vw; font-weight: 800; color: white; line-height: 1; text-shadow: 0 0 30px rgba(0,242,255,0.2); }
-        .map-tiles { filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(85%); }
+        /* Dynamic Timer Colors */
+        .t-green { color: #00ff88; }
+        .t-orange { color: #ffaa00; }
+        .t-red { color: #ff3333; }
+        .t-flash { color: #ff0000; animation: pulse 0.5s infinite; }
+        @keyframes pulse { 50% { opacity: 0.2; } }
+        
+        #timer-display { font-size: 26vw; font-weight: 800; line-height: 1; }
     </style>
 </head>
 <body>
 
-    <div class="status-bar" id="status-line">
-        <span id="gps-status-text" class="gps-searching">GPS: INITIALIZING</span>
+    <div class="h-[35px] bg-[#111] flex items-center justify-center border-b border-zinc-800 text-[10px] font-bold" id="status-line">
+        <span id="gps-status-text" class="text-red-500">SYSTEM OFFLINE</span>
     </div>
 
     <div id="page-dash" class="page active-page p-6 justify-center">
-        <div id="local-intel" class="mb-4 text-center opacity-0 transition-opacity">
-            <span class="text-[10px] bg-cyan-900/30 border border-cyan-500/50 px-3 py-1 rounded-full text-cyan-400 font-bold uppercase">
-                Area Match: <span id="local-avg-val">0.0</span>s Avg
-            </span>
-        </div>
         <div class="grid grid-cols-2 gap-4 mb-8">
             <div class="bg-zinc-900/40 p-3 rounded border border-zinc-800">
-                <span class="text-[8px] opacity-40 uppercase">Stop Score</span>
+                <span class="text-[8px] opacity-40 uppercase">Stop Rating (1-10)</span>
                 <div id="obj-score" class="text-xl font-black text-white">--</div>
             </div>
-            <div class="bg-zinc-900/40 p-3 rounded border border-zinc-800">
-                <span class="text-[8px] opacity-40 uppercase">Trip Avg</span>
-                <div id="avg-wait" class="text-xl font-black text-white">--</div>
-            </div>
+            <div id="sim-indicator" class="hidden text-[8px] text-yellow-500 font-bold animate-pulse">SIMULATION ACTIVE</div>
         </div>
+
         <div class="text-center">
-            <div id="speed-val" class="text-4xl font-black opacity-10 mb-2">0</div>
-            <div id="timer-display">0.0</div>
-            <button id="master-start" onclick="toggleSystem()" class="mt-10 px-10 py-4 border-2 border-cyan-400 rounded-full font-black text-xs uppercase tracking-widest">Initialize</button>
+            <div id="timer-display" class="text-white">0.0</div>
+            <div class="flex flex-col gap-3 mt-10">
+                <button id="master-start" onclick="toggleSystem(true)" class="px-10 py-4 border-2 border-cyan-400 rounded-full font-black text-xs uppercase">Initialize</button>
+                <button id="master-stop" onclick="toggleSystem(false)" class="hidden px-10 py-4 border-2 border-red-500 rounded-full font-black text-xs uppercase text-red-500">Disable System</button>
+            </div>
         </div>
     </div>
 
@@ -63,35 +62,23 @@
     </div>
 
     <div id="page-history" class="page p-6">
-        <div id="stats-header" class="mb-6 p-4 border border-zinc-800 rounded bg-zinc-900/30 hidden">
-            <span class="text-[8px] opacity-40 uppercase">Lifetime Avg</span>
-            <div id="life-avg" class="text-2xl font-black text-cyan-400">0.0s</div>
+        <div class="flex gap-2 mb-4">
+            <button onclick="sortLogs('ts')" class="bg-zinc-800 px-3 py-1 text-[8px] rounded uppercase">Date</button>
+            <button onclick="sortLogs('d')" class="bg-zinc-800 px-3 py-1 text-[8px] rounded uppercase">Duration</button>
+            <button onclick="sortLogs('obj')" class="bg-zinc-800 px-3 py-1 text-[8px] rounded uppercase">Rating</button>
         </div>
         <div id="history-list" class="space-y-2"></div>
     </div>
 
     <div id="page-about" class="page p-8">
-        <div class="mb-8">
-            <h1 class="text-white text-xl font-black italic">GRAVITY INTEL</h1>
-            <p class="text-[10px] opacity-50 uppercase tracking-widest">Performance Stop Tracker</p>
-        </div>
-
         <div class="space-y-6">
-            <div class="border-l-2 border-cyan-500 pl-4">
-                <div class="text-[8px] opacity-40 uppercase">Build Version</div>
-                <div class="text-lg font-bold text-white">V11.0_PRO</div>
+            <div>
+                <div class="text-[8px] opacity-40 uppercase">Build</div>
+                <div class="text-lg font-bold text-white">V11.5_PRO</div>
             </div>
-            <div class="border-l-2 border-zinc-800 pl-4">
-                <div class="text-[8px] opacity-40 uppercase">System Time</div>
-                <div id="sys-clock" class="text-lg font-bold text-white">00:00:00</div>
-            </div>
-            <div class="border-l-2 border-zinc-800 pl-4">
-                <div class="text-[8px] opacity-40 uppercase">Calendar Date</div>
-                <div id="sys-date" class="text-lg font-bold text-white">--/--/--</div>
-            </div>
-            <div class="pt-10">
-                <button onclick="location.reload()" class="w-full py-4 border border-red-900 text-red-500 text-[10px] font-black uppercase tracking-[0.3em]">Full System Reboot</button>
-            </div>
+            <button onclick="startSimulation()" id="sim-btn" class="w-full py-4 border border-yellow-600 text-yellow-500 text-[10px] font-black uppercase">Start 3-Min Simulation</button>
+            <div id="sys-clock" class="text-white text-xs"></div>
+            <button onclick="location.reload()" class="w-full py-4 border border-red-900 text-red-500 text-[10px] font-black uppercase">Reboot</button>
         </div>
     </div>
 
@@ -105,15 +92,8 @@
     <script>
         const DB_KEY = 'GRV_DB_PRO_106';
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
-        let tripData = [], isStopped = false, isArmed = false, startMark = 0, timerInterval = null, lastPos = null;
-        let mapInstance = null, markerLayer = null;
-
-        // Clock Logic
-        setInterval(() => {
-            const now = new Date();
-            document.getElementById('sys-clock').innerText = now.toLocaleTimeString();
-            document.getElementById('sys-date').innerText = now.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        }, 1000);
+        let isArmed = false, isStopped = false, startMark = 0, timerInterval = null, lastPos = [-34.39, 150.89];
+        let mapInstance = null, markerLayer = null, logSortDir = 1;
 
         function tab(n) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
@@ -124,89 +104,125 @@
             if(n === 'history') renderHistory();
         }
 
-        function initMap() {
-            if (!mapInstance) {
-                mapInstance = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView(lastPos || [0,0], 15);
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(mapInstance);
-                markerLayer = L.layerGroup().addTo(mapInstance);
-            }
-            setTimeout(() => { mapInstance.invalidateSize(); if(lastPos) mapInstance.panTo(lastPos); }, 200);
-            markerLayer.clearLayers();
-            storage.forEach(p => {
-                const color = p.obj > 7 ? '#00ff88' : p.obj > 4 ? '#ffff00' : '#ff3333';
-                L.circle([p.lat, p.lng], { radius: 12, color: color, weight: 1, fillOpacity: 0.5 }).addTo(markerLayer);
-            });
+        function toggleSystem(state) {
+            isArmed = state;
+            document.getElementById('master-start').classList.toggle('hidden', state);
+            document.getElementById('master-stop').classList.toggle('hidden', !state);
+            if(state) navigator.geolocation.watchPosition(handleGPS, null, {enableHighAccuracy:true});
         }
 
-        function getDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3;
-            const dLat = (lat2-lat1) * Math.PI/180;
-            const dLon = (lon2-lon1) * Math.PI/180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        // --- RATING LOGIC ---
+        function calculateRating(duration) {
+            if (storage.length < 10) return "--";
+            const times = storage.map(s => s.d);
+            const min = Math.min(...times);
+            const max = Math.max(...times);
+            const range = max - min;
+            const segment = range / 10;
+            // Lower duration = Higher score (10)
+            let score = 10 - Math.floor((duration - min) / segment);
+            return Math.max(1, Math.min(10, score));
         }
 
-        function toggleSystem() {
-            if (!isArmed) {
-                isArmed = true;
-                document.getElementById('master-start').style.display = 'none';
-                navigator.geolocation.watchPosition(handleGPS, null, { enableHighAccuracy: true });
-            }
+        function updateTimerColor(currentSecs) {
+            if (storage.length < 5) return;
+            const avg = storage.reduce((a,b) => a + b.d, 0) / storage.length;
+            const el = document.getElementById('timer-display');
+            el.className = "";
+            if (currentSecs < avg * 0.33) el.classList.add('t-green');
+            else if (currentSecs < avg * 0.66) el.classList.add('t-orange');
+            else if (currentSecs <= avg) el.classList.add('t-red');
+            else el.classList.add('t-flash');
         }
 
         function handleGPS(pos) {
             lastPos = [pos.coords.latitude, pos.coords.longitude];
-            document.getElementById('gps-status-text').innerText = `GPS: LOCKED (±${pos.coords.accuracy.toFixed(0)}m)`;
-            document.getElementById('gps-status-text').className = "gps-active";
+            document.getElementById('gps-status-text').innerText = "GPS ACTIVE";
             const speed = (pos.coords.speed || 0) * 3.6;
-            document.getElementById('speed-val').innerText = Math.round(speed);
-
+            
             if (speed < 1.0 && !isStopped && isArmed) {
                 isStopped = true;
                 startMark = Date.now();
-                const nearby = storage.filter(p => getDistance(lastPos[0], lastPos[1], p.lat, p.lng) < 30);
-                if (nearby.length > 0) {
-                    const localAvg = nearby.reduce((a,b) => a + b.d, 0) / nearby.length;
-                    document.getElementById('local-avg-val').innerText = localAvg.toFixed(1);
-                    document.getElementById('local-intel').style.opacity = "1";
-                }
                 timerInterval = setInterval(() => {
-                    document.getElementById('timer-display').innerText = ((Date.now() - startMark)/1000).toFixed(1);
+                    const elapsed = (Date.now() - startMark) / 1000;
+                    document.getElementById('timer-display').innerText = elapsed.toFixed(1);
+                    updateTimerColor(elapsed);
                 }, 100);
-            } 
-            else if (speed > 5 && isStopped) {
+            } else if (speed > 5 && isStopped) {
                 const dur = (Date.now() - startMark) / 1000;
-                isStopped = false;
-                clearInterval(timerInterval);
-                document.getElementById('local-intel').style.opacity = "0";
-                if (dur > 2.5) {
-                    const score = Math.min(10, (100 / dur) * 2).toFixed(1);
-                    storage.push({ d: dur, ts: Date.now(), lat: lastPos[0], lng: lastPos[1], obj: score });
-                    tripData.push({ d: dur, obj: score });
-                    localStorage.setItem(DB_KEY, JSON.stringify(storage));
-                    document.getElementById('obj-score').innerText = score;
-                    const tripAvg = tripData.reduce((a,b) => a + parseFloat(b.obj), 0) / tripData.length;
-                    document.getElementById('avg-wait').innerText = tripAvg.toFixed(1);
-                }
-                document.getElementById('timer-display').innerText = "0.0";
+                stopTimer(dur);
             }
+        }
+
+        function stopTimer(dur) {
+            isStopped = false;
+            clearInterval(timerInterval);
+            if (dur > 2) {
+                const score = calculateRating(dur);
+                storage.push({ d: dur, ts: Date.now(), lat: lastPos[0], lng: lastPos[1], obj: score });
+                localStorage.setItem(DB_KEY, JSON.stringify(storage));
+                document.getElementById('obj-score').innerText = score;
+            }
+            document.getElementById('timer-display').innerText = "0.0";
+            document.getElementById('timer-display').className = "";
+        }
+
+        // --- SIMULATION ---
+        function startSimulation() {
+            tab('dash');
+            document.getElementById('sim-indicator').classList.remove('hidden');
+            let simCount = 0;
+            const simLoop = setInterval(() => {
+                isStopped = true;
+                startMark = Date.now();
+                timerInterval = setInterval(() => {
+                    const elapsed = (Date.now() - startMark) / 1000;
+                    document.getElementById('timer-display').innerText = elapsed.toFixed(1);
+                    updateTimerColor(elapsed);
+                }, 100);
+
+                setTimeout(() => {
+                    stopTimer(Math.random() * 20 + 5);
+                    simCount++;
+                    if (simCount >= 6) {
+                        clearInterval(simLoop);
+                        document.getElementById('sim-indicator').classList.add('hidden');
+                    }
+                }, 5000); // 5 sec "fake" stop every 10 seconds
+            }, 10000);
+        }
+
+        function initMap() {
+            if (!mapInstance) {
+                mapInstance = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView(lastPos, 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapInstance);
+                markerLayer = L.layerGroup().addTo(mapInstance);
+            }
+            mapInstance.invalidateSize();
+            markerLayer.clearLayers();
+            storage.forEach(p => {
+                L.circle([p.lat, p.lng], { radius: 20, color: '#00f2ff', fillOpacity: 0.6 }).addTo(markerLayer);
+            });
+        }
+
+        function sortLogs(key) {
+            logSortDir *= -1;
+            storage.sort((a, b) => (a[key] > b[key] ? 1 : -1) * logSortDir);
+            renderHistory();
         }
 
         function renderHistory() {
             const list = document.getElementById('history-list');
-            if (storage.length >= 1) {
-                const avg = storage.reduce((a,b) => a + b.d, 0) / storage.length;
-                document.getElementById('life-avg').innerText = avg.toFixed(1) + "s";
-                document.getElementById('stats-header').classList.remove('hidden');
-            }
-            list.innerHTML = storage.slice(-20).reverse().map(h => `
+            list.innerHTML = storage.map(h => `
                 <div class="flex justify-between border-b border-zinc-800 py-3 text-[10px]">
-                    <span class="opacity-40 uppercase">${new Date(h.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                    <span class="opacity-40">${new Date(h.ts).toLocaleTimeString()}</span>
                     <span class="font-bold text-white">${h.d.toFixed(1)}s</span>
-                    <span class="${h.obj > 7 ? 'text-green-400' : 'text-red-400'}">${h.obj}</span>
+                    <span class="text-cyan-400">Score: ${h.obj}</span>
                 </div>
             `).join('');
         }
+
+        setInterval(() => { document.getElementById('sys-clock').innerText = new Date().toLocaleString(); }, 1000);
     </script>
 </body>
 </html>
