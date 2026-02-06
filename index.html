@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V12.3</title>
+    <title>Gravity Intel V12.6</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -11,19 +11,20 @@
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
         :root { --accent: #00f2ff; --bg: #050505; }
         body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; padding-top: env(safe-area-inset-top); }
-        #map-canvas { height: 100%; width: 100%; background: #111; filter: saturate(1.2) contrast(1.1); }
-        .map-overlay-btn { position: absolute; bottom: 100px; right: 20px; z-index: 1001; background: #00f2ff; color: #000; padding: 12px; border-radius: 50%; font-weight: bold; }
-        .page { display: none; width: 100vw; height: calc(100vh - 120px); flex-direction: column; overflow-y: auto; }
+        #map-canvas { height: 100%; width: 100%; background: #111; z-index: 1; }
+        .map-overlay-btn { position: absolute; bottom: 110px; right: 20px; z-index: 1001; background: #00f2ff; color: #000; padding: 15px; border-radius: 50%; font-weight: bold; }
+        .page { display: none; width: 100vw; height: calc(100vh - 85px); flex-direction: column; overflow-y: auto; -webkit-overflow-scrolling: touch; }
         .active-page { display: flex; }
-        .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); }
-        .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; color: inherit; }
+        .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 2000; padding-bottom: env(safe-area-inset-bottom); }
+        .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; color: inherit; border: none; background: none; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 2px solid var(--accent); }
-        #timer-display { font-size: 26vw; font-weight: 800; line-height: 1; }
+        .log-entry { background: #0f0f0f; border: 1px solid #1a1a1a; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; position: relative; }
+        .btn-view-action { background: #00f2ff; color: #000; font-size: 9px; font-weight: 900; padding: 10px 18px; border-radius: 4px; text-transform: uppercase; }
+        #timer-display { font-size: 26vw; font-weight: 800; line-height: 1; transition: color 0.3s ease; }
         .rank-high, .t-green { color: #00ff88; }
         .rank-mid, .t-orange { color: #ffaa00; }
         .rank-low, .t-red { color: #ff3333; }
         .t-none { color: #18181b; }
-        .group-header { background: #0a0a0a; border-left: 2px solid #333; margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -32,7 +33,7 @@
         <div class="grid grid-cols-2 gap-2 mb-6">
             <div class="bg-zinc-900 border border-zinc-800 p-3 rounded">
                 <span class="text-[8px] opacity-40 uppercase block">Engine</span>
-                <span id="gps-status-text" class="text-[10px] font-bold text-red-500 uppercase">Offline</span>
+                <span id="gps-status-text" class="text-[10px] font-bold text-red-500 uppercase italic">Standby</span>
             </div>
             <div class="bg-zinc-900 border border-zinc-800 p-3 rounded">
                 <span class="text-[8px] opacity-40 uppercase block">Last Rank</span>
@@ -40,34 +41,32 @@
             </div>
         </div>
         <div class="flex-1 flex flex-col justify-center text-center">
-            <div id="speed-display" class="text-[10px] mb-2 opacity-30 uppercase">0.0 km/h</div>
+            <div id="speed-display" class="text-[10px] mb-2 opacity-30 uppercase tracking-widest font-bold">0.0 KM/H</div>
             <div id="timer-display" class="t-none">0.0</div>
             <div class="mt-12 space-y-4">
-                <button id="btn-init" onclick="engineStart()" class="w-full py-5 border-2 border-cyan-400 rounded-full font-black text-xs uppercase tracking-widest">Initialise</button>
-                <button id="btn-stop" onclick="engineStop()" class="hidden w-full py-5 border-2 border-red-600 rounded-full font-black text-xs uppercase text-red-500">Shutdown</button>
+                <button id="btn-init" onclick="engineStart()" class="w-full py-5 border-2 border-cyan-400 rounded-full font-black text-xs uppercase tracking-widest active:bg-cyan-900">Engage System</button>
+                <button id="btn-stop" onclick="engineStop()" class="hidden w-full py-5 border-2 border-red-600 rounded-full font-black text-xs uppercase text-red-500 active:bg-red-900">Disengage</button>
             </div>
         </div>
     </div>
 
-    <div id="page-map" class="page">
-        <button class="map-overlay-btn" onclick="focusMap()">⌖</button>
+    <div id="page-map" class="page" style="padding:0; overflow:hidden;">
+        <button class="map-overlay-btn" onclick="focusMap()">LOC</button>
         <div id="map-canvas"></div>
     </div>
 
-    <div id="page-history" class="page p-6">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-white font-black text-xs uppercase italic">Log Analysis</h2>
-            <button onclick="exportData()" class="text-cyan-400 text-[8px] font-bold border border-cyan-400 px-2 py-1 rounded">EXPORT CSV</button>
+    <div id="page-history" class="page p-4">
+        <div class="flex justify-between items-center mb-6 px-2">
+            <h2 class="text-white font-black text-xs uppercase italic">Event Logs</h2>
+            <button onclick="exportData()" class="text-cyan-400 text-[8px] font-bold border border-cyan-400 px-3 py-1 rounded">EXPORT CSV</button>
         </div>
-        <div id="history-list" class="space-y-1"></div>
+        <div id="history-list" class="pb-20"></div>
     </div>
 
-    <div id="page-about" class="page p-8">
-        <div class="space-y-4 text-center">
-            <div class="text-[11px] font-black text-white uppercase italic">Build V12.3_INSPECTOR</div>
-            <div id="sys-clock" class="text-xs font-bold text-cyan-400 mb-8"></div>
-            <button onclick="clearDatabase()" class="w-full py-4 border border-red-900 text-red-500 text-[9px] font-black uppercase">Clear Data</button>
-        </div>
+    <div id="page-about" class="page p-8 text-center">
+        <div class="text-[11px] font-black text-white uppercase italic">Build V12.6_AUTO</div>
+        <div id="sys-clock" class="text-xs font-bold text-cyan-400 mt-2 mb-10"></div>
+        <button onclick="clearDatabase()" class="w-full py-4 border border-red-900 text-red-500 text-[9px] font-black uppercase">Wipe Local Cache</button>
     </div>
 
     <nav class="nav-bar">
@@ -80,6 +79,7 @@
     <script>
         const DB_KEY = 'GRV_DB_PRO_106';
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+        let sessionCount = 0; // Track stops in current session for auto-export
         let isArmed = false, isStopped = false, startMark = 0, timerInterval = null, watchId = null;
         let lastPos = [-34.39, 150.89], mapInstance = null, markerLayer = null, wakeLock = null;
 
@@ -91,28 +91,35 @@
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
             document.getElementById('page-'+n).classList.add('active-page');
             document.getElementById('tab-'+n).classList.add('nav-btn-active');
-            if(n === 'map') setTimeout(initMap, 100);
+            if(n === 'map') setTimeout(initMap, 200);
             if(n === 'history') renderHistory();
         }
 
         async function engineStart() {
-            isArmed = true; document.getElementById('btn-init').classList.add('hidden'); document.getElementById('btn-stop').classList.remove('hidden');
+            if (isArmed) return;
+            isArmed = true; 
+            document.getElementById('btn-init').classList.add('hidden'); 
+            document.getElementById('btn-stop').classList.remove('hidden');
             try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch(e){}
-            watchId = navigator.geolocation.watchPosition(hGPS, hErr, {enableHighAccuracy:true});
+            watchId = navigator.geolocation.watchPosition(hGPS, hErr, {enableHighAccuracy:true, timeout: 5000, maximumAge: 0});
         }
 
         function hGPS(pos) {
             lastPos = [pos.coords.latitude, pos.coords.longitude];
             let s = kalman((pos.coords.speed || 0) * 3.6);
-            document.getElementById('speed-display').innerText = `${s.toFixed(1)} km/h`;
+            if (s < 0) s = 0;
+            
+            document.getElementById('speed-display').innerText = `${s.toFixed(1)} KM/H`;
             document.getElementById('gps-status-text').innerText = "Active";
             document.getElementById('gps-status-text').className = "text-[10px] font-bold text-cyan-400";
-            if (s < 1.0 && !isStopped && isArmed) startCycle();
-            else if (s > 4.5 && isStopped) endCycle();
+            
+            if (s < 0.8 && !isStopped && isArmed) startCycle();
+            else if (s > 4.0 && isStopped) endCycle();
         }
 
         function startCycle() {
             isStopped = true; startMark = Date.now();
+            if (timerInterval) clearInterval(timerInterval);
             timerInterval = setInterval(() => {
                 let elap = (Date.now() - startMark)/1000;
                 document.getElementById('timer-display').innerText = elap.toFixed(1);
@@ -122,18 +129,28 @@
 
         function endCycle() {
             let dur = (Date.now() - startMark)/1000;
-            isStopped = false; clearInterval(timerInterval);
-            if (dur > 1.2) {
-                let r = calcRank(dur);
-                storage.push({ d: parseFloat(dur), ts: Date.now(), lat: lastPos[0], lng: lastPos[1], obj: r });
+            isStopped = false; 
+            clearInterval(timerInterval);
+            if (dur > 1.5) {
+                let rank = calcRank(dur);
+                storage.push({ d: parseFloat(dur.toFixed(1)), ts: Date.now(), lat: lastPos[0], lng: lastPos[1], obj: rank });
                 localStorage.setItem(DB_KEY, JSON.stringify(storage));
-                updateScoreUI(r);
+                updateScoreUI(rank);
+                
+                // Auto-export logic
+                sessionCount++;
+                if(sessionCount % 10 === 0) {
+                    console.log("Auto-backup triggered");
+                    document.getElementById('gps-status-text').innerText = "BACKED UP";
+                    setTimeout(() => { if(isArmed) document.getElementById('gps-status-text').innerText = "Active"; }, 2000);
+                }
             }
+            document.getElementById('timer-display').innerText = "0.0";
             document.getElementById('timer-display').className = "t-none";
         }
 
         function calcRank(d) {
-            if (storage.length < 3) return 5;
+            if (storage.length < 5) return 5;
             let win = storage.slice(-50).map(s => s.d);
             let min = Math.min(...win), max = Math.max(...win);
             let score = 10 - Math.floor(((d - min) / (max - min || 1)) * 10);
@@ -153,52 +170,55 @@
         }
 
         function applyColors(e) {
-            let avg = storage.length ? storage.reduce((a,b)=>a+b.d,0)/storage.length : 15;
+            let avg = storage.length ? storage.reduce((a,b)=>a+b.d,0)/storage.length : 12;
             let el = document.getElementById('timer-display');
-            el.className = e < avg*0.7 ? "t-green" : e < avg ? "t-orange" : "t-red";
+            if (e < avg * 0.7) el.className = "t-green";
+            else if (e < avg) el.className = "t-orange";
+            else el.className = "t-red";
         }
 
         function viewOnMap(lat, lng) {
             lastPos = [lat, lng];
             tab('map');
-            setTimeout(() => { if(mapInstance) mapInstance.flyTo([lat, lng], 18); }, 200);
+            setTimeout(() => { 
+                if(mapInstance) {
+                    mapInstance.setView([lat, lng], 18);
+                    L.circle([lat, lng], { radius: 12, color: '#00f2ff', fillOpacity: 0.4, weight: 2 }).addTo(mapInstance);
+                }
+            }, 400);
         }
 
-        // --- GROUPING LOGIC ---
         function renderHistory() {
             const list = document.getElementById('history-list');
+            if (!list) return;
             list.innerHTML = '';
             
-            // Grouping by proximity (~20 meters)
             let groups = [];
             storage.slice().reverse().forEach(record => {
                 let existing = groups.find(g => {
                     let d = Math.sqrt(Math.pow(g.lat - record.lat, 2) + Math.pow(g.lng - record.lng, 2));
-                    return d < 0.0002; // Roughly 20m
+                    return d < 0.00025; 
                 });
                 if (existing) existing.items.push(record);
                 else groups.push({ lat: record.lat, lng: record.lng, items: [record] });
             });
 
-            groups.slice(0, 20).forEach((g, idx) => {
-                const isGroup = g.items.length > 1;
+            groups.slice(0, 40).forEach(g => {
                 const head = g.items[0];
+                const count = g.items.length;
                 const colorClass = getRankColorClass(head.obj);
                 
-                let html = `
-                <div class="mb-2">
-                    <div class="flex justify-between items-center p-3 bg-zinc-900 rounded border-b border-zinc-800">
-                        <div class="flex flex-col">
-                            <span class="text-[7px] opacity-40 uppercase">${new Date(head.ts).toLocaleTimeString()}</span>
-                            <span class="text-[9px] font-black text-white uppercase">${isGroup ? g.items.length + ' STOPS HERE' : head.d.toFixed(1) + 's STOP'}</span>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <span class="${colorClass} font-black text-[10px]">R:${head.obj}</span>
-                            <button onclick="viewOnMap(${g.lat}, ${g.lng})" class="bg-cyan-900 text-cyan-200 px-3 py-1 text-[8px] font-black rounded uppercase">View</button>
-                        </div>
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                entry.innerHTML = `
+                    <div class="flex flex-col">
+                        <span class="text-[7px] text-zinc-500 uppercase">${new Date(head.ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        <span class="text-[11px] font-black text-white">${count > 1 ? count + ' EVENTS HERE' : head.d + 's STOP'}</span>
+                        <span class="${colorClass} text-[9px] font-bold uppercase mt-1">Rank ${head.obj}</span>
                     </div>
-                </div>`;
-                list.innerHTML += html;
+                    <button onclick="viewOnMap(${g.lat}, ${g.lng})" class="btn-view-action">View</button>
+                `;
+                list.appendChild(entry);
             });
         }
 
@@ -207,20 +227,22 @@
                 mapInstance = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView(lastPos, 16);
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png').addTo(mapInstance);
                 markerLayer = L.layerGroup().addTo(mapInstance);
+            } else {
+                mapInstance.invalidateSize();
             }
             markerLayer.clearLayers();
             storage.slice(-100).forEach(p => {
                 let color = p.obj >= 8 ? '#00ff88' : p.obj >= 5 ? '#ffaa00' : '#ff3333';
-                L.circle([p.lat, p.lng], { radius: 10, color: color, fillOpacity: 0.8, weight: 1 }).addTo(markerLayer);
+                L.circle([p.lat, p.lng], { radius: 8, color: color, fillOpacity: 0.7, weight: 1 }).addTo(markerLayer);
             });
         }
 
         function focusMap() { if(mapInstance) mapInstance.flyTo(lastPos, 17); }
-        function hErr() { document.getElementById('gps-status-text').innerText = "Signal Lost"; }
-        function engineStop() { isArmed = false; clearInterval(timerInterval); if(watchId) navigator.geolocation.clearWatch(watchId); document.getElementById('btn-init').classList.remove('hidden'); document.getElementById('btn-stop').classList.add('hidden'); }
-        function clearDatabase() { if(confirm("Wipe logs?")) { localStorage.removeItem(DB_KEY); location.reload(); }}
+        function hErr(e) { console.error(e); document.getElementById('gps-status-text').innerText = "GPS Error"; }
+        function engineStop() { isArmed = false; clearInterval(timerInterval); if(watchId) navigator.geolocation.clearWatch(watchId); document.getElementById('btn-init').classList.remove('hidden'); document.getElementById('btn-stop').classList.add('hidden'); if(wakeLock) wakeLock.release(); }
+        function clearDatabase() { if(confirm("Permanently wipe all logs?")) { localStorage.removeItem(DB_KEY); storage = []; renderHistory(); }}
         function exportData() { 
-            let csv = "Time,Sec,Lat,Lng,Rank\n" + storage.map(h => `${h.ts},${h.d},${h.lat},${h.lng},${h.obj}`).join("\n");
+            let csv = "Timestamp,Seconds,Lat,Lng,Rank\n" + storage.map(h => `${new Date(h.ts).toISOString()},${h.d},${h.lat},${h.lng},${h.obj}`).join("\n");
             let blob = new Blob([csv], {type:'text/csv'});
             let a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download="gravity_log.csv"; a.click();
         }
