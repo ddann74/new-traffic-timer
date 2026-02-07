@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V15.8</title>
+    <title>Gravity Intel V15.8.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -100,10 +100,10 @@
     </div>
 
     <div id="page-about" class="page p-8 text-center">
-        <div class="text-[10px] text-zinc-500 uppercase font-bold mb-4 tracking-widest">Gravity Intel V15.8</div>
+        <div class="text-[10px] text-zinc-500 uppercase font-bold mb-4 tracking-widest">Gravity Intel V15.8.1</div>
         <div class="bg-zinc-900 p-6 rounded-2xl border border-zinc-800 text-[9px] text-left text-zinc-400 space-y-3 mb-10">
             <div class="flex items-center gap-2 font-bold text-white"><div class="w-1.5 h-1.5 bg-green-500 rounded-full"></div> Map Style: <span class="text-green-500">VOYAGER COLOR</span></div>
-            <div class="flex items-center gap-2 font-bold text-white"><div class="w-1.5 h-1.5 bg-cyan-400 rounded-full"></div> Heatmap: <span class="text-cyan-400">MULTI-SPECTRUM</span></div>
+            <div class="flex items-center gap-2 font-bold text-white"><div class="w-1.5 h-1.5 bg-cyan-400 rounded-full"></div> Data Status: <span id="sys-data-status" class="text-cyan-400">UNSTABLE</span></div>
         </div>
         <button onclick="location.reload()" class="w-full py-4 bg-zinc-800 text-zinc-400 font-bold text-[9px] uppercase rounded-xl">Reboot Core</button>
     </div>
@@ -119,28 +119,47 @@
         const DB_KEY = 'GRV_V15_MASTER';
         const GEOFENCE_RADIUS = 0.05; 
         const SAFE_ZONE = 5.0; 
+        const MIN_RECORDS_FOR_STABILITY = 4;
 
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let isArmed = false, isStopped = false, startMark = 0, timerInterval = null;
         let map = null, userMarker = null, heatLayer = null, historyGroup = null;
         let lastCoords = { lat: 0, lon: 0 }, isHeatmapMode = false;
 
-        function getDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371; 
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        }
-
         function updateStability() {
-            const stability = Math.min((storage.length / 25) * 100, 100);
+            const stability = Math.min((storage.length / 20) * 100, 100);
             const bar = document.getElementById('stabilization-bar');
+            const label = document.getElementById('stabilization-label');
+            const sysLabel = document.getElementById('sys-data-status');
+
             if(bar) {
                 bar.style.width = `${stability}%`;
-                document.getElementById('stabilization-label').innerText = `${stability.toFixed(0)}% STABILIZED`;
-                bar.style.backgroundColor = stability < 30 ? "#ef4444" : (stability < 70 ? "#f97316" : "#22c55e");
+                label.innerText = `${stability.toFixed(0)}% DATA STABILITY`;
+                bar.style.backgroundColor = storage.length < MIN_RECORDS_FOR_STABILITY ? "#3f3f46" : (stability < 70 ? "#f97316" : "#22c55e");
             }
+            if(sysLabel) sysLabel.innerText = storage.length >= MIN_RECORDS_FOR_STABILITY ? "STABILIZED" : "UNSTABLE";
+        }
+
+        function updateColors(sec) {
+            const t = document.getElementById('timer-display');
+            const dStat = document.getElementById('data-status');
+            
+            if (sec < SAFE_ZONE) { 
+                t.style.color = "#3f3f46"; 
+                dStat.innerText = "SAFE ZONE"; 
+                return; 
+            }
+
+            if (storage.length < MIN_RECORDS_FOR_STABILITY) {
+                t.style.color = "var(--accent)";
+                dStat.innerText = `COLLECTING (${storage.length}/${MIN_RECORDS_FOR_STABILITY})`;
+                return;
+            }
+
+            let avg = storage.reduce((s, i) => s + i.d, 0) / storage.length;
+            if (sec <= avg * 0.7) { t.style.color = "#22c55e"; dStat.innerText = "OPTIMAL"; }
+            else if (sec <= avg * 1.2) { t.style.color = "#f97316"; dStat.innerText = "AVERAGE"; }
+            else { t.style.color = "#ef4444"; dStat.innerText = "DELAYED"; }
         }
 
         function startTimer() {
@@ -169,13 +188,6 @@
             resetDisplay();
         }
 
-        function updateColors(sec) {
-            const t = document.getElementById('timer-display');
-            if (sec < SAFE_ZONE) { t.style.color = "#3f3f46"; return; }
-            let avg = storage.length > 0 ? storage.reduce((s, i) => s + i.d, 0) / storage.length : 20;
-            t.style.color = sec <= avg * 0.7 ? "#22c55e" : (sec <= avg * 1.2 ? "#f97316" : "#ef4444");
-        }
-
         function toggleSystem() {
             isArmed = !isArmed;
             const btn = document.getElementById('btn-master');
@@ -188,6 +200,7 @@
             document.getElementById('timer-display').innerText = "0.0";
             document.getElementById('timer-display').style.color = "#18181b";
             document.getElementById('loc-status').innerText = isArmed ? "READY" : "GPS SEARCHING";
+            document.getElementById('data-status').innerText = "SYSTEM IDLE";
         }
 
         function tab(n) {
@@ -211,9 +224,9 @@
         function renderMapMarkers() {
             if (!historyGroup) return;
             historyGroup.clearLayers();
-            let avg = storage.length > 0 ? storage.reduce((s, i) => s + i.d, 0) / storage.length : 20;
+            let avg = storage.length >= MIN_RECORDS_FOR_STABILITY ? storage.reduce((s, i) => s + i.d, 0) / storage.length : null;
             storage.forEach(item => {
-                let color = item.d <= avg * 0.7 ? "#22c55e" : (item.d <= avg * 1.2 ? "#f97316" : "#ef4444");
+                let color = !avg ? "var(--accent)" : (item.d <= avg * 0.7 ? "#22c55e" : (item.d <= avg * 1.2 ? "#f97316" : "#ef4444"));
                 L.circle([item.lat, item.lon], { radius: 12, color: color, fillColor: color, fillOpacity: 0.5 }).addTo(historyGroup);
             });
         }
