@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V15.2</title>
+    <title>Gravity Intel V15.3</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -71,6 +71,7 @@
             <div class="flex items-center gap-2"><div class="w-1 h-1 bg-cyan-500 rounded-full"></div> Time-of-Day Profile Analysis</div>
             <div class="flex items-center gap-2"><div class="w-1 h-1 bg-cyan-500 rounded-full"></div> Export Data to CSV</div>
             <div class="flex items-center gap-2"><div class="w-1 h-1 bg-cyan-500 rounded-full"></div> Calibration Offset Mode</div>
+            <div class="flex items-center gap-2"><div class="w-1 h-1 bg-cyan-500 rounded-full"></div> Data Stabilization Indicator</div>
         </div>
         <button onclick="location.reload()" class="w-full py-5 bg-zinc-800 text-zinc-400 font-black text-[10px] uppercase rounded-xl">Refresh Core</button>
     </div>
@@ -83,10 +84,9 @@
     </nav>
 
     <script>
-        // --- CONFIG & DATA ---
-        const DB_KEY = 'GRV_V15_2_FINAL';
-        const GEOFENCE_RADIUS = 0.05; // 50m
-        const SAFE_ZONE = 5.0; // 5s Buffer
+        const DB_KEY = 'GRV_V15_3_MASTER';
+        const GEOFENCE_RADIUS = 0.05; 
+        const SAFE_ZONE = 5.0; 
 
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let isArmed = false, isStopped = false, startMark = 0, timerInterval = null, map = null;
@@ -114,13 +114,11 @@
             }
         }
 
-        // --- ENGINE ---
         function startTimer() {
             if (isStopped || !isArmed) return;
             isStopped = true;
             startMark = Date.now();
             
-            // Check Geofence
             activeIntersection = storage.find(e => getDistance(lastCoords.lat, lastCoords.lon, e.lat, e.lon) <= GEOFENCE_RADIUS);
             
             const lStat = document.getElementById('loc-status');
@@ -152,28 +150,29 @@
             const t = document.getElementById('timer-display');
             const dStat = document.getElementById('data-status');
             
-            // 1. Grey Safe Zone
+            // 1. Grey Safe Zone (0-5s)
             if (sec < SAFE_ZONE) { 
                 t.style.color = "#71717a"; 
                 dStat.innerText = "SAFE ZONE"; 
                 return; 
             }
 
-            // Target Calc
-            let targetAvg = 180;
-            if (activeIntersection) {
-                const localData = storage.filter(e => getDistance(activeIntersection.lat, activeIntersection.lon, e.lat, e.lon) <= GEOFENCE_RADIUS);
-                targetAvg = localData.reduce((s, i) => s + i.d, 0) / localData.length;
-            } else if (storage.length > 0) {
-                targetAvg = storage.reduce((s, i) => s + i.d, 0) / storage.length;
+            // 2. White Training Phase (Requires 4 records to start color spectrum)
+            if (storage.length < 4) {
+                t.style.color = "#ffffff";
+                dStat.innerText = `DATA COLLECTING (${storage.length}/4)`;
+                return;
             }
 
-            // 2. White (Post-Safe Zone Initial Collection)
-            // Show white until 10% of the average is hit or first 10s
-            if (sec < Math.max(10, targetAvg * 0.1)) {
-                t.style.color = "#ffffff";
-                dStat.innerText = "DATA COLLECTING";
-                return;
+            // Target Calculation
+            let targetAvg = 0;
+            if (activeIntersection) {
+                const localData = storage.filter(e => getDistance(activeIntersection.lat, activeIntersection.lon, e.lat, e.lon) <= GEOFENCE_RADIUS);
+                targetAvg = localData.length >= 2 ? 
+                    localData.reduce((s, i) => s + i.d, 0) / localData.length :
+                    storage.reduce((s, i) => s + i.d, 0) / storage.length;
+            } else {
+                targetAvg = storage.reduce((s, i) => s + i.d, 0) / storage.length;
             }
 
             const third = targetAvg / 3;
