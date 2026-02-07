@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V15.7</title>
+    <title>Gravity Intel V15.8</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -15,15 +15,12 @@
         
         body { 
             font-family: 'JetBrains Mono', monospace; 
-            background: var(--bg); 
-            color: var(--accent); 
-            margin: 0; 
-            overflow: hidden; 
-            height: 100vh; 
+            background: var(--bg); color: var(--accent); 
+            margin: 0; overflow: hidden; height: 100vh; 
             padding-top: env(safe-area-inset-top); 
         }
         
-        #map-canvas { height: 100%; width: 100%; background: #111; z-index: 10; }
+        #map-canvas { height: 100%; width: 100%; background: #eee; z-index: 10; }
         
         .page { display: none; width: 100vw; height: calc(100vh - 85px); flex-direction: column; overflow-y: auto; }
         .active-page { display: flex; }
@@ -44,17 +41,14 @@
         
         .map-controls { position: absolute; bottom: 100px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
         .map-btn { 
-            background: #18181b; color: var(--accent); border: 1px solid #333; 
+            background: white; color: #111; border: 2px solid #ddd; 
             border-radius: 12px; width: 50px; height: 50px; 
             display: flex; align-items: center; justify-content: center; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5); 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); 
         }
         .btn-heat-active { background: #ff4444 !important; color: white !important; border-color: #ff4444; }
 
         #timer-display { font-size: 26vw; font-weight: 800; line-height: 1; transition: color 0.4s; color: #18181b; }
-        
-        .filter-chip { font-size: 8px; font-weight: 800; padding: 4px 12px; border-radius: 4px; border: 1px solid #222; color: #444; }
-        .filter-active { border-color: var(--accent); color: var(--accent); background: rgba(0, 242, 255, 0.05); }
     </style>
 </head>
 <body>
@@ -63,7 +57,7 @@
         <div class="grid grid-cols-2 gap-2 mb-4 text-center">
             <div class="bg-zinc-900 border border-zinc-800 p-3 rounded-xl">
                 <span class="text-[8px] opacity-40 uppercase block mb-1">Context</span>
-                <span id="loc-status" class="text-[9px] font-bold text-cyan-400 uppercase tracking-widest">GPS SEARCHING</span>
+                <span id="loc-status" class="text-[9px] font-bold text-cyan-400 uppercase">GPS SEARCHING</span>
             </div>
             <div class="bg-zinc-900 border border-zinc-800 p-3 rounded-xl">
                 <span class="text-[8px] opacity-40 uppercase block mb-1">Velocity</span>
@@ -74,13 +68,13 @@
         <div class="w-full bg-zinc-900 h-1.5 rounded-full overflow-hidden border border-zinc-800">
             <div id="stabilization-bar" class="h-full bg-cyan-500 transition-all duration-700" style="width: 0%"></div>
         </div>
-        <div id="stabilization-label" class="text-[7px] font-bold opacity-30 mt-2 uppercase tracking-[0.2em] text-center mb-6">DATA UNSTABLE</div>
+        <div id="stabilization-label" class="text-[7px] font-bold opacity-30 mt-2 uppercase text-center mb-6">0% STABILIZED</div>
 
         <div class="flex-1 flex flex-col justify-center text-center">
             <div id="timer-display">0.0</div>
             <div id="data-status" class="text-[9px] mt-2 font-bold opacity-60 uppercase tracking-widest">SYSTEM IDLE</div>
             <div class="mt-12">
-                <button id="btn-master" onclick="toggleSystem()" class="w-full py-5 bg-cyan-500 text-black font-black text-xs uppercase rounded-2xl shadow-[0_10px_30px_rgba(0,242,255,0.2)] active:scale-95 transition-transform">Initiate Engine</button>
+                <button id="btn-master" onclick="toggleSystem()" class="w-full py-5 bg-cyan-500 text-black font-black text-xs uppercase rounded-2xl shadow-[0_10px_30px_rgba(0,242,255,0.2)]">Initiate Engine</button>
             </div>
         </div>
     </div>
@@ -89,30 +83,29 @@
         <div id="map-canvas"></div>
         <div class="map-controls">
             <button id="heat-toggle" onclick="toggleHeatmap()" class="map-btn">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c1.4 0 2.5 1.1 2.5 2.5a2.5 2.5 0 1 1-5 0C9.5 3.1 10.6 2 12 2z"></path><path d="M12 11c3.5 0 7 2 7 6v2a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-2c0-4 3.5-6 7-6z"></path></svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2c1.4 0 2.5 1.1 2.5 2.5a2.5 2.5 0 1 1-5 0C9.5 3.1 10.6 2 12 2z"></path><path d="M12 11c3.5 0 7 2 7 6v2a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-2c0-4 3.5-6 7-6z"></path></svg>
             </button>
             <button onclick="recenterMap()" class="map-btn">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line></svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg>
             </button>
         </div>
     </div>
     
     <div id="page-history" class="page p-4">
         <div class="flex justify-between items-center mb-4">
-            <h2 class="text-white font-black text-xs uppercase tracking-tighter text-cyan-400">Geospatial Logs</h2>
-            <button onclick="clearLogs()" class="text-red-500 text-[8px] font-bold bg-red-500/10 px-3 py-1 rounded-full">WIPE ALL</button>
+            <h2 class="text-white font-black text-xs uppercase text-cyan-400">Geospatial Logs</h2>
+            <button onclick="clearLogs()" class="text-red-500 text-[8px] font-bold bg-red-500/10 px-3 py-1 rounded-full">WIPE</button>
         </div>
         <div id="history-list" class="space-y-2 pb-20"></div>
     </div>
 
     <div id="page-about" class="page p-8 text-center">
-        <div class="text-[10px] text-zinc-500 uppercase font-bold mb-4 tracking-widest">Gravity Intel V15.7</div>
+        <div class="text-[10px] text-zinc-500 uppercase font-bold mb-4 tracking-widest">Gravity Intel V15.8</div>
         <div class="bg-zinc-900 p-6 rounded-2xl border border-zinc-800 text-[9px] text-left text-zinc-400 space-y-3 mb-10">
-            <div class="flex items-center gap-2 font-bold text-white"><div class="w-1.5 h-1.5 bg-cyan-400 rounded-full"></div> Heatmap Layer: <span class="text-cyan-400">ACTIVE</span></div>
-            <div class="flex items-center gap-2 font-bold text-white"><div class="w-1.5 h-1.5 bg-green-500 rounded-full"></div> Geofencing: <span class="text-green-500">50M RADIUS</span></div>
-            <div class="flex items-center gap-2 font-bold text-white"><div class="w-1.5 h-1.5 bg-orange-500 rounded-full"></div> Safe Zone: <span class="text-orange-500">5.0s</span></div>
+            <div class="flex items-center gap-2 font-bold text-white"><div class="w-1.5 h-1.5 bg-green-500 rounded-full"></div> Map Style: <span class="text-green-500">VOYAGER COLOR</span></div>
+            <div class="flex items-center gap-2 font-bold text-white"><div class="w-1.5 h-1.5 bg-cyan-400 rounded-full"></div> Heatmap: <span class="text-cyan-400">MULTI-SPECTRUM</span></div>
         </div>
-        <p class="text-[8px] leading-relaxed opacity-30 uppercase tracking-widest">Standalone sensor suite for local velocity and duration analysis.</p>
+        <button onclick="location.reload()" class="w-full py-4 bg-zinc-800 text-zinc-400 font-bold text-[9px] uppercase rounded-xl">Reboot Core</button>
     </div>
 
     <nav class="nav-bar">
@@ -124,12 +117,12 @@
 
     <script>
         const DB_KEY = 'GRV_V15_MASTER';
-        const GEOFENCE_RADIUS = 0.05; // 50 meters
+        const GEOFENCE_RADIUS = 0.05; 
         const SAFE_ZONE = 5.0; 
 
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let isArmed = false, isStopped = false, startMark = 0, timerInterval = null;
-        let map = null, userMarker = null, heatLayer = null;
+        let map = null, userMarker = null, heatLayer = null, historyGroup = null;
         let lastCoords = { lat: 0, lon: 0 }, isHeatmapMode = false;
 
         function getDistance(lat1, lon1, lat2, lon2) {
@@ -145,7 +138,7 @@
             const bar = document.getElementById('stabilization-bar');
             if(bar) {
                 bar.style.width = `${stability}%`;
-                document.getElementById('stabilization-label').innerText = `${stability.toFixed(0)}% DATA STABILITY`;
+                document.getElementById('stabilization-label').innerText = `${stability.toFixed(0)}% STABILIZED`;
                 bar.style.backgroundColor = stability < 30 ? "#ef4444" : (stability < 70 ? "#f97316" : "#22c55e");
             }
         }
@@ -154,9 +147,7 @@
             if (isStopped || !isArmed) return;
             isStopped = true;
             startMark = Date.now();
-            const activeMatch = storage.find(e => getDistance(lastCoords.lat, lastCoords.lon, e.lat, e.lon) <= GEOFENCE_RADIUS);
-            document.getElementById('loc-status').innerText = activeMatch ? "GEOLOCKED" : "COLLECTING";
-            
+            document.getElementById('loc-status').innerText = "COLLECTING";
             timerInterval = setInterval(() => {
                 const elapsed = (Date.now() - startMark) / 1000;
                 document.getElementById('timer-display').innerText = elapsed.toFixed(1);
@@ -169,40 +160,33 @@
             isStopped = false;
             clearInterval(timerInterval);
             const duration = parseFloat(((Date.now() - startMark) / 1000).toFixed(1));
-            
             if (duration >= SAFE_ZONE) {
                 storage.push({ d: duration, ts: Date.now(), lat: lastCoords.lat, lon: lastCoords.lon });
                 localStorage.setItem(DB_KEY, JSON.stringify(storage));
                 updateStability();
+                if(map) renderMapMarkers();
             }
             resetDisplay();
         }
 
         function updateColors(sec) {
             const t = document.getElementById('timer-display');
-            const dStat = document.getElementById('data-status');
-            if (sec < SAFE_ZONE) { t.style.color = "#3f3f46"; dStat.innerText = "SAFE ZONE"; return; }
-            
+            if (sec < SAFE_ZONE) { t.style.color = "#3f3f46"; return; }
             let avg = storage.length > 0 ? storage.reduce((s, i) => s + i.d, 0) / storage.length : 20;
-            if (sec <= avg * 0.7) { t.style.color = "#22c55e"; dStat.innerText = "OPTIMAL"; }
-            else if (sec <= avg * 1.2) { t.style.color = "#f97316"; dStat.innerText = "AVERAGE"; }
-            else { t.style.color = "#ef4444"; dStat.innerText = "DELAYED"; }
+            t.style.color = sec <= avg * 0.7 ? "#22c55e" : (sec <= avg * 1.2 ? "#f97316" : "#ef4444");
         }
 
         function toggleSystem() {
             isArmed = !isArmed;
             const btn = document.getElementById('btn-master');
             btn.innerText = isArmed ? "STANDBY" : "INITIATE ENGINE";
-            btn.style.background = isArmed ? "transparent" : "";
-            btn.style.color = isArmed ? "#52525b" : "";
-            btn.style.border = isArmed ? "1px solid #27272a" : "none";
+            btn.style.opacity = isArmed ? "0.5" : "1";
             if(!isArmed) stopTimer();
         }
 
         function resetDisplay() {
             document.getElementById('timer-display').innerText = "0.0";
             document.getElementById('timer-display').style.color = "#18181b";
-            document.getElementById('data-status').innerText = "SYSTEM IDLE";
             document.getElementById('loc-status').innerText = isArmed ? "READY" : "GPS SEARCHING";
         }
 
@@ -211,31 +195,40 @@
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
             document.getElementById('page-'+n).classList.add('active-page');
             document.getElementById('tab-'+n).classList.add('nav-btn-active');
-            if(n === 'map') { 
-                initMap(); 
-                setTimeout(() => { if(map) map.invalidateSize(); }, 300); 
-            }
+            if(n === 'map') { initMap(); setTimeout(() => map.invalidateSize(), 300); }
             if(n === 'history') renderHistory();
+        }
+
+        function initMap() {
+            if (map) return;
+            map = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView([lastCoords.lat, lastCoords.lon], 16);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
+            userMarker = L.circleMarker([lastCoords.lat, lastCoords.lon], { radius: 8, color: '#fff', weight: 3, fillColor: '#00f2ff', fillOpacity: 1 }).addTo(map);
+            historyGroup = L.layerGroup().addTo(map);
+            renderMapMarkers();
+        }
+
+        function renderMapMarkers() {
+            if (!historyGroup) return;
+            historyGroup.clearLayers();
+            let avg = storage.length > 0 ? storage.reduce((s, i) => s + i.d, 0) / storage.length : 20;
+            storage.forEach(item => {
+                let color = item.d <= avg * 0.7 ? "#22c55e" : (item.d <= avg * 1.2 ? "#f97316" : "#ef4444");
+                L.circle([item.lat, item.lon], { radius: 12, color: color, fillColor: color, fillOpacity: 0.5 }).addTo(historyGroup);
+            });
         }
 
         function toggleHeatmap() {
             if (!map) return;
             isHeatmapMode = !isHeatmapMode;
             document.getElementById('heat-toggle').classList.toggle('btn-heat-active', isHeatmapMode);
-            
             if (isHeatmapMode) {
                 const heatPoints = storage.map(i => [i.lat, i.lon, Math.min(i.d / 30, 1)]); 
-                heatLayer = L.heatLayer(heatPoints, {radius: 25, blur: 15, maxZoom: 17}).addTo(map);
-            } else if (heatLayer) {
-                map.removeLayer(heatLayer);
-            }
-        }
-
-        function initMap() {
-            if (map) return;
-            map = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView([lastCoords.lat, lastCoords.lon], 15);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
-            userMarker = L.circleMarker([lastCoords.lat, lastCoords.lon], { radius: 6, color: '#00f2ff', fillColor: '#00f2ff', fillOpacity: 1 }).addTo(map);
+                heatLayer = L.heatLayer(heatPoints, {
+                    radius: 25, blur: 15, 
+                    gradient: {0.2: 'blue', 0.4: 'cyan', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red'}
+                }).addTo(map);
+            } else if (heatLayer) { map.removeLayer(heatLayer); }
         }
 
         function recenterMap() { if (map) map.panTo([lastCoords.lat, lastCoords.lon]); }
@@ -246,35 +239,23 @@
             [...storage].reverse().slice(0, 50).forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800 flex justify-between items-center';
-                div.innerHTML = `
-                    <div>
-                        <div class="text-white text-xs font-black">${item.d}s</div>
-                        <div class="text-[7px] text-zinc-500 uppercase mt-1">${new Date(item.ts).toLocaleTimeString()}</div>
-                    </div>
-                    <button onclick="tab('map'); setTimeout(()=>map.flyTo([${item.lat}, ${item.lon}], 18), 400)" class="h-8 px-4 bg-zinc-800 text-cyan-400 text-[8px] font-bold rounded-xl uppercase">Map</button>
-                `;
+                div.innerHTML = `<div><div class="text-white text-xs font-black">${item.d}s</div><div class="text-[7px] text-zinc-500 uppercase">${new Date(item.ts).toLocaleTimeString()}</div></div>`;
                 list.appendChild(div);
             });
         }
 
-        function clearLogs() { if(confirm("PERMANENTLY WIPE ALL DATA?")) { storage = []; localStorage.removeItem(DB_KEY); updateStability(); renderHistory(); } }
+        function clearLogs() { if(confirm("WIPE DATA?")) { storage = []; localStorage.removeItem(DB_KEY); updateStability(); if(historyGroup) historyGroup.clearLayers(); renderHistory(); } }
 
-        // Core Tracking Logic
         if ("geolocation" in navigator) {
             navigator.geolocation.watchPosition((pos) => {
                 lastCoords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-                const speed = (pos.coords.speed || 0) * 3.6; // Convert m/s to km/h
+                const speed = (pos.coords.speed || 0) * 3.6;
                 document.getElementById('speed-display').innerText = speed.toFixed(1) + " KM/H";
-                
                 if (isArmed && speed < 2.0 && !isStopped) startTimer();
                 else if (isStopped && speed > 5.0) stopTimer();
-                
                 if (userMarker) userMarker.setLatLng([lastCoords.lat, lastCoords.lon]);
-            }, (err) => {
-                document.getElementById('loc-status').innerText = "GPS ERROR";
-            }, { enableHighAccuracy: true });
+            }, null, { enableHighAccuracy: true });
         }
-
         updateStability();
     </script>
 </body>
