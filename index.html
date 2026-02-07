@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V14.6</title>
+    <title>Gravity Intel V14.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -11,19 +11,25 @@
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
         :root { --accent: #00f2ff; --bg: #050505; }
         body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; padding-top: env(safe-area-inset-top); }
-        #map-canvas { height: 100%; width: 100%; background: #111; }
+        
+        /* Map Visibility Fixes */
+        #map-canvas { height: 100%; width: 100%; background: #ddd; filter: saturate(1.1) contrast(1.1); }
+        
         .page { display: none; width: 100vw; height: calc(100vh - 85px); flex-direction: column; overflow-y: auto; }
         .active-page { display: flex; }
+        
+        /* Navigation */
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 2000; padding-bottom: env(safe-area-inset-bottom); }
         .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; color: inherit; border: none; background: none; transition: 0.3s; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 2px solid var(--accent); }
-        #timer-display { font-size: 26vw; font-weight: 800; line-height: 1; transition: color 0.4s; color: #18181b; }
         
+        /* Timer Aesthetics */
+        #timer-display { font-size: 26vw; font-weight: 800; line-height: 1; transition: color 0.4s; color: #18181b; }
         @keyframes record-alert {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(0.98); }
+            0%, 100% { opacity: 1; transform: scale(1); filter: brightness(1); }
+            50% { opacity: 0.6; transform: scale(0.95); filter: brightness(1.5); }
         }
-        .flash-red { animation: record-alert 0.5s infinite; color: #ff3b30 !important; text-shadow: 0 0 30px rgba(255,59,48,0.7); }
+        .flash-red { animation: record-alert 0.4s infinite; color: #ff3b30 !important; text-shadow: 0 0 40px rgba(255,59,48,0.6); }
     </style>
 </head>
 <body>
@@ -31,23 +37,23 @@
     <div id="page-dash" class="page active-page p-6">
         <div class="grid grid-cols-2 gap-2 mb-6 text-center">
             <div class="bg-zinc-900 border border-zinc-800 p-3 rounded">
-                <span class="text-[8px] opacity-40 uppercase block text-zinc-400">System Status</span>
+                <span class="text-[8px] opacity-40 uppercase block text-zinc-400">Telemetry</span>
                 <span id="gps-status-text" class="text-[10px] font-bold text-red-500 uppercase">OFFLINE</span>
             </div>
             <div class="bg-zinc-900 border border-zinc-800 p-3 rounded">
-                <span class="text-[8px] opacity-40 uppercase block text-zinc-400">Live Speed</span>
+                <span class="text-[8px] opacity-40 uppercase block text-zinc-400">Velocity</span>
                 <span id="speed-display" class="text-[10px] font-bold text-white uppercase">0.0 KM/H</span>
             </div>
         </div>
 
         <div class="flex-1 flex flex-col justify-center text-center">
             <div id="timer-display">0.0</div>
-            <div id="data-status" class="text-[9px] mt-2 font-bold opacity-60 tracking-[0.2em] uppercase text-white">READY TO TRACK</div>
+            <div id="data-status" class="text-[9px] mt-2 font-bold opacity-60 tracking-[0.2em] uppercase text-white">READY</div>
             <div id="record-msg" class="text-[10px] mt-4 font-bold text-red-500 hidden uppercase tracking-widest">RECORD BREAKING STOP</div>
             
             <div class="mt-12 space-y-3">
-                <button id="btn-enable" onclick="engineControl(true)" class="w-full py-5 bg-cyan-500 text-black font-black text-xs uppercase rounded-full">Enable Tracking</button>
-                <button id="btn-disable" onclick="engineControl(false)" class="w-full py-5 border border-zinc-700 text-zinc-500 font-black text-xs uppercase rounded-full hidden">Disable System</button>
+                <button id="btn-enable" onclick="engineControl(true)" class="w-full py-5 bg-cyan-500 text-black font-black text-xs uppercase rounded-full">Initiate System</button>
+                <button id="btn-disable" onclick="engineControl(false)" class="w-full py-5 border border-zinc-700 text-zinc-500 font-black text-xs uppercase rounded-full hidden">Standby Mode</button>
             </div>
         </div>
     </div>
@@ -55,26 +61,32 @@
     <div id="page-map" class="page" style="padding:0; overflow:hidden;"><div id="map-canvas"></div></div>
     
     <div id="page-history" class="page p-4">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-white font-black text-xs uppercase">Intelligent Log</h2>
-            <button onclick="clearLogs()" class="text-red-500 text-[8px] font-bold">WIPE DATA</button>
+        <div class="flex justify-between items-end mb-6">
+            <div>
+                <h2 class="text-white font-black text-xs uppercase">Intelligent Log</h2>
+                <button onclick="toggleSort()" class="text-cyan-400 text-[8px] font-bold uppercase tracking-widest mt-1">
+                    Sorting: <span id="sort-label">NEWEST</span>
+                </button>
+            </div>
+            <button onclick="clearLogs()" class="text-red-500 text-[8px] font-bold bg-red-500/10 px-4 py-2 rounded-full">WIPE ALL</button>
         </div>
-        <div id="history-list" class="space-y-2"></div>
+        <div id="history-list" class="space-y-2 pb-20"></div>
     </div>
 
     <div id="page-about" class="page p-8 text-center">
-        <div class="text-[11px] font-black text-white uppercase mb-4">Gravity Intel V14.6</div>
-        <div id="stats-avg" class="text-[10px] text-cyan-400 mb-10 uppercase tracking-widest font-bold">AVG: ---s</div>
+        <div class="text-[11px] font-black text-white uppercase mb-4">Gravity Intel V14.7</div>
+        <div id="stats-avg" class="text-[12px] text-cyan-400 mb-2 uppercase tracking-widest font-bold">AVG: ---s</div>
+        <div id="stats-count" class="text-[8px] text-zinc-500 mb-10 uppercase font-bold">Points Collected: 0</div>
         
         <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl mb-10 text-left">
-            <h3 class="text-[9px] font-bold text-white mb-4 uppercase">Logic Profile</h3>
-            <p class="text-[9px] text-zinc-500 leading-relaxed uppercase">
-                Dynamic average is calculated over all stored sessions. 
-                Zones are segmented into equal 33% tiers of your historical mean.
-            </p>
+            <h3 class="text-[9px] font-bold text-white mb-4 uppercase">Dynamic Logic Rules</h3>
+            <ul class="text-[9px] text-zinc-500 space-y-2 uppercase leading-relaxed">
+                <li>• Safe Zone Buffer: 5.0s (Ignored)</li>
+                <li>• Learning Phase: 4 Stops Required</li>
+                <li>• Color Zones: Calculated at 33% intervals of Mean</li>
+            </ul>
         </div>
-
-        <button onclick="location.reload()" class="w-full py-6 bg-white text-black font-black text-[12px] rounded-2xl">REBOOT SYSTEM</button>
+        <button onclick="location.reload()" class="w-full py-6 bg-white text-black font-black text-[12px] rounded-2xl">HARD REBOOT</button>
     </div>
 
     <nav class="nav-bar">
@@ -85,27 +97,29 @@
     </nav>
 
     <script>
-        // --- DATA PERSISTENCE ---
+        // --- DATA PERSISTENCE & CONFIG ---
         const DB_KEY = 'GRV_LEARN_DATA_V14';
         const REC_KEY = 'GRV_REC_V14';
-        const INDUSTRY_STANDARD = 180;
+        const INDUSTRY_STD = 180;
+        const SAFE_ZONE = 5.0; 
 
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let recordHigh = parseFloat(localStorage.getItem(REC_KEY) || '0');
         let GLOBAL_AVG = 180; 
+        let currentSort = 'time';
 
         // --- ENGINE STATE ---
-        let isArmed = false, isStopped = false, startMark = 0, timerInterval = null, currentSpeed = 0.0;
-        let map = null;
+        let isArmed = false, isStopped = false, startMark = 0, timerInterval = null, currentSpeed = 0.0, map = null;
 
         function recalculateGlobalAverage() {
-            if (storage.length < 1) {
-                GLOBAL_AVG = INDUSTRY_STANDARD;
-            } else {
+            if (storage.length > 0) {
                 const total = storage.reduce((sum, item) => sum + item.d, 0);
                 GLOBAL_AVG = total / storage.length;
+            } else {
+                GLOBAL_AVG = INDUSTRY_STD;
             }
             document.getElementById('stats-avg').innerText = `AVG: ${GLOBAL_AVG.toFixed(1)}S`;
+            document.getElementById('stats-count').innerText = `Points Collected: ${storage.length}`;
         }
 
         function tab(n) {
@@ -115,11 +129,10 @@
             document.getElementById('tab-'+n).classList.add('nav-btn-active');
             if(n === 'map') initMap();
             if(n === 'history') renderHistory();
-            if(n === 'about') recalculateGlobalAverage();
         }
 
         function startTimer() {
-            if (isStopped) return; 
+            if (isStopped || !isArmed) return;
             isStopped = true;
             startMark = Date.now();
             if(timerInterval) clearInterval(timerInterval);
@@ -134,126 +147,132 @@
             if (!isStopped) return;
             isStopped = false;
             clearInterval(timerInterval);
-            const duration = ((Date.now() - startMark) / 1000).toFixed(1);
+            const duration = parseFloat(((Date.now() - startMark) / 1000).toFixed(1));
             
-            if (parseFloat(duration) >= 1.0) {
-                storage.push({ d: parseFloat(duration), ts: Date.now() });
+            if (duration >= SAFE_ZONE) {
+                storage.push({ d: duration, ts: Date.now() });
                 localStorage.setItem(DB_KEY, JSON.stringify(storage));
-                if (parseFloat(duration) > recordHigh) {
-                    recordHigh = parseFloat(duration);
+                if (duration > recordHigh) {
+                    recordHigh = duration;
                     localStorage.setItem(REC_KEY, recordHigh.toString());
                 }
                 recalculateGlobalAverage();
             }
-            
             resetDisplay();
         }
 
-        function resetDisplay() {
+        function updateColors(sec) {
             const t = document.getElementById('timer-display');
-            t.innerText = "0.0";
-            t.style.color = storage.length < 4 ? "#ffffff" : "#4cd964";
-            t.classList.remove('flash-red');
-            document.getElementById('record-msg').classList.add('hidden');
+            const dStatus = document.getElementById('data-status');
+            const rMsg = document.getElementById('record-msg');
+
+            // Safe Zone Check
+            if (sec < SAFE_ZONE) {
+                t.style.color = "#27272a"; 
+                dStatus.innerText = "SAFE ZONE BUFFER";
+                return;
+            }
+
+            // Learning Check
+            if (storage.length < 4) {
+                t.style.color = "#ffffff";
+                dStatus.innerText = `LEARNING (${storage.length}/4)`;
+                return;
+            }
+
+            // Record High Check
+            if (sec > recordHigh && recordHigh > 0) {
+                t.classList.add('flash-red');
+                rMsg.classList.remove('hidden');
+                return;
+            } else {
+                t.classList.remove('flash-red');
+                rMsg.classList.add('hidden');
+            }
+
+            // Dynamic Average Logic (33% Brackets)
+            const zoneSize = GLOBAL_AVG / 3;
+            if (sec <= zoneSize) {
+                t.style.color = "#4cd964"; // Green
+                dStatus.innerText = "OPTIMAL WAIT";
+            } else if (sec <= zoneSize * 2) {
+                t.style.color = "#ffcc00"; // Orange
+                dStatus.innerText = "AVERAGE WAIT";
+            } else {
+                t.style.color = "#ff3b30"; // Red
+                dStatus.innerText = GLOBAL_AVG > INDUSTRY_STD ? "CRITICAL (LVL F)" : "ABOVE AVERAGE";
+            }
+        }
+
+        function toggleSort() {
+            currentSort = (currentSort === 'time') ? 'duration' : 'time';
+            document.getElementById('sort-label').innerText = currentSort.toUpperCase();
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            let data = [...storage];
+            if(currentSort === 'duration') data.sort((a,b) => b.d - a.d);
+            else data.sort((a,b) => b.ts - a.ts);
+
+            list.innerHTML = data.length ? '' : '<div class="text-center py-20 opacity-20 text-[10px]">EMPTY LOG</div>';
+            data.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center bg-zinc-900/50 p-4 rounded-xl border border-zinc-800';
+                div.innerHTML = `<div><div class="text-[10px] font-bold text-white">${item.d}s</div><div class="text-[7px] opacity-40 uppercase">${new Date(item.ts).toLocaleDateString()}</div></div><div class="text-[8px] opacity-40 uppercase">${new Date(item.ts).toLocaleTimeString()}</div>`;
+                list.appendChild(div);
+            });
+        }
+
+        function initMap() {
+            if (map) return;
+            map = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView([0,0], 2);
+            // High contrast 'Voyager' tiles for better visibility
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
+            setTimeout(() => map.invalidateSize(), 300);
         }
 
         function engineControl(state) {
             isArmed = state;
             const statusText = document.getElementById('gps-status-text');
-            if (state) {
-                statusText.innerText = "ONLINE";
-                statusText.style.color = "#4cd964";
-                document.getElementById('btn-enable').classList.add('hidden');
-                document.getElementById('btn-disable').classList.remove('hidden');
-                if (currentSpeed < 1.0) startTimer();
-            } else {
-                statusText.innerText = "OFFLINE";
-                statusText.style.color = "#ff3b30";
-                document.getElementById('btn-enable').classList.remove('hidden');
-                document.getElementById('btn-disable').classList.add('hidden');
-                stopTimer();
-            }
+            statusText.innerText = state ? "ONLINE" : "OFFLINE";
+            statusText.style.color = state ? "#4cd964" : "#ff3b30";
+            document.getElementById('btn-enable').classList.toggle('hidden', state);
+            document.getElementById('btn-disable').classList.toggle('hidden', !state);
+            if (!state) stopTimer();
         }
 
-        function updateColors(sec) {
+        function resetDisplay() {
             const t = document.getElementById('timer-display');
-            const rMsg = document.getElementById('record-msg');
-            const dStatus = document.getElementById('data-status');
-
-            // 1. Data Gathering Phase
-            if (storage.length < 4) {
-                t.style.color = "#ffffff";
-                dStatus.innerText = `LEARNING ROUTE (${storage.length}/4)`;
-                return;
-            }
-
-            // 2. Personal Record Alert
-            if (recordHigh > 0 && sec > recordHigh) {
-                t.classList.add('flash-red');
-                rMsg.classList.remove('hidden');
-                return;
-            }
+            t.innerText = "0.0";
+            t.style.color = "#18181b";
             t.classList.remove('flash-red');
-            rMsg.classList.add('hidden');
-
-            // 3. Dynamic 33% Split
-            const zoneSize = GLOBAL_AVG / 3;
-            if (sec <= zoneSize) {
-                t.style.color = "#4cd964";
-                dStatus.innerText = "BELOW AVERAGE";
-            } else if (sec <= zoneSize * 2) {
-                t.style.color = "#ffcc00";
-                dStatus.innerText = "TYPICAL WAIT";
-            } else {
-                t.style.color = "#ff3b30";
-                dStatus.innerText = (GLOBAL_AVG > INDUSTRY_STANDARD) ? "POOR (VS INDUSTRY)" : "ABOVE AVERAGE";
-            }
-        }
-
-        function updateLogic(speed) {
-            currentSpeed = speed;
-            document.getElementById('speed-display').innerText = speed.toFixed(1) + " KM/H";
-            if (!isArmed) return;
-            if (speed < 1.0 && !isStopped) startTimer();
-            else if (speed > 4.0 && isStopped) stopTimer();
-        }
-
-        function renderHistory() {
-            const list = document.getElementById('history-list');
-            list.innerHTML = storage.length ? '' : '<div class="text-center py-20 opacity-20 text-[10px]">NO DATA</div>';
-            [...storage].reverse().slice(0, 50).forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'flex justify-between items-center bg-zinc-900/50 p-3 rounded border border-zinc-800 mb-2';
-                div.innerHTML = `<div class="text-[10px] font-bold text-white">${item.d}s STOP</div><div class="text-[8px] opacity-40 uppercase">${new Date(item.ts).toLocaleTimeString()}</div>`;
-                list.appendChild(div);
-            });
+            document.getElementById('record-msg').classList.add('hidden');
         }
 
         function clearLogs() {
-            if(confirm("DELETE HISTORY?")) { 
+            if(confirm("WIPE SYSTEM MEMORY?")) {
                 storage = []; recordHigh = 0;
-                localStorage.removeItem(DB_KEY); 
+                localStorage.removeItem(DB_KEY);
                 localStorage.removeItem(REC_KEY);
                 recalculateGlobalAverage();
-                renderHistory(); 
+                renderHistory();
             }
         }
 
-        function initMap() {
-            if (map) return;
-            map = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView([-33.86, 151.20], 15);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
-        }
-
         if ("geolocation" in navigator) {
-            navigator.geolocation.watchPosition(
-                (pos) => updateLogic(pos.coords.speed * 3.6 || 0),
-                (err) => console.warn(err),
-                { enableHighAccuracy: true }
-            );
+            navigator.geolocation.watchPosition((pos) => {
+                const speed = (pos.coords.speed || 0) * 3.6;
+                currentSpeed = speed;
+                document.getElementById('speed-display').innerText = speed.toFixed(1) + " KM/H";
+                if (isArmed) {
+                    if (speed < 2.0 && !isStopped) startTimer();
+                    else if (speed > 5.0 && isStopped) stopTimer();
+                }
+                if (map) map.setView([pos.coords.latitude, pos.coords.longitude], 16);
+            }, null, { enableHighAccuracy: true });
         }
-
-        // Initial Logic Run
         recalculateGlobalAverage();
     </script>
 </body>
