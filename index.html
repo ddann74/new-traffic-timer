@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V14.2</title>
+    <title>Gravity Intel V13.9 - Revert</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -17,21 +17,16 @@
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 2000; padding-bottom: env(safe-area-inset-bottom); }
         .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; color: inherit; border: none; background: none; transition: 0.3s; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 2px solid var(--accent); }
-        #timer-display { font-size: 26vw; font-weight: 800; line-height: 1; transition: color 0.3s, text-shadow 0.3s; }
-        .log-entry { background: #0f0f0f; border: 1px solid #1a1a1a; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
-        .tour-overlay { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #fff; color: #000; padding: 10px 20px; border-radius: 4px; font-size: 10px; font-weight: 900; z-index: 9999; display: none; }
+        #timer-display { font-size: 26vw; font-weight: 800; line-height: 1; transition: color 0.3s; }
         
-        /* Custom Record Flash */
         @keyframes record-flash {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(0.98); }
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
         }
-        .flash-record { animation: record-flash 0.6s infinite; }
+        .flash-red { animation: record-flash 0.5s infinite; color: #ff3b30 !important; text-shadow: 0 0 20px rgba(255,59,48,0.6); }
     </style>
 </head>
 <body>
-
-    <div id="tour-box" class="tour-overlay uppercase">SYSTEM READY</div>
 
     <div id="page-dash" class="page active-page p-6">
         <div class="grid grid-cols-2 gap-2 mb-6 text-center">
@@ -41,15 +36,15 @@
             </div>
             <div class="bg-zinc-900 border border-zinc-800 p-3 rounded">
                 <span class="text-[8px] opacity-40 uppercase block">Speed</span>
-                <span id="speed-display" class="text-[10px] font-bold text-white uppercase">0.0 KM/H</span>
+                <span id="speed-display" class="text-[10px] font-bold text-white">0.0 KM/H</span>
             </div>
         </div>
 
         <div class="flex-1 flex flex-col justify-center text-center">
-            <div id="timer-display" style="color: #333;">0.0</div>
-            <div id="record-msg" class="text-[8px] mt-4 font-bold text-red-500 hidden uppercase">NEW RECORD DETECTED</div>
+            <div id="timer-display" style="color: #18181b;">0.0</div>
+            
             <div class="mt-12 space-y-3">
-                <button id="btn-enable" onclick="engineControl(true)" class="w-full py-5 bg-white text-black font-black text-xs uppercase rounded-full">Enable Tracking</button>
+                <button id="btn-enable" onclick="engineControl(true)" class="w-full py-5 bg-cyan-500 text-black font-black text-xs uppercase rounded-full">Enable Tracking</button>
                 <button id="btn-disable" onclick="engineControl(false)" class="w-full py-5 border border-zinc-700 text-zinc-500 font-black text-xs uppercase rounded-full hidden">Disable System</button>
             </div>
         </div>
@@ -68,8 +63,8 @@
     </div>
 
     <div id="page-about" class="page p-8 text-center">
-        <div class="text-[11px] font-black text-white uppercase mb-10">Gravity Intel Pro V14.2</div>
-        <button onclick="runFullTour()" class="w-full py-6 bg-cyan-500 text-black font-black text-[12px] rounded-2xl">RUN FULL SYSTEM DEMO</button>
+        <div class="text-[11px] font-black text-white uppercase mb-10">Gravity Intel V13.9.R</div>
+        <button onclick="runFullTour()" class="w-full py-6 bg-white text-black font-black text-[12px] rounded-2xl">RUN PROMO SIMULATION</button>
     </div>
 
     <nav class="nav-bar">
@@ -82,10 +77,8 @@
     <script>
         const DB_KEY = 'GRV_PRO_V14_DATA';
         const REC_KEY = 'GRV_RECORD_HIGH';
-        const GLOBAL_AVG = 180; 
-        const firstInt = GLOBAL_AVG / 3;
-        const secondInt = (GLOBAL_AVG / 3) * 2;
-
+        const GLOBAL_AVG = 180;
+        
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let recordHigh = parseFloat(localStorage.getItem(REC_KEY) || '0');
         let isArmed = false, isStopped = false, startMark = 0, timerInterval = null;
@@ -103,8 +96,8 @@
 
         function engineControl(state) {
             isArmed = state;
-            const timer = document.getElementById('timer-display');
             const statusText = document.getElementById('gps-status-text');
+            const timer = document.getElementById('timer-display');
             const btnEnable = document.getElementById('btn-enable');
             const btnDisable = document.getElementById('btn-disable');
 
@@ -117,40 +110,34 @@
             } else {
                 statusText.innerText = "OFFLINE";
                 statusText.style.color = "#ff3b30";
-                timer.style.color = "#333";
+                timer.style.color = "#18181b";
                 timer.innerText = "0.0";
+                timer.classList.remove('flash-red');
                 btnEnable.classList.remove('hidden');
                 btnDisable.classList.add('hidden');
-                document.getElementById('record-msg').classList.add('hidden');
-                timer.classList.remove('flash-record');
                 clearInterval(timerInterval);
                 isStopped = false;
             }
         }
 
-        function updateTimerVisuals(sec) {
+        function updateTimerColors(sec) {
             const t = document.getElementById('timer-display');
-            const rMsg = document.getElementById('record-msg');
-
-            // RECORD HIGH (FLASHING RED)
+            
+            // Record High Flash
             if (recordHigh > 0 && sec > recordHigh) {
-                t.style.color = "#ff3b30";
-                t.style.textShadow = "0 0 30px rgba(255, 59, 48, 0.8)";
-                t.classList.add('flash-record');
-                rMsg.classList.remove('hidden');
+                t.classList.add('flash-red');
                 return;
             }
+            t.classList.remove('flash-red');
 
-            // INTERVAL COLORING
-            if (sec <= firstInt) {
-                t.style.color = "#4cd964"; // GREEN
-            } else if (sec <= secondInt) {
-                t.style.color = "#ffcc00"; // ORANGE
+            // Interval Logic
+            if (sec <= (GLOBAL_AVG / 3)) {
+                t.style.color = "#4cd964"; // Green
+            } else if (sec <= (GLOBAL_AVG / 3) * 2) {
+                t.style.color = "#ffcc00"; // Orange
             } else {
-                t.style.color = "#ff3b30"; // RED
+                t.style.color = "#ff3b30"; // Red
             }
-            t.classList.remove('flash-record');
-            rMsg.classList.add('hidden');
         }
 
         function updateLogic(speed) {
@@ -160,11 +147,10 @@
             
             if (speed < 1.0 && !isStopped) {
                 isStopped = true; startMark = Date.now();
-                if(timerInterval) clearInterval(timerInterval); 
                 timerInterval = setInterval(() => { 
                     const elapsed = (Date.now() - startMark)/1000;
-                    t.innerText = elapsed.toFixed(1); 
-                    updateTimerVisuals(elapsed);
+                    t.innerText = elapsed.toFixed(1);
+                    updateTimerColors(elapsed);
                 }, 100);
             } else if (speed > 4.0 && isStopped) {
                 isStopped = false; clearInterval(timerInterval);
@@ -180,7 +166,7 @@
                 }
                 t.innerText = "0.0";
                 t.style.color = "#4cd964";
-                t.classList.remove('flash-record');
+                t.classList.remove('flash-red');
             }
         }
 
@@ -196,10 +182,9 @@
             const list = document.getElementById('history-list');
             list.innerHTML = storage.length ? '' : '<div class="text-center py-20 opacity-20 text-[10px]">NO LOGS</div>';
             [...storage].reverse().forEach(item => {
-                const isRec = parseFloat(item.d) >= recordHigh && recordHigh > 0;
                 const div = document.createElement('div');
                 div.className = 'log-entry';
-                div.innerHTML = `<div><span class="text-[7px] text-zinc-500 uppercase">${new Date(item.ts).toLocaleTimeString()}</span><br><span class="text-[11px] font-black ${isRec?'text-red-500':''}">${item.d}s STOP</span></div><div class="text-[8px] font-bold text-cyan-400">${isRec?'RECORD':'LOGGED'}</div>`;
+                div.innerHTML = `<div><span class="text-[7px] text-zinc-500 uppercase">${new Date(item.ts).toLocaleTimeString()}</span><br><span class="text-[11px] font-black">${item.d}s STOP</span></div><div class="text-[8px] font-bold text-cyan-400">LOGGED</div>`;
                 list.appendChild(div);
             });
         }
@@ -211,23 +196,9 @@
         }
 
         function runFullTour() {
-            const tour = document.getElementById('tour-box');
-            tour.style.display = 'block';
-            let i = 0;
-            const steps = [
-                { m: "System Armed", f: () => { tab('dash'); engineControl(true); } },
-                { m: "Simulating Drive", f: () => updateLogic(80.0) },
-                { m: "Stop - Int 1 (Green)", f: () => updateLogic(0.0) },
-                { m: "Stop - Int 2 (Orange)", f: () => { /* wait timer handled by logic */ } },
-                { m: "New Record Check", f: () => { /* test record flash */ } },
-                { m: "Saving Entry", f: () => { updateLogic(30.0); tab('history'); } }
-            ];
-            const interval = setInterval(() => {
-                if(i >= steps.length) { clearInterval(interval); tour.style.display='none'; return; }
-                tour.innerText = steps[i].m;
-                steps[i].f();
-                i++;
-            }, 3000);
+            tab('dash');
+            engineControl(true);
+            setTimeout(() => updateLogic(0.0), 1000);
         }
     </script>
 </body>
