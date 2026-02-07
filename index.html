@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V14.2 - Official Build</title>
+    <title>Gravity Intel V14.3</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -18,12 +18,10 @@
         .nav-btn { display: flex; align-items: center; justify-content: center; opacity: 0.3; font-size: 10px; font-weight: 800; color: inherit; border: none; background: none; transition: 0.3s; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 2px solid var(--accent); }
         #timer-display { font-size: 26vw; font-weight: 800; line-height: 1; transition: color 0.3s; color: #18181b; }
-        .log-entry { background: #0f0f0f; border: 1px solid #1a1a1a; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
         
-        /* High-Priority Record Flash */
         @keyframes record-alert {
             0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.4; transform: scale(0.95); }
+            50% { opacity: 0.4; transform: scale(0.98); }
         }
         .flash-red { animation: record-alert 0.5s infinite; color: #ff3b30 !important; text-shadow: 0 0 30px rgba(255,59,48,0.7); }
     </style>
@@ -44,7 +42,7 @@
 
         <div class="flex-1 flex flex-col justify-center text-center">
             <div id="timer-display">0.0</div>
-            <div id="record-msg" class="text-[10px] mt-4 font-bold text-red-500 hidden uppercase tracking-widest">NEW RECORD HIGH</div>
+            <div id="record-msg" class="text-[10px] mt-4 font-bold text-red-500 hidden uppercase tracking-widest">RECORD BREAKING STOP</div>
             
             <div class="mt-12 space-y-3">
                 <button id="btn-enable" onclick="engineControl(true)" class="w-full py-5 bg-cyan-500 text-black font-black text-xs uppercase rounded-full">Enable Tracking</button>
@@ -53,10 +51,7 @@
         </div>
     </div>
 
-    <div id="page-map" class="page" style="padding:0; overflow:hidden;">
-        <div id="map-canvas"></div>
-    </div>
-
+    <div id="page-map" class="page" style="padding:0; overflow:hidden;"><div id="map-canvas"></div></div>
     <div id="page-history" class="page p-4">
         <div class="flex justify-between items-center mb-6">
             <h2 class="text-white font-black text-xs uppercase">Intelligent Log</h2>
@@ -64,14 +59,9 @@
         </div>
         <div id="history-list" class="space-y-2"></div>
     </div>
-
     <div id="page-about" class="page p-8 text-center">
-        <div class="text-[11px] font-black text-white uppercase mb-10">Gravity Intel V14.2 Pro</div>
-        <div class="bg-zinc-900 p-4 rounded mb-4">
-            <span class="text-[8px] opacity-40 uppercase block mb-1">Current Record High</span>
-            <span id="record-display" class="text-white font-bold text-xl">0.0s</span>
-        </div>
-        <button onclick="location.reload()" class="w-full py-6 bg-white text-black font-black text-[12px] rounded-2xl">REBOOT SYSTEM</button>
+        <div class="text-[11px] font-black text-white uppercase mb-10">Gravity Intel V14.3</div>
+        <button onclick="location.reload()" class="w-full py-6 bg-white text-black font-black text-[12px] rounded-2xl">REBOOT</button>
     </div>
 
     <nav class="nav-bar">
@@ -82,18 +72,15 @@
     </nav>
 
     <script>
-        // --- DATA & CONFIG ---
         const DB_KEY = 'GRV_PRO_V14_DATA';
         const REC_KEY = 'GRV_RECORD_HIGH';
-        const GLOBAL_AVG = 180; // The threshold for Red color
+        const GLOBAL_AVG = 180;
 
         let storage = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let recordHigh = parseFloat(localStorage.getItem(REC_KEY) || '0');
         let isArmed = false, isStopped = false, startMark = 0, timerInterval = null;
-        let lastPos = [-33.8688, 151.2093]; 
-        let mapInstance = null;
+        let currentSpeed = 0.0;
 
-        // --- NAVIGATION ---
         function tab(n) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
@@ -101,140 +88,123 @@
             document.getElementById('tab-'+n).classList.add('nav-btn-active');
             if(n === 'map') initMap();
             if(n === 'history') renderHistory();
-            if(n === 'about') document.getElementById('record-display').innerText = recordHigh + 's';
         }
 
-        // --- ENGINE CONTROLS ---
+        // --- THE FIX: SEPARATED TIMER LOGIC ---
+        function startTimer() {
+            if (isStopped) return; 
+            isStopped = true;
+            startMark = Date.now();
+            if(timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                const elapsed = (Date.now() - startMark) / 1000;
+                document.getElementById('timer-display').innerText = elapsed.toFixed(1);
+                updateColors(elapsed);
+            }, 100);
+        }
+
+        function stopTimer() {
+            if (!isStopped) return;
+            isStopped = false;
+            clearInterval(timerInterval);
+            const duration = ((Date.now() - startMark) / 1000).toFixed(1);
+            if (parseFloat(duration) >= 1.0) saveStop(duration);
+            
+            const t = document.getElementById('timer-display');
+            t.innerText = "0.0";
+            t.style.color = "#4cd964";
+            t.classList.remove('flash-red');
+            document.getElementById('record-msg').classList.add('hidden');
+        }
+
         function engineControl(state) {
             isArmed = state;
             const statusText = document.getElementById('gps-status-text');
             const timer = document.getElementById('timer-display');
-            const btnEnable = document.getElementById('btn-enable');
-            const btnDisable = document.getElementById('btn-disable');
-
+            
             if (state) {
                 statusText.innerText = "ONLINE";
                 statusText.style.color = "#4cd964";
-                timer.style.color = "#4cd964"; // Set to Green immediately
-                btnEnable.classList.add('hidden');
-                btnDisable.classList.remove('hidden');
-                
-                // If stationary when enabled, trigger timer
-                const curSpeed = parseFloat(document.getElementById('speed-display').innerText);
-                if (curSpeed < 1.0) triggerTimerStart();
+                timer.style.color = "#4cd964";
+                document.getElementById('btn-enable').classList.add('hidden');
+                document.getElementById('btn-disable').classList.remove('hidden');
+                // Check if already stationary
+                if (currentSpeed < 1.0) startTimer();
             } else {
                 statusText.innerText = "OFFLINE";
                 statusText.style.color = "#ff3b30";
                 timer.style.color = "#18181b";
-                timer.innerText = "0.0";
-                timer.classList.remove('flash-red');
-                document.getElementById('record-msg').classList.add('hidden');
-                btnEnable.classList.remove('hidden');
-                btnDisable.classList.add('hidden');
-                clearInterval(timerInterval);
-                isStopped = false;
+                document.getElementById('btn-enable').classList.remove('hidden');
+                document.getElementById('btn-disable').classList.add('hidden');
+                stopTimer();
             }
         }
 
-        // --- COLOR LOGIC ---
-        function updateTimerVisuals(sec) {
+        function updateColors(sec) {
             const t = document.getElementById('timer-display');
             const rMsg = document.getElementById('record-msg');
 
-            // 1. Record High Flash (Highest Priority)
             if (recordHigh > 0 && sec > recordHigh) {
                 t.classList.add('flash-red');
                 rMsg.classList.remove('hidden');
                 return;
             }
-            
+
             t.classList.remove('flash-red');
             rMsg.classList.add('hidden');
 
-            // 2. Interval Color Coding
-            if (sec <= (GLOBAL_AVG / 3)) {
-                t.style.color = "#4cd964"; // Interval 1: Green
-            } else if (sec <= (GLOBAL_AVG / 3) * 2) {
-                t.style.color = "#ffcc00"; // Interval 2: Orange
-            } else {
-                t.style.color = "#ff3b30"; // Interval 3: Red
-            }
-        }
-
-        // --- CORE LOGIC ---
-        function triggerTimerStart() {
-            if (isStopped) return;
-            isStopped = true;
-            startMark = Date.now();
-            timerInterval = setInterval(() => {
-                const elapsed = (Date.now() - startMark) / 1000;
-                document.getElementById('timer-display').innerText = elapsed.toFixed(1);
-                updateTimerVisuals(elapsed);
-            }, 100);
+            if (sec <= (GLOBAL_AVG / 3)) t.style.color = "#4cd964"; // Green
+            else if (sec <= (GLOBAL_AVG / 3) * 2) t.style.color = "#ffcc00"; // Orange
+            else t.style.color = "#ff3b30"; // Red
         }
 
         function updateLogic(speed) {
+            currentSpeed = speed;
+            document.getElementById('speed-display').innerText = speed.toFixed(1) + " KM/H";
             if (!isArmed) return;
-            document.getElementById('speed-display').innerText = `${speed.toFixed(1)} KM/H`;
-            
-            if (speed < 1.0 && !isStopped) {
-                triggerTimerStart();
-            } else if (speed > 4.0 && isStopped) {
-                isStopped = false;
-                clearInterval(timerInterval);
-                const duration = ((Date.now() - startMark) / 1000).toFixed(1);
-                
-                if (parseFloat(duration) >= 1.0) {
-                    saveLog(duration);
-                }
-                
-                const t = document.getElementById('timer-display');
-                t.innerText = "0.0";
-                t.style.color = "#4cd964";
-                t.classList.remove('flash-red');
-            }
+
+            if (speed < 1.0 && !isStopped) startTimer();
+            else if (speed > 4.0 && isStopped) stopTimer();
         }
 
-        function saveLog(duration) {
+        function saveStop(duration) {
             const d = parseFloat(duration);
             storage.push({ d: d, ts: Date.now() });
             localStorage.setItem(DB_KEY, JSON.stringify(storage));
-            
             if (d > recordHigh) {
                 recordHigh = d;
                 localStorage.setItem(REC_KEY, recordHigh.toString());
             }
         }
 
-        // --- SYSTEM UTILS ---
-        function initMap() {
-            if (!mapInstance) {
-                mapInstance = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView(lastPos, 15);
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png').addTo(mapInstance);
-            }
-        }
-
         function renderHistory() {
             const list = document.getElementById('history-list');
-            list.innerHTML = storage.length ? '' : '<div class="text-center py-20 opacity-20 text-[10px]">EMPTY LOG</div>';
-            [...storage].reverse().forEach(item => {
+            list.innerHTML = storage.length ? '' : '<div class="text-center py-20 opacity-20 text-[10px]">NO DATA</div>';
+            [...storage].reverse().slice(0, 50).forEach(item => {
                 const div = document.createElement('div');
-                div.className = 'log-entry';
-                div.innerHTML = `<div><span class="text-[7px] text-zinc-500 uppercase">${new Date(item.ts).toLocaleTimeString()}</span><br><span class="text-[11px] font-black">${item.d}s</span></div><div class="text-[8px] font-bold text-cyan-400">STATIONARY</div>`;
+                div.className = 'flex justify-between items-center bg-zinc-900/50 p-3 rounded border border-zinc-800 mb-2';
+                div.innerHTML = `<div class="text-[10px] font-bold">${item.d}s STOP</div><div class="text-[8px] opacity-40">${new Date(item.ts).toLocaleTimeString()}</div>`;
                 list.appendChild(div);
             });
         }
 
         function clearLogs() {
-            if(confirm("WIPE ALL LOGS?")) {
-                storage = [];
-                localStorage.removeItem(DB_KEY);
-                renderHistory();
-            }
+            if(confirm("DELETE HISTORY?")) { storage = []; localStorage.removeItem(DB_KEY); renderHistory(); }
         }
 
-        // --- GPS SIMULATION (OR ACTUAL) ---
-        // navigator.geolocation.watchPosition((p) => updateLogic(p.coords.speed || 0));
+        function initMap() {
+            const m = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView([-33.86, 151.20], 15);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(m);
+        }
+
+        // Connect to real GPS
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(
+                (pos) => updateLogic(pos.coords.speed * 3.6 || 0),
+                (err) => console.log(err),
+                { enableHighAccuracy: true }
+            );
+        }
     </script>
 </body>
 </html>
