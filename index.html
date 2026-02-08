@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V17.4</title>
+    <title>Gravity Intel V17.5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -11,112 +11,103 @@
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-        :root { --accent: #00f2ff; --bg: #050505; }
-        body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; font-size: 18px; }
+        :root { --accent: #00f2ff; --bg: #0a0a0a; }
+        body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; font-size: 16px; }
         
-        /* High Contrast Map Filter */
-        #map-canvas { height: 100%; width: 100%; background: #000; z-index: 10; }
-        .map-brightness-tweak { filter: invert(100%) hue-rotate(180deg) brightness(0.9) contrast(1.2); }
-        .leaflet-container { background: #000 !important; }
+        /* FIX: Map Visibility */
+        #map-canvas { height: 100%; width: 100%; background: #111; z-index: 1; }
+        .leaflet-container { background: #111 !important; }
+
+        /* High Visibility Overlay Buttons */
+        .map-overlay-btn {
+            background: #ffffff !important;
+            color: #000000 !important;
+            border: 2px solid var(--accent);
+            padding: 12px 18px;
+            border-radius: 14px;
+            font-weight: 900;
+            font-size: 11px;
+            text-transform: uppercase;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+            pointer-events: auto;
+        }
 
         .page { display: none; width: 100vw; height: calc(100vh - 85px); flex-direction: column; overflow-y: auto; }
         .active-page { display: flex; }
         
-        /* Navigation */
-        .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 2000; padding-bottom: env(safe-area-inset-bottom); }
-        .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; font-size: 13px; font-weight: 700; border: none; background: none; color: white; }
+        .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 5000; padding-bottom: env(safe-area-inset-bottom); }
+        .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; font-size: 12px; font-weight: 700; color: white; border: none; background: none; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 3px solid var(--accent); }
-        
-        /* Dashboard */
-        #timer-display { font-size: 32vw; font-weight: 700; line-height: 1; color: #27272a; transition: color 0.3s; }
-        .filter-pill { background: #111; border: 1px solid #333; padding: 8px 16px; border-radius: 20px; font-size: 12px; color: #71717a; }
-        .filter-pill.active { background: var(--accent); color: black; font-weight: 800; }
-        
-        /* Modals & Cards */
-        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 5000; display: none; padding: 25px; align-items: center; justify-content: center; }
+
+        #timer-display { font-size: 28vw; font-weight: 700; color: #27272a; }
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 9999; display: none; align-items: center; justify-content: center; padding: 20px; }
         .modal.active { display: flex; }
-        .log-card { transition: all 0.2s; border: 1px solid #18181b; }
-        .log-card.selected { border-color: var(--accent); background: rgba(0, 242, 255, 0.05); }
-        
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        @keyframes pulse-purple { 0%, 100% { border-color: rgba(168, 85, 247, 0.5); } 50% { border-color: rgba(168, 85, 247, 1); } }
-        .suggest-anim { animation: pulse-purple 2s infinite; }
     </style>
 </head>
 <body>
 
     <div id="page-dash" class="page active-page p-6">
-        <div id="suggestion-bar" class="hidden mb-4 bg-purple-900/30 border border-purple-500/50 p-4 rounded-2xl flex justify-between items-center suggest-anim cursor-pointer">
-            <span class="text-[10px] font-black text-purple-400 uppercase">Frequent Zone: Mark as Safe?</span>
-            <span class="text-[10px] bg-purple-500 text-white px-3 py-1 rounded-lg font-bold">YES</span>
-        </div>
-        <div class="grid grid-cols-2 gap-4 mb-8">
-            <div class="bg-zinc-900 p-5 rounded-2xl border border-zinc-800">
-                <span class="text-[11px] opacity-40 uppercase block mb-1">Stability</span>
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
+                <span class="text-[10px] opacity-40 uppercase block">Stability</span>
                 <span id="stab-percent" class="text-lg font-bold">0%</span>
             </div>
-            <div class="bg-zinc-900 p-5 rounded-2xl border border-zinc-800 text-right">
-                <span class="text-[11px] opacity-40 uppercase block mb-1">Velocity</span>
-                <span id="speed-display" class="text-lg font-bold text-white uppercase">0.0 KM/H</span>
+            <div class="bg-zinc-900 p-4 rounded-2xl border border-zinc-800 text-right">
+                <span class="text-[10px] opacity-40 uppercase block">Velocity</span>
+                <span id="speed-display" class="text-lg font-bold text-white">0.0 KM/H</span>
             </div>
         </div>
-        <div class="flex-1 flex flex-col justify-center items-center text-center">
+        <div class="flex-1 flex flex-col justify-center items-center">
             <div id="timer-display">0.0</div>
-            <div id="data-status" class="text-sm mt-6 opacity-50 font-bold uppercase tracking-widest">Initializing...</div>
-            <div class="mt-12 w-full"><button id="btn-master" onclick="toggleSystem()" class="w-full py-6 bg-zinc-800 text-zinc-400 font-black rounded-3xl uppercase text-lg shadow-xl">Initiate Engine</button></div>
+            <div id="data-status" class="text-xs mt-4 opacity-50 font-bold uppercase tracking-widest">Awaiting Engine</div>
+            <button id="btn-master" onclick="toggleSystem()" class="mt-12 w-full py-6 bg-zinc-800 text-zinc-400 font-black rounded-3xl uppercase text-lg shadow-xl">Initiate Engine</button>
         </div>
     </div>
 
     <div id="page-map" class="page" style="padding:0; overflow:hidden; position:relative;">
         <div id="map-canvas"></div>
-        <div class="absolute top-4 left-4 z-[1000]">
-            <button onclick="recenterMap()" class="bg-zinc-900/90 border border-zinc-700 p-4 rounded-2xl text-[10px] font-black uppercase text-white backdrop-blur-md shadow-2xl active:scale-95 transition-transform">◎ Find Me</button>
-        </div>
-        <div class="absolute top-4 right-4 z-[1000]">
-            <button onclick="toggleHeatmap()" id="heat-btn" class="bg-zinc-900/90 border border-zinc-700 p-4 rounded-2xl text-[10px] font-black uppercase text-zinc-400 backdrop-blur-md shadow-2xl">Heatmap: OFF</button>
+        
+        <div class="absolute top-6 left-6 right-6 flex justify-between items-start z-[2000] pointer-events-none">
+            <button onclick="recenterMap()" class="map-overlay-btn">◎ Find Me</button>
+            <button onclick="toggleHeatmap()" id="heat-btn" class="map-overlay-btn" style="border-color: #71717a;">Heatmap: OFF</button>
         </div>
     </div>
     
     <div id="page-history" class="page p-6">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-white font-black text-xl uppercase tracking-tight">Geospatial Logs</h2>
-            <button id="edit-mode-btn" onclick="toggleEditMode()" class="text-[10px] font-bold border border-zinc-700 px-3 py-2 rounded-xl text-zinc-400 uppercase">Select</button>
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-white font-black text-xl uppercase">Geospatial Logs</h2>
+            <button id="edit-mode-btn" onclick="toggleEditMode()" class="text-[10px] font-bold border border-zinc-700 px-3 py-2 rounded-xl text-zinc-400">SELECT</button>
         </div>
-        <div id="bulk-actions" class="hidden mb-4 bg-zinc-900 p-3 rounded-2xl flex justify-between items-center border border-cyan-500/30">
-            <span id="selected-count" class="text-xs font-bold text-cyan-500 ml-2">0 SELECTED</span>
+        <div id="bulk-actions" class="hidden mb-4 bg-zinc-900 p-4 rounded-2xl flex justify-between items-center border border-cyan-500/30">
+            <span id="selected-count" class="text-xs font-bold text-cyan-500">0 SELECTED</span>
             <button onclick="deleteSelected()" class="bg-red-500 text-white text-[10px] font-black px-4 py-2 rounded-xl uppercase">Delete Group</button>
         </div>
-        <div id="history-list" class="space-y-4 pb-32"></div>
+        <div id="history-list" class="space-y-3 pb-32"></div>
     </div>
 
     <div id="page-about" class="page p-6">
-        <h2 class="text-white font-black text-xl uppercase mb-6 tracking-tighter">System Control</h2>
-        <div class="space-y-4">
-            <div class="bg-zinc-900 p-6 rounded-[32px] border border-zinc-800">
-                <span class="text-[10px] opacity-40 uppercase font-black block mb-4">Data Management</span>
-                <button onclick="exportToCSV()" class="w-full bg-cyan-500/10 border border-cyan-500/50 text-cyan-500 py-4 rounded-2xl font-black text-xs uppercase tracking-widest mb-3">Export Records (CSV)</button>
-                <p class="text-[10px] text-zinc-500 leading-relaxed">Backup history. Records: <span id="record-count-stat">0</span></p>
-            </div>
-            <div class="bg-zinc-900 p-6 rounded-[32px] border border-zinc-800">
-                <span class="text-[10px] opacity-40 uppercase font-black block mb-2">Build Info</span>
-                <div class="text-white font-bold text-sm">V17.4 High-Visibility</div>
-            </div>
+        <h2 class="text-white font-black text-xl uppercase mb-6">System</h2>
+        <div class="bg-zinc-900 p-6 rounded-[32px] border border-zinc-800 mb-4">
+            <button onclick="exportToCSV()" class="w-full bg-cyan-500 text-black py-4 rounded-2xl font-black text-xs uppercase mb-3">Export Records (CSV)</button>
+            <p class="text-[10px] text-zinc-500">Total Records: <span id="record-count-stat" class="text-zinc-300">0</span></p>
+        </div>
+        <div class="bg-zinc-900 p-6 rounded-[32px] border border-zinc-800 text-[10px] text-zinc-500">
+            BUILD: V17.5 / NATIVE_MAP_ENGINE
         </div>
     </div>
 
     <div id="edit-modal" class="modal">
-        <div class="bg-zinc-900 w-full max-w-sm rounded-[40px] p-8 border border-zinc-800">
+        <div class="bg-zinc-900 w-full max-w-sm rounded-[32px] p-8 border border-zinc-800">
             <h3 class="text-white font-black text-lg mb-6 uppercase">Modify Record</h3>
-            <select id="edit-category" class="w-full bg-black p-4 rounded-2xl border border-zinc-700 text-white font-bold">
+            <select id="edit-category" class="w-full bg-black p-4 rounded-xl border border-zinc-700 text-white font-bold mb-8">
                 <option value="General">Standard Stop</option>
-                <option value="Traffic">Traffic / Signal</option>
                 <option value="SafeZone">Safe Zone</option>
             </select>
-            <div class="grid grid-cols-2 gap-4 mt-10">
-                <button onclick="deleteCurrentRecord()" class="bg-red-500/10 text-red-500 py-4 rounded-2xl font-black text-xs">DELETE</button>
-                <button onclick="saveEdit()" class="bg-cyan-500 text-black py-4 rounded-2xl font-black text-xs">CONFIRM</button>
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="deleteCurrentRecord()" class="bg-red-500/10 text-red-500 py-4 rounded-xl font-black text-xs uppercase">Delete</button>
+                <button onclick="saveEdit()" class="bg-cyan-500 text-black py-4 rounded-xl font-black text-xs uppercase">Save</button>
             </div>
-            <button onclick="closeModal()" class="w-full mt-6 text-xs font-bold opacity-30 uppercase">Go Back</button>
+            <button onclick="closeModal()" class="w-full mt-6 text-[10px] font-bold opacity-30 uppercase">Cancel</button>
         </div>
     </div>
 
@@ -141,33 +132,18 @@
             isArmed = !isArmed;
             const btn = document.getElementById('btn-master');
             btn.innerText = isArmed ? "ENGINE ACTIVE" : "INITIATE ENGINE";
-            btn.style.backgroundColor = isArmed ? "#06b6d4" : "#27272a";
+            btn.style.backgroundColor = isArmed ? "#00f2ff" : "#27272a";
             btn.style.color = isArmed ? "#000" : "#71717a";
             if(!isArmed) stopTimer();
-        }
-
-        function updateColors(sec) {
-            const display = document.getElementById('timer-display');
-            const status = document.getElementById('data-status');
-            const validData = storage.filter(i => i.cat !== 'SafeZone');
-            if (validData.length < STABILITY_THRESHOLD) {
-                display.style.color = "#3f3f46";
-                status.innerText = `LEARNING: ${validData.length}/${STABILITY_THRESHOLD}`;
-                return;
-            }
-            const avg = validData.reduce((a, b) => a + b.d, 0) / validData.length;
-            if (sec <= avg * 0.8) { display.style.color = "#22c55e"; status.innerText = "OPTIMAL"; }
-            else if (sec <= avg * 1.2) { display.style.color = "#f59e0b"; status.innerText = "AVERAGE"; }
-            else { display.style.color = "#ef4444"; status.innerText = "DELAYED"; }
         }
 
         function startTimer() {
             if (isStopped || !isArmed) return;
             isStopped = true; startMark = Date.now();
             timerInterval = setInterval(() => {
-                const elapsed = (Date.now() - startMark) / 1000;
-                document.getElementById('timer-display').innerText = elapsed.toFixed(1);
-                updateColors(elapsed);
+                const sec = (Date.now() - startMark) / 1000;
+                document.getElementById('timer-display').innerText = sec.toFixed(1);
+                updateTimerColor(sec);
             }, 100);
         }
 
@@ -184,17 +160,26 @@
             document.getElementById('timer-display').style.color = "#27272a";
         }
 
+        function updateTimerColor(sec) {
+            const valid = storage.filter(i => i.cat !== 'SafeZone');
+            const display = document.getElementById('timer-display');
+            if (valid.length < STABILITY_THRESHOLD) return;
+            const avg = valid.reduce((a, b) => a + b.d, 0) / valid.length;
+            display.style.color = sec <= avg * 0.8 ? "#22c55e" : (sec <= avg * 1.2 ? "#f59e0b" : "#ef4444");
+        }
+
         function initMap() {
             if (map) return;
             map = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView([lastCoords.lat, lastCoords.lon], 16);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', {
-                className: 'map-brightness-tweak'
-            }).addTo(map);
+            
+            // Native Dark Tiles (No CSS Filters)
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
             historyGroup = L.layerGroup().addTo(map);
             userMarker = L.circleMarker([lastCoords.lat, lastCoords.lon], { 
-                radius: 12, color: '#fff', weight: 4, fillColor: '#00f2ff', fillOpacity: 1 
+                radius: 12, color: '#fff', weight: 3, fillColor: '#00f2ff', fillOpacity: 1 
             }).addTo(map);
+            
             renderMapData();
         }
 
@@ -204,8 +189,10 @@
 
         function toggleHeatmap() {
             heatActive = !heatActive;
-            document.getElementById('heat-btn').innerText = heatActive ? "Heatmap: ON" : "Heatmap: OFF";
-            document.getElementById('heat-btn').classList.toggle('text-orange-400', heatActive);
+            const btn = document.getElementById('heat-btn');
+            btn.innerText = heatActive ? "Heatmap: ON" : "Heatmap: OFF";
+            btn.style.borderColor = heatActive ? "#f97316" : "#71717a";
+            btn.style.color = heatActive ? "#f97316" : "#000";
             renderMapData();
         }
 
@@ -215,21 +202,17 @@
             if(heatLayer) map.removeLayer(heatLayer);
             if(ghostRoute) map.removeLayer(ghostRoute);
 
-            // GHOST ROUTE (24H)
+            // Ghost Route (24h)
             const dayAgo = Date.now() - 86400000;
             const recent = storage.filter(i => i.ts > dayAgo).sort((a,b) => a.ts - b.ts).map(i => [i.lat, i.lon]);
-            if(recent.length > 1) {
-                ghostRoute = L.polyline(recent, { color: '#00f2ff', weight: 2, opacity: 0.2, dashArray: '5, 10' }).addTo(map);
-            }
+            if(recent.length > 1) ghostRoute = L.polyline(recent, { color: '#00f2ff', weight: 2, opacity: 0.3, dashArray: '5, 10' }).addTo(map);
 
             if (heatActive) {
-                const points = storage.map(i => [i.lat, i.lon, Math.min(i.d / 60, 1)]);
-                heatLayer = L.heatLayer(points, { radius: 25, blur: 15 }).addTo(map);
+                heatLayer = L.heatLayer(storage.map(i => [i.lat, i.lon, 0.5]), { radius: 25, blur: 15 }).addTo(map);
             } else {
                 storage.forEach(item => {
-                    const isSafe = item.cat === "SafeZone";
                     L.circleMarker([item.lat, item.lon], { 
-                        radius: 8, color: isSafe ? "#a855f7" : "#00f2ff", fillColor: isSafe ? "#a855f7" : "#00f2ff", fillOpacity: 0.5 
+                        radius: 8, color: item.cat === "SafeZone" ? "#a855f7" : "#00f2ff", fillColor: item.cat === "SafeZone" ? "#a855f7" : "#00f2ff", fillOpacity: 0.6 
                     }).addTo(historyGroup).on('click', () => { activeRecordId = item.id; openEditModal(item); });
                 });
             }
@@ -241,28 +224,17 @@
             [...storage].reverse().forEach(i => {
                 const isSel = selectedIds.has(i.id);
                 const div = document.createElement('div');
-                div.className = `log-card bg-zinc-900/50 p-5 rounded-3xl flex justify-between items-center ${isSel ? 'selected' : ''}`;
-                div.onclick = () => { 
-                    if(isEditMode) { 
-                        if(isSel) selectedIds.delete(i.id); else selectedIds.add(i.id); 
-                        document.getElementById('selected-count').innerText = `${selectedIds.size} SELECTED`; 
-                        renderLogs(); 
-                    } else { activeRecordId = i.id; openEditModal(i); } 
+                div.className = `bg-zinc-900 p-5 rounded-2xl flex justify-between items-center border ${isSel ? 'border-cyan-500' : 'border-zinc-800'}`;
+                div.onclick = () => {
+                    if(isEditMode) {
+                        if(isSel) selectedIds.delete(i.id); else selectedIds.add(i.id);
+                        document.getElementById('selected-count').innerText = `${selectedIds.size} SELECTED`;
+                        renderLogs();
+                    } else { activeRecordId = i.id; openEditModal(i); }
                 };
-                div.innerHTML = `<div class="flex items-center gap-4"><div class="w-1 h-8 rounded-full ${i.cat === 'SafeZone' ? 'bg-purple-500' : 'bg-cyan-500'}"></div><div><div class="text-white font-bold">${i.d}s</div><div class="text-[10px] opacity-30">${new Date(i.ts).toLocaleTimeString()}</div></div></div>`;
+                div.innerHTML = `<div><div class="text-white font-bold">${i.d}s</div><div class="text-[10px] opacity-30">${new Date(i.ts).toLocaleTimeString()}</div></div><div class="text-[10px] font-bold ${i.cat === 'SafeZone' ? 'text-purple-500' : 'text-cyan-500'} uppercase">${i.cat}</div>`;
                 list.appendChild(div);
             });
-        }
-
-        function exportToCSV() {
-            const headers = ["ID", "Duration_Sec", "Timestamp", "Lat", "Lon", "Category"];
-            const csvRows = [headers.join(",")];
-            storage.forEach(i => csvRows.push([i.id, i.d, new Date(i.ts).toISOString(), i.lat, i.lon, i.cat].join(",")));
-            const blob = new Blob([csvRows.join("\n")], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = `gravity_intel_${Date.now()}.csv`;
-            a.click();
         }
 
         function tab(n) {
@@ -270,7 +242,7 @@
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
             document.getElementById('page-'+n).classList.add('active-page');
             document.getElementById('tab-'+n).classList.add('nav-btn-active');
-            if(n === 'map') { initMap(); setTimeout(() => map.invalidateSize(), 200); }
+            if(n === 'map') { initMap(); setTimeout(() => map.invalidateSize(), 250); }
             if(n === 'history') renderLogs();
         }
 
@@ -284,18 +256,26 @@
         }, null, { enableHighAccuracy: true });
 
         function updateDashboard() {
-            const validData = storage.filter(i => i.cat !== 'SafeZone');
-            document.getElementById('stab-percent').innerText = Math.min((validData.length / STABILITY_THRESHOLD) * 100, 100).toFixed(0) + "%";
+            const valid = storage.filter(i => i.cat !== 'SafeZone');
+            document.getElementById('stab-percent').innerText = Math.min((valid.length / STABILITY_THRESHOLD) * 100, 100).toFixed(0) + "%";
             document.getElementById('record-count-stat').innerText = storage.length;
-            if(map) renderMapData();
         }
 
-        function openEditModal(item) { document.getElementById('edit-category').value = item.cat; document.getElementById('edit-modal').classList.add('active'); }
+        function openEditModal(i) { document.getElementById('edit-category').value = i.cat; document.getElementById('edit-modal').classList.add('active'); }
         function closeModal() { document.getElementById('edit-modal').classList.remove('active'); }
-        function saveEdit() { const idx = storage.findIndex(i => i.id === activeRecordId); if(idx !== -1) { storage[idx].cat = document.getElementById('edit-category').value; localStorage.setItem(DB_KEY, JSON.stringify(storage)); updateDashboard(); } closeModal(); }
+        function saveEdit() { 
+            const idx = storage.findIndex(i => i.id === activeRecordId);
+            if(idx !== -1) { storage[idx].cat = document.getElementById('edit-category').value; localStorage.setItem(DB_KEY, JSON.stringify(storage)); updateDashboard(); }
+            closeModal();
+        }
         function deleteCurrentRecord() { storage = storage.filter(i => i.id !== activeRecordId); localStorage.setItem(DB_KEY, JSON.stringify(storage)); updateDashboard(); closeModal(); }
-        function toggleEditMode() { isEditMode = !isEditMode; selectedIds.clear(); document.getElementById('edit-mode-btn').innerText = isEditMode ? "Cancel" : "Select"; document.getElementById('bulk-actions').classList.toggle('hidden', !isEditMode); renderLogs(); }
-        function deleteSelected() { if(confirm("Delete selected?")) { storage = storage.filter(i => !selectedIds.has(i.id)); localStorage.setItem(DB_KEY, JSON.stringify(storage)); toggleEditMode(); updateDashboard(); } }
+        function toggleEditMode() { isEditMode = !isEditMode; selectedIds.clear(); document.getElementById('edit-mode-btn').innerText = isEditMode ? "CANCEL" : "SELECT"; document.getElementById('bulk-actions').classList.toggle('hidden', !isEditMode); renderLogs(); }
+        function deleteSelected() { if(confirm("Delete selection?")) { storage = storage.filter(i => !selectedIds.has(i.id)); localStorage.setItem(DB_KEY, JSON.stringify(storage)); toggleEditMode(); updateDashboard(); } }
+        function exportToCSV() {
+            const rows = [["ID", "Duration", "Time", "Lat", "Lon", "Cat"], ...storage.map(i => [i.id, i.d, new Date(i.ts).toISOString(), i.lat, i.lon, i.cat])];
+            const url = URL.createObjectURL(new Blob([rows.map(r => r.join(",")).join("\n")], { type: 'text/csv' }));
+            const a = document.createElement('a'); a.href = url; a.download = `gravity_${Date.now()}.csv`; a.click();
+        }
 
         updateDashboard();
     </script>
