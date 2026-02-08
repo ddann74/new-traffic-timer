@@ -3,275 +3,330 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V17.5 | Extended</title>
+    <title>Gravity Intel V18.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-        :root { --accent: #00f2ff; --bg: #050505; --card: #0f0f10; }
-        body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; font-size: 16px; }
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap');
         
-        /* Map Visibility & Layers */
-        #map-canvas { height: 100%; width: 100%; background: #000; z-index: 1; }
-        .leaflet-container { background: #000 !important; }
-        
-        /* High-Contrast Control UI */
-        .map-ui-container { position: absolute; z-index: 2000; pointer-events: none; inset: 0; padding: 24px; display: flex; flex-direction: column; justify-content: space-between; }
-        .ui-top { display: flex; justify-content: space-between; width: 100%; pointer-events: none; }
-        .ctrl-btn { pointer-events: auto; background: #ffffff !important; color: #000 !important; border: 2px solid var(--accent); padding: 14px 22px; border-radius: 16px; font-weight: 900; font-size: 11px; text-transform: uppercase; box-shadow: 0 10px 25px rgba(0,0,0,0.8); transition: transform 0.1s; }
-        .ctrl-btn:active { transform: scale(0.92); }
+        :root { 
+            --accent: #00f2ff; 
+            --bg: #000000; 
+            --ui-panel: rgba(10, 10, 12, 0.95);
+        }
 
-        .page { display: none; width: 100vw; height: calc(100vh - 85px); flex-direction: column; overflow-y: auto; scroll-behavior: smooth; }
+        body { 
+            font-family: 'JetBrains Mono', monospace; 
+            background: var(--bg); 
+            color: var(--accent); 
+            margin: 0; 
+            overflow: hidden; 
+            height: 100vh; 
+        }
+
+        /* MAP VISIBILITY ENHANCEMENTS */
+        #map-canvas { 
+            height: 100%; 
+            width: 100%; 
+            background: #000; 
+            z-index: 1; 
+        }
+
+        /* Top Bar Scrim for UI Legibility */
+        .map-header-scrim {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 120px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .map-ctrl-wrapper {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            z-index: 2000;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+        }
+
+        .tactical-btn {
+            pointer-events: auto;
+            background: #ffffff !important;
+            color: #000000 !important;
+            border: 3px solid var(--accent);
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-weight: 800;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        /* UI ELEMENTS */
+        .page { display: none; width: 100vw; height: calc(100vh - 85px); flex-direction: column; overflow-y: auto; }
         .active-page { display: flex; }
         
-        .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #1a1a1a; z-index: 5000; padding-bottom: env(safe-area-inset-bottom); }
-        .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.3; font-size: 11px; font-weight: 800; color: white; border: none; background: none; transition: 0.2s; }
-        .nav-btn-active { opacity: 1; color: var(--accent); border-top: 3px solid var(--accent); }
+        .nav-bar { 
+            position: fixed; bottom: 0; width: 100%; height: 85px; 
+            background: #080808; display: grid; grid-template-columns: repeat(4, 1fr); 
+            border-top: 1px solid #1a1a1a; z-index: 5000; 
+            padding-bottom: env(safe-area-inset-bottom); 
+        }
 
-        /* Dashboard Typography */
-        #timer-display { font-size: 30vw; font-weight: 800; color: #1a1a1c; line-height: 0.9; letter-spacing: -5px; }
-        .status-pill { background: #111; border: 1px solid #222; padding: 6px 12px; border-radius: 8px; font-size: 10px; font-weight: bold; }
+        .nav-btn { 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            opacity: 0.3; font-size: 10px; font-weight: 800; color: white; border: none; background: none; 
+        }
+        .nav-btn-active { opacity: 1; color: var(--accent); border-top: 4px solid var(--accent); }
+
+        #timer-display { font-size: 28vw; font-weight: 800; color: #111; line-height: 1; }
         
-        /* Animations */
-        @keyframes pulse-stabilizing { 0% { opacity: 0.4; } 50% { opacity: 1; color: #fff; } 100% { opacity: 0.4; } }
-        .stabilizing { animation: pulse-stabilizing 1.5s infinite; }
+        .modal { 
+            position: fixed; inset: 0; background: rgba(0,0,0,0.92); 
+            z-index: 9999; display: none; align-items: center; justify-content: center; padding: 20px; 
+        }
+        .modal.active { display: flex; }
+
+        /* Stabilization Pulse */
+        @keyframes pulse-yellow { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        .stab-active { animation: pulse-yellow 1s infinite; color: #fbbf24; }
     </style>
 </head>
 <body>
 
     <div id="page-dash" class="page active-page p-6">
-        <div class="flex flex-col gap-4 mb-8">
-            <div class="flex justify-between items-center">
-                <span class="text-[10px] font-black tracking-widest opacity-40 uppercase">Satellite Link: <span id="gps-status" class="text-green-500">ACTIVE</span></span>
-                <div id="stab-indicator" class="status-pill text-zinc-500 uppercase">Data Stabilization: <span id="stab-val" class="">WAITING</span></div>
+        <div class="flex justify-between items-start mb-6">
+            <div>
+                <div class="text-[10px] font-black opacity-30 uppercase tracking-[0.2em]">Data Stabilization</div>
+                <div id="stab-status" class="text-xs font-bold uppercase mt-1">Acquiring Satellites...</div>
             </div>
-            <div class="grid grid-cols-2 gap-4">
-                <div class="bg-zinc-900/50 p-5 rounded-3xl border border-zinc-800">
-                    <span class="text-[10px] opacity-30 uppercase block font-bold mb-1">Confidence</span>
-                    <span id="conf-percent" class="text-2xl font-black text-white">0%</span>
-                </div>
-                <div class="bg-zinc-900/50 p-5 rounded-3xl border border-zinc-800 text-right">
-                    <span class="text-[10px] opacity-30 uppercase block font-bold mb-1">Speed</span>
-                    <span id="speed-val" class="text-2xl font-black text-white italic">0.0</span>
-                </div>
+            <div class="text-right">
+                <div class="text-[10px] font-black opacity-30 uppercase tracking-[0.2em]">Velocity</div>
+                <div id="speed-out" class="text-xl font-black text-white italic">0.0 <span class="text-[10px]">KM/H</span></div>
             </div>
         </div>
 
         <div class="flex-1 flex flex-col justify-center items-center">
             <div id="timer-display">0.0</div>
-            <div id="engine-status" class="text-[10px] mt-4 font-black uppercase tracking-[0.3em] text-zinc-600">Standby Mode</div>
-            <button id="master-switch" onclick="toggleEngine()" class="mt-12 w-full py-7 bg-zinc-900 text-zinc-500 font-black rounded-[32px] uppercase text-sm border-2 border-zinc-800 transition-all">Start Recon Engine</button>
+            <div id="engine-note" class="text-[10px] font-bold opacity-20 uppercase tracking-[0.4em] mt-4">System Disarmed</div>
+            <button id="master-toggle" onclick="toggleEngine()" class="mt-10 w-full py-6 bg-zinc-900 border-2 border-zinc-800 rounded-3xl font-black text-zinc-500 uppercase tracking-widest transition-all">Enable Engine</button>
         </div>
-    </div>
-
-    <div id="page-map" class="page" style="padding:0; overflow:hidden; position:relative;">
-        <div id="map-canvas"></div>
-        <div class="map-ui-container">
-            <div class="ui-top">
-                <button onclick="recenterMap()" class="ctrl-btn">◎ Recenter</button>
-                <button onclick="toggleHeat()" id="heat-toggle" class="ctrl-btn" style="border-color: #333;">Heat: OFF</button>
+        
+        <div class="mt-6 grid grid-cols-2 gap-4">
+            <div class="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800">
+                <div class="text-[9px] opacity-30 font-bold uppercase">Confidence</div>
+                <div id="conf-val" class="text-lg font-black text-white">0%</div>
+            </div>
+            <div class="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800">
+                <div class="text-[9px] opacity-30 font-bold uppercase">Record Count</div>
+                <div id="count-val" class="text-lg font-black text-white">0</div>
             </div>
         </div>
     </div>
+
+    <div id="page-map" class="page" style="padding:0; position:relative;">
+        <div class="map-header-scrim"></div>
+        <div class="map-ctrl-wrapper">
+            <button onclick="recenterMap()" class="tactical-btn">◎ Recenter</button>
+            <button onclick="toggleHeat()" id="heat-btn" class="tactical-btn" style="border-color: #222;">Heatmap: OFF</button>
+        </div>
+        <div id="map-canvas"></div>
+    </div>
     
-    <div id="page-history" class="page p-6">
-        <div class="flex justify-between items-end mb-8">
-            <h2 class="text-2xl font-black text-white uppercase italic">Archives</h2>
-            <button onclick="enterSelectMode()" id="sel-btn" class="text-[10px] font-bold border border-zinc-700 px-4 py-2 rounded-full">SELECT</button>
+    <div id="page-logs" class="page p-6">
+        <div class="flex justify-between items-center mb-8">
+            <h2 class="text-xl font-black text-white uppercase italic">Session Logs</h2>
+            <button onclick="toggleBulk()" id="bulk-toggle-btn" class="text-[10px] font-bold border border-zinc-800 px-4 py-2 rounded-xl">SELECT</button>
         </div>
-        <div id="multi-tools" class="hidden mb-6 bg-cyan-500 p-4 rounded-3xl flex justify-between items-center shadow-lg shadow-cyan-500/20">
-            <span id="sel-count" class="text-black font-black text-xs">0 ITEMS</span>
-            <button onclick="bulkDelete()" class="bg-black text-white text-[10px] font-black px-6 py-2 rounded-2xl">PURGE</button>
+        <div id="bulk-bar" class="hidden mb-4 bg-cyan-500 p-4 rounded-2xl flex justify-between items-center">
+            <span id="sel-info" class="text-black font-black text-xs uppercase">0 Selected</span>
+            <button onclick="deleteSelected()" class="bg-black text-white px-4 py-1 rounded-lg text-[10px] font-black">DELETE</button>
         </div>
-        <div id="log-anchor" class="space-y-3 pb-32"></div>
+        <div id="log-list" class="space-y-3 pb-32"></div>
     </div>
 
     <div id="page-sys" class="page p-8">
-        <h2 class="text-white font-black text-xl uppercase mb-8">Terminal Settings</h2>
-        <div class="space-y-4">
-            <div class="bg-zinc-900/50 p-6 rounded-[32px] border border-zinc-800">
-                <label class="text-[10px] font-black uppercase text-zinc-500 mb-4 block">Data Export</label>
-                <button onclick="downloadCSV()" class="w-full bg-white text-black py-4 rounded-2xl font-black text-xs uppercase mb-2">Generate CSV Manifest</button>
-                <div class="text-[9px] text-zinc-600 mt-2 italic">Stored locally in device browser.</div>
-            </div>
-            <div class="bg-zinc-900/50 p-6 rounded-[32px] border border-zinc-800">
-                <label class="text-[10px] font-black uppercase text-zinc-500 mb-2 block">System Integrity</label>
-                <div class="text-white text-xs font-bold">V17.5-PRO-MASTER</div>
-                <div class="text-[10px] text-zinc-600 mt-1">Satellite Precision: High</div>
-            </div>
+        <h2 class="text-xl font-black text-white uppercase mb-8">System Terminal</h2>
+        <button onclick="exportData()" class="w-full bg-white text-black py-5 rounded-2xl font-black text-xs uppercase mb-4 shadow-xl">Export CSV Manifest</button>
+        <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800 text-[10px] leading-loose">
+            <span class="opacity-30 uppercase font-black block mb-2">Build Info</span>
+            CORE: GEMINI-3-FLASH<br>
+            VERSION: 18.0.2-HIGH-CONTRAST<br>
+            MAP_ENGINE: LEAFLET_NATIVE_STABILIZED
         </div>
     </div>
 
-    <div id="edit-view" class="modal">
-        <div class="bg-zinc-900 w-full max-w-sm rounded-[40px] p-8 border border-zinc-800">
-            <h3 class="text-white font-black text-sm mb-6 uppercase tracking-widest">Entry Options</h3>
-            <select id="entry-cat" class="w-full bg-black p-5 rounded-2xl border border-zinc-800 text-white font-bold mb-8 outline-none focus:border-cyan-500">
-                <option value="General">Normal Stop</option>
-                <option value="Traffic">Traffic Delay</option>
+    <div id="edit-modal" class="modal">
+        <div class="bg-zinc-900 w-full max-w-xs rounded-[40px] p-8 border border-zinc-800">
+            <h3 class="text-white font-black text-xs mb-6 uppercase">Modify Entry</h3>
+            <select id="edit-cat" class="w-full bg-black p-4 rounded-xl border border-zinc-800 text-white font-bold mb-8 outline-none focus:border-cyan-500">
+                <option value="General">Standard</option>
                 <option value="SafeZone">Safe Zone</option>
             </select>
             <div class="grid grid-cols-2 gap-4">
-                <button onclick="trashEntry()" class="bg-red-500/10 text-red-500 py-5 rounded-2xl font-black text-[10px] uppercase">Discard</button>
-                <button onclick="applyEntry()" class="bg-cyan-500 text-black py-5 rounded-2xl font-black text-[10px] uppercase">Update</button>
+                <button onclick="deleteEntry()" class="bg-red-500/10 text-red-500 py-4 rounded-xl font-black text-[10px] uppercase">Remove</button>
+                <button onclick="saveEntry()" class="bg-cyan-500 text-black py-4 rounded-xl font-black text-[10px] uppercase">Update</button>
             </div>
-            <button onclick="hideModal()" class="w-full mt-8 text-[10px] font-bold opacity-30 uppercase">Close</button>
+            <button onclick="closeModal()" class="w-full mt-8 text-[10px] font-bold opacity-20 uppercase">Cancel</button>
         </div>
     </div>
 
     <nav class="nav-bar">
         <button onclick="tab('dash')" id="tab-dash" class="nav-btn nav-btn-active">DASH</button>
         <button onclick="tab('map')" id="tab-map" class="nav-btn">MAP</button>
-        <button onclick="tab('history')" id="tab-history" class="nav-btn">LOGS</button>
+        <button onclick="tab('logs')" id="tab-logs" class="nav-btn">LOGS</button>
         <button onclick="tab('sys')" id="tab-sys" class="nav-btn">SYS</button>
     </nav>
 
     <script>
-        const STORAGE_ID = 'GRV_INTEL_MASTER_V17';
-        let data = JSON.parse(localStorage.getItem(STORAGE_ID) || '[]');
-        let active = false, timing = false, startTime = 0, clock = null;
-        let map, userPointer, trail, heat, logs = L.layerGroup();
-        let currentPos = { lat: 0, lon: 0, acc: 0 };
-        let activeID = null, heatON = false, selectionMode = false;
-        let selectedSet = new Set();
+        const DB = 'GRAVITY_V18_FINAL';
+        let store = JSON.parse(localStorage.getItem(DB) || '[]');
+        let isArmed = false, isClocking = false, startT = 0, clockRef = null;
+        let map, userM, logsLayer = L.layerGroup(), heatM, trailL;
+        let lastLoc = { lat: 0, lon: 0, acc: 0 };
+        let activeID = null, isHeat = false, isBulk = false;
+        let selected = new Set();
 
-        // Engine Control
+        // SYSTEM ENGINE
         function toggleEngine() {
-            active = !active;
-            const b = document.getElementById('master-switch');
-            const s = document.getElementById('engine-status');
-            b.innerText = active ? "ENGINE RUNNING" : "START RECON ENGINE";
-            b.style.borderColor = active ? "#00f2ff" : "#27272a";
-            b.style.color = active ? "#fff" : "#71717a";
-            s.innerText = active ? "Monitoring Signals..." : "Standby Mode";
-            if(!active) killTimer();
+            isArmed = !isArmed;
+            const b = document.getElementById('master-toggle');
+            b.innerText = isArmed ? "ENGINE ACTIVE" : "ENABLE ENGINE";
+            b.style.borderColor = isArmed ? "#00f2ff" : "#27272a";
+            b.style.color = isArmed ? "#fff" : "#71717a";
+            document.getElementById('engine-note').innerText = isArmed ? "Monitoring Signals" : "System Disarmed";
+            if(!isArmed) stopClock();
         }
 
-        function runTimer() {
-            if (timing || !active) return;
-            timing = true; startTime = Date.now();
-            clock = setInterval(() => {
-                const dur = (Date.now() - startTime) / 1000;
-                document.getElementById('timer-display').innerText = dur.toFixed(1);
-                paintTimer(dur);
+        function startClock() {
+            if (isClocking || !isArmed) return;
+            isClocking = true; startT = Date.now();
+            clockRef = setInterval(() => {
+                const s = (Date.now() - startT) / 1000;
+                document.getElementById('timer-display').innerText = s.toFixed(1);
+                const avg = store.length > 3 ? store.reduce((a, b) => a + b.d, 0) / store.length : 0;
+                if(avg > 0) {
+                    const disp = document.getElementById('timer-display');
+                    disp.style.color = s <= avg * 0.8 ? "#22c55e" : (s <= avg * 1.2 ? "#f59e0b" : "#ef4444");
+                }
             }, 100);
         }
 
-        function killTimer() {
-            if (!timing) return;
-            timing = false; clearInterval(clock);
-            const final = parseFloat(((Date.now() - startTime) / 1000).toFixed(1));
-            if (final > 2.5) {
-                data.push({ id: Date.now(), d: final, ts: Date.now(), lat: currentPos.lat, lon: currentPos.lon, cat: "General" });
-                save();
+        function stopClock() {
+            if (!isClocking) return;
+            isClocking = false; clearInterval(clockRef);
+            const duration = parseFloat(((Date.now() - startT) / 1000).toFixed(1));
+            if (duration > 3.0) {
+                store.push({ id: Date.now(), d: duration, ts: Date.now(), lat: lastLoc.lat, lon: lastLoc.lon, cat: "General" });
+                saveData();
             }
             document.getElementById('timer-display').innerText = "0.0";
-            document.getElementById('timer-display').style.color = "#1a1a1c";
+            document.getElementById('timer-display').style.color = "#111";
         }
 
-        function paintTimer(s) {
-            const v = data.filter(x => x.cat !== 'SafeZone');
-            const d = document.getElementById('timer-display');
-            if (v.length < 4) return;
-            const a = v.reduce((p, c) => p + c.d, 0) / v.length;
-            d.style.color = s <= a * 0.8 ? "#22c55e" : (s <= a * 1.2 ? "#eab308" : "#ef4444");
-        }
-
-        // Map Engine
-        function bootMap() {
+        // MAP CONTROLLER
+        function initMap() {
             if (map) return;
-            map = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView([currentPos.lat, currentPos.lon], 16);
+            map = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView([lastLoc.lat, lastLoc.lon], 16);
+            
+            // High-Contrast Dark Map (Voyager Labels Under)
             L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
-            logs.addTo(map);
-            userPointer = L.circleMarker([currentPos.lat, currentPos.lon], { radius: 10, color: '#fff', weight: 3, fillColor: '#00f2ff', fillOpacity: 1 }).addTo(map);
-            syncMap();
+            
+            logsLayer.addTo(map);
+            userM = L.circleMarker([lastLoc.lat, lastLoc.lon], { 
+                radius: 12, color: '#fff', weight: 4, fillColor: '#00f2ff', fillOpacity: 1 
+            }).addTo(map);
+            
+            drawLayers();
         }
 
-        function recenterMap() { if (currentPos.lat !== 0) map.flyTo([currentPos.lat, currentPos.lon], 17); }
+        function recenterMap() { if (lastLoc.lat !== 0) map.flyTo([lastLoc.lat, lastLoc.lon], 17); }
 
         function toggleHeat() {
-            heatON = !heatON;
-            const b = document.getElementById('heat-toggle');
-            b.innerText = heatON ? "Heat: ON" : "Heat: OFF";
-            b.style.borderColor = heatON ? "#f97316" : "#333";
-            syncMap();
+            isHeat = !isHeat;
+            document.getElementById('heat-btn').innerText = isHeat ? "Heatmap: ON" : "Heatmap: OFF";
+            document.getElementById('heat-btn').style.borderColor = isHeat ? "#fbbf24" : "#222";
+            drawLayers();
         }
 
-        function syncMap() {
-            if(!logs) return;
-            logs.clearLayers();
-            if(heat) map.removeLayer(heat);
-            if(trail) map.removeLayer(trail);
+        function drawLayers() {
+            if(!logsLayer) return;
+            logsLayer.clearLayers();
+            if(heatM) map.removeLayer(heatM);
+            if(trailL) map.removeLayer(trailL);
 
-            // 24H History Trail
-            const cut = Date.now() - 86400000;
-            const pts = data.filter(x => x.ts > cut).sort((a,b) => a.ts - b.ts).map(x => [x.lat, x.lon]);
-            if(pts.length > 1) trail = L.polyline(pts, { color: '#00f2ff', weight: 2, opacity: 0.2, dashArray: '4, 8' }).addTo(map);
+            // 24H Path
+            const limit = Date.now() - 86400000;
+            const recent = store.filter(x => x.ts > limit).sort((a,b) => a.ts - b.ts).map(x => [x.lat, x.lon]);
+            if(recent.length > 1) trailL = L.polyline(recent, { color: '#00f2ff', weight: 2, opacity: 0.3, dashArray: '8, 12' }).addTo(map);
 
-            if (heatON) {
-                heat = L.heatLayer(data.map(x => [x.lat, x.lon, 0.4]), { radius: 20, blur: 15 }).addTo(map);
+            if (isHeat) {
+                heatM = L.heatLayer(store.map(x => [x.lat, x.lon, 0.5]), { radius: 25, blur: 15 }).addTo(map);
             } else {
-                data.forEach(item => {
-                    L.circleMarker([item.lat, item.lon], { 
-                        radius: 7, 
-                        color: item.cat === "SafeZone" ? "#a855f7" : "#00f2ff", 
-                        fillColor: item.cat === "SafeZone" ? "#a855f7" : "#00f2ff", 
-                        fillOpacity: 0.5 
-                    }).addTo(logs).on('click', () => showEdit(item));
+                store.forEach(i => {
+                    L.circleMarker([i.lat, i.lon], { 
+                        radius: 8, color: '#fff', weight: 2, 
+                        fillColor: i.cat === "SafeZone" ? "#a855f7" : "#00f2ff", 
+                        fillOpacity: 0.7 
+                    }).addTo(logsLayer).on('click', () => { activeID = i.id; openModal(i); });
                 });
             }
         }
 
-        // Location Logic
+        // GEOLOCATION
         navigator.geolocation.watchPosition(p => {
-            currentPos = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy };
+            lastLoc = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy };
             const speed = (p.coords.speed || 0) * 3.6;
-            document.getElementById('speed-val').innerText = speed.toFixed(1);
+            document.getElementById('speed-out').innerHTML = `${speed.toFixed(1)} <span class="text-[10px]">KM/H</span>`;
             
-            // User-requested Data Stabilization logic
-            const stabBox = document.getElementById('stab-val');
+            // DATA STABILIZATION INDICATOR
+            const sBox = document.getElementById('stab-status');
             if (p.coords.accuracy < 15) {
-                stabBox.innerText = "STABLE";
-                stabBox.className = "text-green-500 font-bold";
+                sBox.innerText = "Signal: Stable";
+                sBox.className = "text-green-500 font-bold uppercase";
             } else {
-                stabBox.innerText = "STABILIZING...";
-                stabBox.className = "text-yellow-500 stabilizing";
+                sBox.innerText = "Signal: Stabilizing...";
+                sBox.className = "stab-active font-bold uppercase";
             }
 
-            if (active && speed < 1.2 && !timing) runTimer();
-            if (timing && speed > 6.0) killTimer();
-            if (userPointer) userPointer.setLatLng([currentPos.lat, currentPos.lon]);
-        }, e => {
-            document.getElementById('gps-status').innerText = "ERROR";
-            document.getElementById('gps-status').className = "text-red-500";
-        }, { enableHighAccuracy: true });
+            if (isArmed && speed < 1.0 && !isClocking) startClock();
+            if (isClocking && speed > 5.0) stopClock();
+            if (userM) userM.setLatLng([lastLoc.lat, lastLoc.lon]);
+        }, null, { enableHighAccuracy: true });
 
-        // Storage & UI Utils
-        function save() {
-            localStorage.setItem(STORAGE_ID, JSON.stringify(data));
-            const v = data.filter(x => x.cat !== 'SafeZone');
-            document.getElementById('conf-percent').innerText = Math.min((v.length / 4) * 100, 100).toFixed(0) + "%";
-            if(map) syncMap();
+        // UI & STORAGE
+        function saveData() {
+            localStorage.setItem(DB, JSON.stringify(store));
+            document.getElementById('count-val').innerText = store.length;
+            const valid = store.filter(x => x.cat !== 'SafeZone');
+            document.getElementById('conf-val').innerText = Math.min((valid.length / 5) * 100, 100).toFixed(0) + "%";
+            if(map) drawLayers();
         }
 
-        function renderList() {
-            const h = document.getElementById('log-anchor');
-            h.innerHTML = "";
-            [...data].reverse().forEach(x => {
-                const s = selectedSet.has(x.id);
-                const d = document.createElement('div');
-                d.className = `bg-zinc-900/40 p-5 rounded-3xl flex justify-between items-center border ${s ? 'border-cyan-500 bg-cyan-500/5' : 'border-zinc-800'}`;
-                d.onclick = () => {
-                    if(selectionMode) {
-                        if(s) selectedSet.delete(x.id); else selectedSet.add(x.id);
-                        document.getElementById('sel-count').innerText = `${selectedSet.size} ITEMS`;
-                        renderList();
-                    } else { showEdit(x); }
+        function renderLogs() {
+            const list = document.getElementById('log-list');
+            list.innerHTML = "";
+            [...store].reverse().forEach(i => {
+                const s = selected.has(i.id);
+                const el = document.createElement('div');
+                el.className = `bg-zinc-900/50 p-5 rounded-3xl flex justify-between items-center border ${s ? 'border-cyan-500' : 'border-zinc-800'}`;
+                el.onclick = () => {
+                    if(isBulk) {
+                        if(s) selected.delete(i.id); else selected.add(i.id);
+                        document.getElementById('sel-info').innerText = `${selected.size} Selected`;
+                        renderLogs();
+                    } else { activeID = i.id; openModal(i); }
                 };
-                d.innerHTML = `<div><div class="text-white font-black text-lg">${x.d}s</div><div class="text-[9px] opacity-30 font-bold uppercase">${new Date(x.ts).toLocaleTimeString()}</div></div><div class="text-[9px] font-black uppercase ${x.cat === 'SafeZone' ? 'text-purple-500' : 'text-cyan-500'}">${x.cat}</div>`;
-                h.appendChild(d);
+                el.innerHTML = `<div><div class="text-white font-black text-lg">${i.d}s</div><div class="text-[9px] opacity-20 font-bold">${new Date(i.ts).toLocaleTimeString()}</div></div><div class="text-[9px] font-black uppercase ${i.cat === 'SafeZone' ? 'text-purple-500' : 'text-cyan-500'}">${i.cat}</div>`;
+                list.appendChild(el);
             });
         }
 
@@ -280,28 +335,26 @@
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
             document.getElementById('page-'+n).classList.add('active-page');
             document.getElementById('tab-'+n).classList.add('nav-btn-active');
-            if(n === 'map') { bootMap(); setTimeout(() => map.invalidateSize(), 300); }
-            if(n === 'history') renderList();
+            if(n === 'map') { initMap(); setTimeout(() => map.invalidateSize(), 200); }
+            if(n === 'logs') renderLogs();
         }
 
-        function showEdit(i) { activeID = i.id; document.getElementById('entry-cat').value = i.cat; document.getElementById('edit-view').classList.add('active'); }
-        function hideModal() { document.getElementById('edit-view').classList.remove('active'); }
-        function applyEntry() {
-            const i = data.findIndex(x => x.id === activeID);
-            if(i !== -1) { data[i].cat = document.getElementById('entry-cat').value; save(); }
-            hideModal();
+        function openModal(i) { document.getElementById('edit-cat').value = i.cat; document.getElementById('edit-modal').classList.add('active'); }
+        function closeModal() { document.getElementById('edit-modal').classList.remove('active'); }
+        function saveEntry() { 
+            const idx = store.findIndex(x => x.id === activeID);
+            if(idx !== -1) { store[idx].cat = document.getElementById('edit-cat').value; saveData(); }
+            closeModal();
         }
-        function trashEntry() { data = data.filter(x => x.id !== activeID); save(); hideModal(); renderList(); }
-        function enterSelectMode() { selectionMode = !selectionMode; selectedSet.clear(); document.getElementById('sel-btn').innerText = selectionMode ? "CANCEL" : "SELECT"; document.getElementById('multi-tools').classList.toggle('hidden', !selectionMode); renderList(); }
-        function bulkDelete() { if(confirm("Purge selected data?")) { data = data.filter(x => !selectedSet.has(x.id)); save(); enterSelectMode(); renderList(); } }
-        function downloadCSV() {
-            const h = ["ID", "Duration", "Timestamp", "Latitude", "Longitude", "Category"];
-            const r = data.map(x => [x.id, x.d, new Date(x.ts).toISOString(), x.lat, x.lon, x.cat].join(","));
-            const blob = new Blob([[h.join(","), ...r].join("\n")], { type: 'text/csv' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `recon_data_${Date.now()}.csv`; a.click();
+        function deleteEntry() { store = store.filter(x => x.id !== activeID); saveData(); renderLogs(); closeModal(); }
+        function toggleBulk() { isBulk = !isBulk; selected.clear(); document.getElementById('bulk-toggle-btn').innerText = isBulk ? "CANCEL" : "SELECT"; document.getElementById('bulk-bar').classList.toggle('hidden', !isBulk); renderLogs(); }
+        function deleteSelected() { if(confirm("Purge selected?")) { store = store.filter(x => !selected.has(x.id)); saveData(); toggleBulk(); } }
+        function exportData() {
+            const blob = new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `recon_${Date.now()}.json`; a.click();
         }
 
-        save(); // Initial state sync
+        saveData();
     </script>
 </body>
 </html>
