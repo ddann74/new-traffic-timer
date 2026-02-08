@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V17.2</title>
+    <title>Gravity Intel V17.4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -13,21 +13,33 @@
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
         :root { --accent: #00f2ff; --bg: #050505; }
         body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; font-size: 18px; }
-        #map-canvas { height: 100%; width: 100%; background: #111; z-index: 10; }
+        
+        /* High Contrast Map Filter */
+        #map-canvas { height: 100%; width: 100%; background: #000; z-index: 10; }
+        .map-brightness-tweak { filter: invert(100%) hue-rotate(180deg) brightness(0.9) contrast(1.2); }
+        .leaflet-container { background: #000 !important; }
+
         .page { display: none; width: 100vw; height: calc(100vh - 85px); flex-direction: column; overflow-y: auto; }
         .active-page { display: flex; }
+        
+        /* Navigation */
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222; z-index: 2000; padding-bottom: env(safe-area-inset-bottom); }
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; font-size: 13px; font-weight: 700; border: none; background: none; color: white; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 3px solid var(--accent); }
+        
+        /* Dashboard */
         #timer-display { font-size: 32vw; font-weight: 700; line-height: 1; color: #27272a; transition: color 0.3s; }
-        .filter-pill { background: #111; border: 1px solid #333; padding: 8px 16px; border-radius: 20px; font-size: 12px; white-space: nowrap; color: #71717a; }
-        .filter-pill.active { background: var(--accent); color: black; border-color: var(--accent); font-weight: 800; }
+        .filter-pill { background: #111; border: 1px solid #333; padding: 8px 16px; border-radius: 20px; font-size: 12px; color: #71717a; }
+        .filter-pill.active { background: var(--accent); color: black; font-weight: 800; }
+        
+        /* Modals & Cards */
         .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 5000; display: none; padding: 25px; align-items: center; justify-content: center; }
         .modal.active { display: flex; }
         .log-card { transition: all 0.2s; border: 1px solid #18181b; }
         .log-card.selected { border-color: var(--accent); background: rgba(0, 242, 255, 0.05); }
+        
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        @keyframes pulse-purple { 0%, 100% { border-color: rgba(168, 85, 247, 0.5); } 50% { border-color: rgba(168, 85, 247, 1); box-shadow: 0 0 15px 0 rgba(168, 85, 247, 0.3); } }
+        @keyframes pulse-purple { 0%, 100% { border-color: rgba(168, 85, 247, 0.5); } 50% { border-color: rgba(168, 85, 247, 1); } }
         .suggest-anim { animation: pulse-purple 2s infinite; }
     </style>
 </head>
@@ -35,7 +47,7 @@
 
     <div id="page-dash" class="page active-page p-6">
         <div id="suggestion-bar" class="hidden mb-4 bg-purple-900/30 border border-purple-500/50 p-4 rounded-2xl flex justify-between items-center suggest-anim cursor-pointer">
-            <span class="text-[10px] font-black text-purple-400 uppercase tracking-tighter">Frequent Zone Detected: Mark as Safe?</span>
+            <span class="text-[10px] font-black text-purple-400 uppercase">Frequent Zone: Mark as Safe?</span>
             <span class="text-[10px] bg-purple-500 text-white px-3 py-1 rounded-lg font-bold">YES</span>
         </div>
         <div class="grid grid-cols-2 gap-4 mb-8">
@@ -50,32 +62,29 @@
         </div>
         <div class="flex-1 flex flex-col justify-center items-center text-center">
             <div id="timer-display">0.0</div>
-            <div id="data-status" class="text-sm mt-6 opacity-50 font-bold tracking-widest uppercase">Initializing...</div>
-            <div class="mt-12 w-full"><button id="btn-master" onclick="toggleSystem()" class="w-full py-6 bg-zinc-800 text-zinc-400 font-black rounded-3xl uppercase tracking-tighter text-lg shadow-xl">Initiate Engine</button></div>
+            <div id="data-status" class="text-sm mt-6 opacity-50 font-bold uppercase tracking-widest">Initializing...</div>
+            <div class="mt-12 w-full"><button id="btn-master" onclick="toggleSystem()" class="w-full py-6 bg-zinc-800 text-zinc-400 font-black rounded-3xl uppercase text-lg shadow-xl">Initiate Engine</button></div>
         </div>
     </div>
 
     <div id="page-map" class="page" style="padding:0; overflow:hidden; position:relative;">
         <div id="map-canvas"></div>
-        <div class="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
-            <button onclick="toggleHeatmap()" id="heat-btn" class="bg-zinc-900/90 border border-zinc-700 p-4 rounded-2xl text-[10px] font-black uppercase text-zinc-400 backdrop-blur-md">Heatmap: OFF</button>
+        <div class="absolute top-4 left-4 z-[1000]">
+            <button onclick="recenterMap()" class="bg-zinc-900/90 border border-zinc-700 p-4 rounded-2xl text-[10px] font-black uppercase text-white backdrop-blur-md shadow-2xl active:scale-95 transition-transform">◎ Find Me</button>
+        </div>
+        <div class="absolute top-4 right-4 z-[1000]">
+            <button onclick="toggleHeatmap()" id="heat-btn" class="bg-zinc-900/90 border border-zinc-700 p-4 rounded-2xl text-[10px] font-black uppercase text-zinc-400 backdrop-blur-md shadow-2xl">Heatmap: OFF</button>
         </div>
     </div>
     
     <div id="page-history" class="page p-6">
         <div class="flex justify-between items-center mb-4">
             <h2 class="text-white font-black text-xl uppercase tracking-tight">Geospatial Logs</h2>
-            <div class="flex gap-2">
-                <button id="edit-mode-btn" onclick="toggleEditMode()" class="text-[10px] font-bold border border-zinc-700 px-3 py-2 rounded-xl text-zinc-400 uppercase">Select</button>
-            </div>
+            <button id="edit-mode-btn" onclick="toggleEditMode()" class="text-[10px] font-bold border border-zinc-700 px-3 py-2 rounded-xl text-zinc-400 uppercase">Select</button>
         </div>
         <div id="bulk-actions" class="hidden mb-4 bg-zinc-900 p-3 rounded-2xl flex justify-between items-center border border-cyan-500/30">
             <span id="selected-count" class="text-xs font-bold text-cyan-500 ml-2">0 SELECTED</span>
             <button onclick="deleteSelected()" class="bg-red-500 text-white text-[10px] font-black px-4 py-2 rounded-xl uppercase">Delete Group</button>
-        </div>
-        <div class="flex gap-3 mb-6 overflow-x-auto pb-2 no-scrollbar">
-            <button onclick="setTimeFilter('all')" class="filter-pill active" id="f-all">ALL</button>
-            <button onclick="setTimeFilter('24h')" class="filter-pill">24H</button>
         </div>
         <div id="history-list" class="space-y-4 pb-32"></div>
     </div>
@@ -86,20 +95,19 @@
             <div class="bg-zinc-900 p-6 rounded-[32px] border border-zinc-800">
                 <span class="text-[10px] opacity-40 uppercase font-black block mb-4">Data Management</span>
                 <button onclick="exportToCSV()" class="w-full bg-cyan-500/10 border border-cyan-500/50 text-cyan-500 py-4 rounded-2xl font-black text-xs uppercase tracking-widest mb-3">Export Records (CSV)</button>
-                <p class="text-[10px] text-zinc-500 leading-relaxed">Download logs for backup. Current: <span id="record-count-stat">0</span></p>
-                <button onclick="clearLogs()" class="w-full mt-4 text-red-500 text-[10px] font-bold uppercase tracking-widest opacity-40">Wipe Local Storage</button>
+                <p class="text-[10px] text-zinc-500 leading-relaxed">Backup history. Records: <span id="record-count-stat">0</span></p>
             </div>
             <div class="bg-zinc-900 p-6 rounded-[32px] border border-zinc-800">
                 <span class="text-[10px] opacity-40 uppercase font-black block mb-2">Build Info</span>
-                <div class="text-white font-bold text-sm">V17.2 Ghost-Stable (2026 Build)</div>
+                <div class="text-white font-bold text-sm">V17.4 High-Visibility</div>
             </div>
         </div>
     </div>
 
     <div id="edit-modal" class="modal">
-        <div class="bg-zinc-900 w-full max-w-sm rounded-[40px] p-8 border border-zinc-800 shadow-2xl">
-            <h3 class="text-white font-black text-lg mb-6 uppercase tracking-tight">Modify Record</h3>
-            <select id="edit-category" class="w-full bg-black p-4 rounded-2xl border border-zinc-700 text-white font-bold outline-none">
+        <div class="bg-zinc-900 w-full max-w-sm rounded-[40px] p-8 border border-zinc-800">
+            <h3 class="text-white font-black text-lg mb-6 uppercase">Modify Record</h3>
+            <select id="edit-category" class="w-full bg-black p-4 rounded-2xl border border-zinc-700 text-white font-bold">
                 <option value="General">Standard Stop</option>
                 <option value="Traffic">Traffic / Signal</option>
                 <option value="SafeZone">Safe Zone</option>
@@ -127,7 +135,7 @@
         let map, userMarker, historyGroup, heatLayer, ghostRoute = null;
         let lastCoords = { lat: 0, lon: 0 };
         let activeRecordId = null, heatActive = false, isEditMode = false;
-        let currentFilter = 'all', selectedIds = new Set();
+        let selectedIds = new Set();
 
         function toggleSystem() {
             isArmed = !isArmed;
@@ -170,59 +178,34 @@
             if (duration > 3) {
                 storage.push({ id: Date.now(), d: duration, ts: Date.now(), lat: lastCoords.lat, lon: lastCoords.lon, cat: "General" });
                 localStorage.setItem(DB_KEY, JSON.stringify(storage));
-                checkFrequentZones(lastCoords.lat, lastCoords.lon);
                 updateDashboard();
             }
             document.getElementById('timer-display').innerText = "0.0";
             document.getElementById('timer-display').style.color = "#27272a";
         }
 
-        function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371000;
-            const dLat = (lat2 - lat1) * Math.PI / 180;
-            const dLon = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        }
-
-        function checkFrequentZones(lat, lon) {
-            const matches = storage.filter(i => calculateDistance(lat, lon, i.lat, i.lon) < 50 && i.cat !== "SafeZone");
-            if (matches.length >= 3) {
-                const bar = document.getElementById('suggestion-bar');
-                bar.classList.remove('hidden');
-                bar.onclick = () => {
-                    storage.forEach(i => { if (calculateDistance(lat, lon, i.lat, i.lon) < 50) i.cat = "SafeZone"; });
-                    localStorage.setItem(DB_KEY, JSON.stringify(storage));
-                    bar.classList.add('hidden');
-                    updateDashboard();
-                };
-            }
-        }
-
-        function exportToCSV() {
-            if (storage.length === 0) return alert("No records.");
-            const headers = ["ID", "Duration_Sec", "Timestamp", "Lat", "Lon", "Category"];
-            const csvRows = [headers.join(",")];
-            storage.forEach(i => csvRows.push([i.id, i.d, new Date(i.ts).toISOString(), i.lat, i.lon, i.cat].join(",")));
-            const blob = new Blob([csvRows.join("\n")], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = `gravity_intel_${Date.now()}.csv`;
-            a.click();
-        }
-
         function initMap() {
             if (map) return;
-            map = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView([lastCoords.lat, lastCoords.lon], 15);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            map = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView([lastCoords.lat, lastCoords.lon], 16);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', {
+                className: 'map-brightness-tweak'
+            }).addTo(map);
+
             historyGroup = L.layerGroup().addTo(map);
-            userMarker = L.circleMarker([lastCoords.lat, lastCoords.lon], { radius: 9, color: '#fff', weight: 4, fillColor: '#00f2ff', fillOpacity: 1 }).addTo(map);
+            userMarker = L.circleMarker([lastCoords.lat, lastCoords.lon], { 
+                radius: 12, color: '#fff', weight: 4, fillColor: '#00f2ff', fillOpacity: 1 
+            }).addTo(map);
             renderMapData();
+        }
+
+        function recenterMap() {
+            if (lastCoords.lat !== 0) map.flyTo([lastCoords.lat, lastCoords.lon], 17);
         }
 
         function toggleHeatmap() {
             heatActive = !heatActive;
             document.getElementById('heat-btn').innerText = heatActive ? "Heatmap: ON" : "Heatmap: OFF";
+            document.getElementById('heat-btn').classList.toggle('text-orange-400', heatActive);
             renderMapData();
         }
 
@@ -245,7 +228,9 @@
             } else {
                 storage.forEach(item => {
                     const isSafe = item.cat === "SafeZone";
-                    L.circleMarker([item.lat, item.lon], { radius: 8, color: isSafe ? "#a855f7" : "#00f2ff", fillColor: isSafe ? "#a855f7" : "#00f2ff", fillOpacity: 0.5 }).addTo(historyGroup).on('click', () => { activeRecordId = item.id; openEditModal(item); });
+                    L.circleMarker([item.lat, item.lon], { 
+                        radius: 8, color: isSafe ? "#a855f7" : "#00f2ff", fillColor: isSafe ? "#a855f7" : "#00f2ff", fillOpacity: 0.5 
+                    }).addTo(historyGroup).on('click', () => { activeRecordId = item.id; openEditModal(item); });
                 });
             }
         }
@@ -253,25 +238,32 @@
         function renderLogs() {
             const list = document.getElementById('history-list');
             list.innerHTML = "";
-            let filtered = [...storage].reverse();
-            if(currentFilter === '24h') filtered = filtered.filter(i => Date.now() - i.ts < 86400000);
-            filtered.forEach(i => {
+            [...storage].reverse().forEach(i => {
                 const isSel = selectedIds.has(i.id);
                 const div = document.createElement('div');
                 div.className = `log-card bg-zinc-900/50 p-5 rounded-3xl flex justify-between items-center ${isSel ? 'selected' : ''}`;
-                div.onclick = () => { if(isEditMode) { if(isSel) selectedIds.delete(i.id); else selectedIds.add(i.id); document.getElementById('selected-count').innerText = `${selectedIds.size} SELECTED`; renderLogs(); } else { activeRecordId = i.id; openEditModal(i); } };
-                div.innerHTML = `<div class="flex items-center gap-4"><div class="w-1 h-8 rounded-full ${i.cat === 'SafeZone' ? 'bg-purple-500' : 'bg-cyan-500'}"></div><div><div class="text-white font-bold">${i.d}s <span class="text-[9px] opacity-40 ml-1">${i.cat}</span></div><div class="text-[10px] opacity-30">${new Date(i.ts).toLocaleTimeString()}</div></div></div>`;
+                div.onclick = () => { 
+                    if(isEditMode) { 
+                        if(isSel) selectedIds.delete(i.id); else selectedIds.add(i.id); 
+                        document.getElementById('selected-count').innerText = `${selectedIds.size} SELECTED`; 
+                        renderLogs(); 
+                    } else { activeRecordId = i.id; openEditModal(i); } 
+                };
+                div.innerHTML = `<div class="flex items-center gap-4"><div class="w-1 h-8 rounded-full ${i.cat === 'SafeZone' ? 'bg-purple-500' : 'bg-cyan-500'}"></div><div><div class="text-white font-bold">${i.d}s</div><div class="text-[10px] opacity-30">${new Date(i.ts).toLocaleTimeString()}</div></div></div>`;
                 list.appendChild(div);
             });
         }
 
-        function toggleEditMode() { isEditMode = !isEditMode; selectedIds.clear(); document.getElementById('edit-mode-btn').innerText = isEditMode ? "Cancel" : "Select"; document.getElementById('bulk-actions').classList.toggle('hidden', !isEditMode); renderLogs(); }
-        function deleteSelected() { if(confirm("Delete selected?")) { storage = storage.filter(i => !selectedIds.has(i.id)); localStorage.setItem(DB_KEY, JSON.stringify(storage)); toggleEditMode(); updateDashboard(); } }
-        function openEditModal(item) { document.getElementById('edit-category').value = item.cat; document.getElementById('edit-modal').classList.add('active'); }
-        function closeModal() { document.getElementById('edit-modal').classList.remove('active'); }
-        function saveEdit() { const idx = storage.findIndex(i => i.id === activeRecordId); if(idx !== -1) { storage[idx].cat = document.getElementById('edit-category').value; localStorage.setItem(DB_KEY, JSON.stringify(storage)); updateDashboard(); } closeModal(); }
-        function deleteCurrentRecord() { storage = storage.filter(i => i.id !== activeRecordId); localStorage.setItem(DB_KEY, JSON.stringify(storage)); updateDashboard(); closeModal(); }
-        function setTimeFilter(f) { currentFilter = f; document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active')); event.target.classList.add('active'); renderLogs(); }
+        function exportToCSV() {
+            const headers = ["ID", "Duration_Sec", "Timestamp", "Lat", "Lon", "Category"];
+            const csvRows = [headers.join(",")];
+            storage.forEach(i => csvRows.push([i.id, i.d, new Date(i.ts).toISOString(), i.lat, i.lon, i.cat].join(",")));
+            const blob = new Blob([csvRows.join("\n")], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `gravity_intel_${Date.now()}.csv`;
+            a.click();
+        }
 
         function tab(n) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
@@ -297,7 +289,14 @@
             document.getElementById('record-count-stat').innerText = storage.length;
             if(map) renderMapData();
         }
-        function clearLogs() { if(confirm("WIPE EVERYTHING?")) { storage = []; localStorage.removeItem(DB_KEY); updateDashboard(); renderLogs(); } }
+
+        function openEditModal(item) { document.getElementById('edit-category').value = item.cat; document.getElementById('edit-modal').classList.add('active'); }
+        function closeModal() { document.getElementById('edit-modal').classList.remove('active'); }
+        function saveEdit() { const idx = storage.findIndex(i => i.id === activeRecordId); if(idx !== -1) { storage[idx].cat = document.getElementById('edit-category').value; localStorage.setItem(DB_KEY, JSON.stringify(storage)); updateDashboard(); } closeModal(); }
+        function deleteCurrentRecord() { storage = storage.filter(i => i.id !== activeRecordId); localStorage.setItem(DB_KEY, JSON.stringify(storage)); updateDashboard(); closeModal(); }
+        function toggleEditMode() { isEditMode = !isEditMode; selectedIds.clear(); document.getElementById('edit-mode-btn').innerText = isEditMode ? "Cancel" : "Select"; document.getElementById('bulk-actions').classList.toggle('hidden', !isEditMode); renderLogs(); }
+        function deleteSelected() { if(confirm("Delete selected?")) { storage = storage.filter(i => !selectedIds.has(i.id)); localStorage.setItem(DB_KEY, JSON.stringify(storage)); toggleEditMode(); updateDashboard(); } }
+
         updateDashboard();
     </script>
 </body>
