@@ -3,29 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V18.10</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Gravity Intel V18.13</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap');
         :root { --accent: #00f2ff; --bg: #050505; }
-        body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; }
-
-        .page { display: none; width: 100vw; height: calc(100vh - 85px); flex-direction: column; overflow-y: auto; }
+        body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; position: fixed; width: 100%; }
+        .page { display: none; width: 100vw; height: calc(100vh - 85px); flex-direction: column; overflow-y: auto; -webkit-overflow-scrolling: touch; }
         .active-page { display: flex; }
         #map-canvas { height: 100%; width: 100%; background: #1a1a1a; z-index: 1; }
-        
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #111; z-index: 5000; padding-bottom: env(safe-area-inset-bottom); }
-        .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.3; color: white; border: none; background: none; transition: 0.2s; }
+        .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.3; color: white; border: none; background: none; transition: 0.2s; font-size: 10px; font-weight: 800; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 4px solid var(--accent); }
-
-        #timer-display { font-size: 26vw; font-weight: 800; color: #fff; line-height: 1; transition: color 0.2s; }
-        
-        @keyframes flash-red { 0%, 100% { color: #ff0000; opacity: 1; } 50% { opacity: 0.2; } }
+        #timer-display { font-size: 24vw; font-weight: 800; color: #fff; line-height: 1; }
         .record-flash { animation: flash-red 0.4s infinite !important; }
-
+        @keyframes flash-red { 0%, 100% { color: #ff0000; } 50% { opacity: 0.5; } }
         .stab-warn { animation: pulse 1s infinite; color: #facc15; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
     </style>
@@ -33,50 +29,67 @@
 <body>
 
     <div id="page-dash" class="page active-page p-6">
-        <div class="flex justify-between items-start mb-6">
+        <div class="flex justify-between items-start mb-4">
             <div>
-                <div class="text-[10px] font-black opacity-30 uppercase tracking-widest">Data Stabilization</div>
-                <div id="stab-status" class="text-xs font-bold uppercase mt-1">Standby</div>
+                <div id="stab-status" class="text-[10px] font-black uppercase tracking-widest opacity-40">Standby</div>
+                <div class="flex gap-2 mt-2">
+                    <button onclick="toggleSafeZone()" id="safe-btn" class="text-[9px] border border-zinc-700 px-3 py-1 rounded-full font-bold">SAFE ZONE: OFF</button>
+                </div>
             </div>
             <div class="text-right">
-                <div class="text-[10px] font-black opacity-30 uppercase tracking-widest">Velocity</div>
-                <div id="speed-out" class="text-xl font-black text-white italic">0.0</div>
+                <div class="text-[10px] font-black opacity-30 uppercase tracking-widest">Velocity / Dist</div>
+                <div class="text-white italic font-black"><span id="speed-out">0.0</span> <small class="text-[10px] opacity-50">km/h</small></div>
+                <div id="total-dist" class="text-[10px] text-cyan-400 font-bold mt-1">0.00 km</div>
             </div>
         </div>
 
         <div class="flex-1 flex flex-col justify-center items-center text-center">
             <div id="timer-display">0.0</div>
             <div id="phase-note" class="text-[10px] font-bold opacity-40 uppercase mt-4 tracking-widest">Learning Mode</div>
+            <div id="stop-ratio" class="text-[9px] opacity-30 mt-2 font-bold tracking-tighter uppercase">STOP RATIO: 0%</div>
             <button id="master-toggle" onclick="toggleEngine()" class="mt-10 w-full py-6 bg-zinc-900 border-2 border-zinc-800 rounded-[32px] font-black text-zinc-500 uppercase active:scale-95 transition-all">Initiate Recon</button>
         </div>
     </div>
 
     <div id="page-map" class="page" style="padding:0; position:relative;">
-        <div class="absolute top-5 left-5 right-5 z-[2000] flex justify-between pointer-events-none">
-            <button onclick="recenterMap()" class="pointer-events-auto bg-white text-black px-6 py-3 rounded-xl font-black text-[10px] border-2 border-cyan-400">RECENTER</button>
-            <button onclick="clearMapPath()" class="pointer-events-auto bg-white text-black px-6 py-3 rounded-xl font-black text-[10px] border-2 border-red-500">CLEAR PATH</button>
+        <div class="absolute top-5 left-5 right-5 z-[2000] flex flex-col gap-2 pointer-events-none">
+            <div class="flex justify-between">
+                <button onclick="recenterMap()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-cyan-400">RECENTER</button>
+                <button onclick="setSafeCenter()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-green-500">SET SAFE BASE</button>
+            </div>
         </div>
         <div id="map-canvas"></div>
     </div>
 
     <div id="page-logs" class="page p-6">
-        <h2 class="text-xl font-black text-white uppercase italic mb-6">Trip Archives</h2>
+        <div class="flex justify-between items-end mb-4">
+            <h2 class="text-xl font-black text-white uppercase italic">Archives (<span id="log-count">0</span>)</h2>
+            <select id="log-filter" onchange="renderLogs()" class="bg-zinc-900 text-[10px] font-bold border border-zinc-700 p-1 rounded">
+                <option value="newest">NEWEST</option>
+                <option value="longest">LONGEST</option>
+                <option value="category">BY CATEGORY</option>
+            </select>
+        </div>
+        
+        <div id="bulk-actions" class="hidden mb-4 p-3 bg-cyan-950/30 border border-cyan-900 rounded-xl flex justify-between items-center">
+            <span class="text-[10px] font-bold text-cyan-400">SELECTED: <span id="select-count">0</span></span>
+            <div class="flex gap-2">
+                <button onclick="bulkDelete()" class="bg-red-900/50 text-red-400 px-3 py-1 rounded-lg text-[9px] font-bold">DELETE</button>
+                <button onclick="bulkGroup()" class="bg-cyan-600 text-black px-3 py-1 rounded-lg text-[9px] font-bold">GROUP</button>
+            </div>
+        </div>
+
         <div id="log-list" class="space-y-3 pb-32"></div>
     </div>
 
     <div id="page-sys" class="page p-8">
         <h2 class="text-xl font-black text-white uppercase mb-8">System Manifest</h2>
-        <button onclick="exportJSON()" class="w-full bg-white text-black py-5 rounded-2xl font-black text-xs uppercase mb-4 shadow-lg shadow-cyan-900/20">Export Trip Logs</button>
-        <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800 text-[10px] leading-relaxed">
-            <span class="opacity-30 uppercase font-black block mb-2">Build V18.10 Config</span>
-            - 0-4 Records: White (Learning)<br>
-            - 4+ Records: 33% Split (G/O/R)<br>
-            - Peak Record: Flashing Red<br>
-            - Data Stabilization Indicator: Active<br>
-            <span class="text-cyan-400 font-bold mt-2 block italic">Future Roadmap:</span>
-            - Data Stabilization Save Filter<br>
-            - Manual Target Calibration<br>
-            - Area Heatmapping
+        <button onclick="exportJSON()" class="w-full bg-white text-black py-5 rounded-2xl font-black text-xs uppercase mb-4">Export Trip Logs</button>
+        <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800 text-[10px] leading-relaxed mt-4">
+            <span class="opacity-30 uppercase font-black block mb-2">Build V18.13</span>
+            - Persistent Coordinates<br>
+            - Dynamic Haversine Distance<br>
+            - Radius Based Safe Zones
         </div>
     </div>
 
@@ -88,60 +101,91 @@
     </nav>
 
     <script>
-        const STORAGE_KEY = 'GRAVITY_PRO_V18_10';
+        const STORAGE_KEY = 'GRAVITY_PRO_V18_12'; 
         let trips = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
         let isArmed = false, isClocking = false, startT = 0, clockRef = null;
-        let map, userMarker, tripLine, currentTripPath = [];
-        let lastPos = { lat: 0, lon: 0 };
+        let map, userMarker, tripLine, safeCircle, currentTripPath = [];
+        let lastPos = JSON.parse(localStorage.getItem('GRAVITY_LAST_POS') || '{"lat":0,"lon":0}');
+        let safeBase = JSON.parse(localStorage.getItem('GRAVITY_SAFE_BASE') || 'null');
+        let totalDist = 0, sessionStartTime = 0;
+        let selectedLogs = new Set();
+        let isSafeZone = false;
+
+        const CATEGORIES = ["General", "Logistics", "Traffic", "Security", "Safe Zone"];
+
+        function toggleSafeZone() {
+            isSafeZone = !isSafeZone;
+            updateSafeUI();
+        }
+
+        function updateSafeUI() {
+            const btn = document.getElementById('safe-btn');
+            btn.innerText = isSafeZone ? "SAFE ZONE: ON" : "SAFE ZONE: OFF";
+            btn.className = isSafeZone ? "text-[9px] border border-green-500 bg-green-500/20 px-3 py-1 rounded-full font-bold text-green-400" : "text-[9px] border border-zinc-700 px-3 py-1 rounded-full font-bold";
+        }
+
+        function calculateDistance(path) {
+            let d = 0;
+            for(let i=1; i<path.length; i++) {
+                const p1 = L.latLng(path[i-1]);
+                const p2 = L.latLng(path[i]);
+                d += p1.distanceTo(p2);
+            }
+            return d / 1000;
+        }
 
         function toggleEngine() {
             isArmed = !isArmed;
             const btn = document.getElementById('master-toggle');
             if (isArmed) {
                 btn.innerText = "ENGINE ACTIVE"; btn.style.borderColor = "#00f2ff"; btn.style.color = "#fff";
-                currentTripPath = [];
+                currentTripPath = []; sessionStartTime = Date.now(); totalDist = 0;
+                if(tripLine) tripLine.setLatLngs([]);
             } else {
                 btn.innerText = "INITIATE RECON"; btn.style.borderColor = "#27272a"; btn.style.color = "#71717a";
                 stopClock();
                 if (currentTripPath.length > 2) {
-                    trips.push({ id: Date.now(), path: currentTripPath, duration: 0, ts: Date.now() });
+                    trips.push({ 
+                        id: Date.now(), 
+                        path: currentTripPath, 
+                        duration: 0, 
+                        ts: Date.now(), 
+                        cat: isSafeZone ? "Safe Zone" : "General",
+                        dist: calculateDistance(currentTripPath),
+                        heading: getHeading(currentTripPath)
+                    });
                     saveData();
                 }
             }
         }
 
+        function getHeading(path) {
+            if(path.length < 2) return "N";
+            const start = path[path.length-2];
+            const end = path[path.length-1];
+            const angle = Math.atan2(end[1] - start[1], end[0] - start[0]) * 180 / Math.PI;
+            const dirs = ['E', 'NE', 'N', 'NW', 'W', 'SW', 'S', 'SE'];
+            return dirs[Math.round(((angle %= 360) < 0 ? angle + 360 : angle) / 45) % 8];
+        }
+
         function startClock() {
             if (isClocking || !isArmed) return;
             isClocking = true; startT = Date.now();
-            
-            const hasData = trips.length >= 4;
-            let avg = 0, max = 0;
-            if (hasData) {
-                const validDurs = trips.map(t => t.duration).filter(d => d > 0);
-                avg = validDurs.reduce((a, b) => a + b, 0) / (validDurs.length || 1);
-                max = Math.max(...validDurs);
-            }
-
+            const valid = trips.filter(t => t.duration > 0);
+            const avg = valid.length >= 4 ? valid.reduce((a,b)=>a+b.duration,0)/valid.length : 0;
             clockRef = setInterval(() => {
                 const elapsed = (Date.now() - startT) / 1000;
-                const disp = document.getElementById('timer-display');
-                const note = document.getElementById('phase-note');
-                disp.innerText = elapsed.toFixed(1);
+                document.getElementById('timer-display').innerText = elapsed.toFixed(1);
+                const ratio = ((elapsed / ((Date.now() - sessionStartTime)/1000)) * 100).toFixed(0);
+                document.getElementById('stop-ratio').innerText = `STOP RATIO: ${ratio}%`;
 
-                if (!hasData) {
-                    disp.style.color = "#ffffff";
-                    note.innerText = `Learning Mode (${trips.length}/4)`;
-                } else {
-                    if (elapsed > max && max > 0) {
-                        disp.className = "record-flash";
-                        note.innerText = "NEW RECORD HIGH";
-                    } else {
-                        disp.className = "";
-                        const pct = elapsed / avg;
-                        if (pct <= 0.33) { disp.style.color = "#22c55e"; note.innerText = "Phase: Start (33%)"; }
-                        else if (pct <= 0.66) { disp.style.color = "#f59e0b"; note.innerText = "Phase: Middle (66%)"; }
-                        else { disp.style.color = "#ef4444"; note.innerText = "Phase: Final (99%)"; }
-                    }
+                if (valid.length >= 4 && !isSafeZone) {
+                    const pct = elapsed / avg;
+                    const disp = document.getElementById('timer-display');
+                    if (pct > 1.0) disp.className = "record-flash";
+                    else if (pct > 0.66) disp.style.color = "#ef4444";
+                    else if (pct > 0.33) disp.style.color = "#f59e0b";
+                    else disp.style.color = "#22c55e";
                 }
             }, 100);
         }
@@ -150,48 +194,129 @@
             if (!isClocking) return;
             isClocking = false; clearInterval(clockRef);
             const finalDur = (Date.now() - startT) / 1000;
-            if (trips.length > 0) {
-                const lastTrip = trips[trips.length - 1];
-                if(lastTrip) { lastTrip.duration = finalDur; saveData(); }
-            }
-            const disp = document.getElementById('timer-display');
-            disp.innerText = "0.0"; disp.style.color = "#fff"; disp.className = "";
+            if (trips.length > 0) { trips[trips.length-1].duration = finalDur; saveData(); }
+            document.getElementById('timer-display').innerText = "0.0";
+            document.getElementById('timer-display').className = "";
         }
 
         function initMap() {
             if (map) return;
-            map = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView([0,0], 2);
+            map = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView([lastPos.lat, lastPos.lon], 16);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
-            userMarker = L.circleMarker([0,0], { radius: 9, color: '#fff', weight: 3, fillColor: '#00f2ff', fillOpacity: 1 }).addTo(map);
-            tripLine = L.polyline([], { color: '#00f2ff', weight: 6, opacity: 0.9 }).addTo(map);
+            userMarker = L.circleMarker([lastPos.lat, lastPos.lon], { radius: 8, color: '#fff', weight: 2, fillColor: '#00f2ff', fillOpacity: 1 }).addTo(map);
+            tripLine = L.polyline([], { color: '#00f2ff', weight: 4 }).addTo(map);
+            
+            if(safeBase) {
+                safeCircle = L.circle([safeBase.lat, safeBase.lon], { radius: 100, color: '#22c55e', fillOpacity: 0.1 }).addTo(map);
+            }
+
+            map.on('moveend', () => {
+                const center = map.getCenter();
+                localStorage.setItem('GRAVITY_LAST_POS', JSON.stringify({lat: center.lat, lon: center.lng}));
+            });
+        }
+
+        function setSafeCenter() {
+            safeBase = { lat: lastPos.lat, lon: lastPos.lon };
+            localStorage.setItem('GRAVITY_SAFE_BASE', JSON.stringify(safeBase));
+            if(safeCircle) map.removeLayer(safeCircle);
+            safeCircle = L.circle([safeBase.lat, safeBase.lon], { radius: 100, color: '#22c55e', fillOpacity: 0.1 }).addTo(map);
+            alert("Safe Base Set (100m Radius)");
         }
 
         navigator.geolocation.watchPosition(p => {
-            lastPos = { lat: p.coords.latitude, lon: p.coords.longitude };
-            const speed = (p.coords.speed || 0) * 3.6;
-            document.getElementById('speed-out').innerText = speed.toFixed(1);
-
-            const sBox = document.getElementById('stab-status');
-            if (p.coords.accuracy < 15) { sBox.innerText = "STABLE"; sBox.className = "text-green-400 font-bold"; }
-            else { sBox.innerText = "STABILIZING..."; sBox.className = "stab-warn font-bold"; }
+            const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
+            const kmh = (speed || 0) * 3.6;
+            
+            // Auto Safe Zone Detection
+            if(safeBase) {
+                const distToBase = L.latLng(lat, lon).distanceTo(L.latLng(safeBase.lat, safeBase.lon));
+                isSafeZone = distToBase < 100;
+                updateSafeUI();
+            }
 
             if (isArmed) {
-                currentTripPath.push([p.coords.latitude, p.coords.longitude]);
-                if (speed < 1.0 && !isClocking) startClock();
-                if (isClocking && speed > 5.0) stopClock();
+                if(currentTripPath.length > 0) {
+                    const lastStep = currentTripPath[currentTripPath.length-1];
+                    totalDist += L.latLng(lat, lon).distanceTo(L.latLng(lastStep[0], lastStep[1])) / 1000;
+                }
+                currentTripPath.push([lat, lon]);
+                document.getElementById('total-dist').innerText = `${totalDist.toFixed(2)} km`;
+                if (tripLine) tripLine.addLatLng([lat, lon]);
+                if (kmh < 1.5 && !isClocking) startClock();
+                if (kmh > 4.5 && isClocking) stopClock();
             }
-            if (userMarker) userMarker.setLatLng([lastPos.lat, lastPos.lon]);
+
+            lastPos = { lat, lon };
+            document.getElementById('speed-out').innerText = kmh.toFixed(1);
+            const sBox = document.getElementById('stab-status');
+            sBox.innerText = accuracy < 15 ? "STABLE" : "STABILIZING...";
+            sBox.style.color = accuracy < 15 ? "#22c55e" : "#facc15";
+            if (userMarker) userMarker.setLatLng([lat, lon]);
         }, null, { enableHighAccuracy: true });
 
         function renderLogs() {
             const list = document.getElementById('log-list');
-            list.innerHTML = trips.length ? "" : "<div class='opacity-20 text-center mt-20 text-xs uppercase'>Archive Empty</div>";
-            [...trips].reverse().forEach(t => {
+            const filter = document.getElementById('log-filter').value;
+            let sorted = [...trips];
+            if(filter === 'longest') sorted.sort((a,b) => b.duration - a.duration);
+            if(filter === 'category') sorted.sort((a,b) => a.cat.localeCompare(b.cat));
+            else sorted.reverse();
+
+            document.getElementById('log-count').innerText = trips.length;
+            list.innerHTML = "";
+            sorted.forEach(t => {
+                const timeStr = new Date(t.ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const hourGroup = new Date(t.ts).getHours();
                 const el = document.createElement('div');
-                el.className = "bg-zinc-900 p-5 rounded-2xl border border-zinc-800 flex justify-between items-center";
-                el.innerHTML = `<div><div class="text-white font-black text-[10px] uppercase">${new Date(t.ts).toLocaleTimeString()}</div><div class="text-[12px] text-cyan-400 font-bold">${t.duration.toFixed(1)}s STOP</div></div><button onclick="viewTrip(${t.id})" class="bg-white text-black px-4 py-2 rounded-xl text-[10px] font-black uppercase">Review</button>`;
+                el.className = `p-4 rounded-2xl border transition-all ${selectedLogs.has(t.id) ? 'bg-cyan-900/40 border-cyan-400' : 'bg-zinc-900 border-zinc-800'}`;
+                el.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <input type="checkbox" ${selectedLogs.has(t.id)?'checked':''} onclick="toggleSelect(${t.id}, event)" class="mt-1">
+                        <div class="flex-1 ml-3" onclick="viewTrip(${t.id})">
+                            <div class="text-white font-black text-[10px] uppercase">${timeStr} | ${hourGroup}:00 BLOCK</div>
+                            <div class="text-[14px] text-cyan-400 font-bold">${t.duration.toFixed(1)}s <span class="text-white opacity-40 text-[9px] italic">${t.heading || 'N'}</span></div>
+                            <div class="flex gap-2 items-center mt-2">
+                                <select onchange="updateCat(${t.id}, this.value)" class="bg-black text-[9px] text-zinc-400 border border-zinc-800 rounded px-1">
+                                    ${CATEGORIES.map(c => `<option ${t.cat===c?'selected':''}>${c}</option>`).join('')}
+                                </select>
+                                <span class="text-[8px] opacity-30 font-bold">${t.dist ? t.dist.toFixed(2) : '0.0'} KM</span>
+                            </div>
+                        </div>
+                        <button onclick="deleteSingle(${t.id})" class="text-red-900 text-[10px] font-black p-2">X</button>
+                    </div>
+                `;
                 list.appendChild(el);
             });
+        }
+
+        function toggleSelect(id, e) {
+            e.stopPropagation();
+            selectedLogs.has(id) ? selectedLogs.delete(id) : selectedLogs.add(id);
+            document.getElementById('bulk-actions').classList.toggle('hidden', selectedLogs.size === 0);
+            document.getElementById('select-count').innerText = selectedLogs.size;
+            renderLogs();
+        }
+
+        function updateCat(id, val) {
+            const t = trips.find(x => x.id === id);
+            if(t) { t.cat = val; saveData(); }
+        }
+
+        function deleteSingle(id) {
+            if(confirm("Confirm deletion?")) {
+                trips = trips.filter(t => t.id !== id);
+                saveData(); renderLogs();
+            }
+        }
+
+        function bulkDelete() {
+            if(confirm(`Purge ${selectedLogs.size} records?`)) {
+                trips = trips.filter(t => !selectedLogs.has(t.id));
+                selectedLogs.clear();
+                saveData(); renderLogs();
+                document.getElementById('bulk-actions').classList.add('hidden');
+            }
         }
 
         function viewTrip(id) {
@@ -199,7 +324,7 @@
             if (!t || !t.path.length) return;
             tab('map');
             tripLine.setLatLngs(t.path);
-            map.fitBounds(tripLine.getBounds(), { padding: [50, 50] });
+            map.fitBounds(tripLine.getBounds(), {padding: [40,40]});
         }
 
         function tab(n) {
@@ -216,8 +341,7 @@
         function recenterMap() { if (lastPos.lat !== 0 && map) map.flyTo([lastPos.lat, lastPos.lon], 17); }
         function exportJSON() {
             const blob = new Blob([JSON.stringify(trips)], {type: 'application/json'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = 'gravity_v18_10_export.json'; a.click();
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gravity_v18_13.json'; a.click();
         }
     </script>
 </body>
