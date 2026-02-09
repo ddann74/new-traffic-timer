@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Gravity Intel V18.13</title>
+    <title>Gravity Intel V18.14</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -22,8 +22,7 @@
         #timer-display { font-size: 24vw; font-weight: 800; color: #fff; line-height: 1; }
         .record-flash { animation: flash-red 0.4s infinite !important; }
         @keyframes flash-red { 0%, 100% { color: #ff0000; } 50% { opacity: 0.5; } }
-        .stab-warn { animation: pulse 1s infinite; color: #facc15; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .date-header { padding: 10px 0; border-bottom: 1px solid #222; margin-top: 20px; color: #555; font-size: 10px; font-weight: 800; letter-spacing: 2px; }
     </style>
 </head>
 <body>
@@ -54,14 +53,28 @@
     <div id="page-map" class="page" style="padding:0; position:relative;">
         <div class="absolute top-5 left-5 right-5 z-[2000] flex flex-col gap-2 pointer-events-none">
             <div class="flex justify-between">
-                <button onclick="recenterMap()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-cyan-400">RECENTER</button>
-                <button onclick="setSafeCenter()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-green-500">SET SAFE BASE</button>
+                <button onclick="recenterMap()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-cyan-400 shadow-lg">RECENTER</button>
+                <button onclick="setSafeCenter()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-green-500 shadow-lg">SET SAFE BASE</button>
             </div>
         </div>
         <div id="map-canvas"></div>
     </div>
 
     <div id="page-logs" class="page p-6">
+        <div class="mb-6 p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl">
+            <h3 class="text-[10px] font-black opacity-40 uppercase mb-2">Today's Performance</h3>
+            <div class="flex justify-between items-end">
+                <div>
+                    <div class="text-white font-black text-xl" id="daily-dist">0.00 <small class="text-[10px] opacity-40">KM</small></div>
+                    <div class="text-[9px] font-bold text-zinc-500">TRAVELLED</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-cyan-400 font-black text-xl" id="daily-stop">0:00 <small class="text-[10px] opacity-40">MIN</small></div>
+                    <div class="text-[9px] font-bold text-zinc-500">TOTAL STOP TIME</div>
+                </div>
+            </div>
+        </div>
+
         <div class="flex justify-between items-end mb-4">
             <h2 class="text-xl font-black text-white uppercase italic">Archives (<span id="log-count">0</span>)</h2>
             <select id="log-filter" onchange="renderLogs()" class="bg-zinc-900 text-[10px] font-bold border border-zinc-700 p-1 rounded">
@@ -75,7 +88,6 @@
             <span class="text-[10px] font-bold text-cyan-400">SELECTED: <span id="select-count">0</span></span>
             <div class="flex gap-2">
                 <button onclick="bulkDelete()" class="bg-red-900/50 text-red-400 px-3 py-1 rounded-lg text-[9px] font-bold">DELETE</button>
-                <button onclick="bulkGroup()" class="bg-cyan-600 text-black px-3 py-1 rounded-lg text-[9px] font-bold">GROUP</button>
             </div>
         </div>
 
@@ -86,10 +98,10 @@
         <h2 class="text-xl font-black text-white uppercase mb-8">System Manifest</h2>
         <button onclick="exportJSON()" class="w-full bg-white text-black py-5 rounded-2xl font-black text-xs uppercase mb-4">Export Trip Logs</button>
         <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800 text-[10px] leading-relaxed mt-4">
-            <span class="opacity-30 uppercase font-black block mb-2">Build V18.13</span>
-            - Persistent Coordinates<br>
-            - Dynamic Haversine Distance<br>
-            - Radius Based Safe Zones
+            <span class="opacity-30 uppercase font-black block mb-2">Build V18.14</span>
+            - Group by Date Enabled<br>
+            - Daily Stop/Distance Totals<br>
+            - Map State Persistence
         </div>
     </div>
 
@@ -120,6 +132,7 @@
 
         function updateSafeUI() {
             const btn = document.getElementById('safe-btn');
+            if(!btn) return;
             btn.innerText = isSafeZone ? "SAFE ZONE: ON" : "SAFE ZONE: OFF";
             btn.className = isSafeZone ? "text-[9px] border border-green-500 bg-green-500/20 px-3 py-1 rounded-full font-bold text-green-400" : "text-[9px] border border-zinc-700 px-3 py-1 rounded-full font-bold";
         }
@@ -127,9 +140,7 @@
         function calculateDistance(path) {
             let d = 0;
             for(let i=1; i<path.length; i++) {
-                const p1 = L.latLng(path[i-1]);
-                const p2 = L.latLng(path[i]);
-                d += p1.distanceTo(p2);
+                d += L.latLng(path[i-1]).distanceTo(L.latLng(path[i]));
             }
             return d / 1000;
         }
@@ -145,13 +156,14 @@
                 btn.innerText = "INITIATE RECON"; btn.style.borderColor = "#27272a"; btn.style.color = "#71717a";
                 stopClock();
                 if (currentTripPath.length > 2) {
+                    const d = calculateDistance(currentTripPath);
                     trips.push({ 
                         id: Date.now(), 
                         path: currentTripPath, 
                         duration: 0, 
                         ts: Date.now(), 
                         cat: isSafeZone ? "Safe Zone" : "General",
-                        dist: calculateDistance(currentTripPath),
+                        dist: d,
                         heading: getHeading(currentTripPath)
                     });
                     saveData();
@@ -221,14 +233,13 @@
             localStorage.setItem('GRAVITY_SAFE_BASE', JSON.stringify(safeBase));
             if(safeCircle) map.removeLayer(safeCircle);
             safeCircle = L.circle([safeBase.lat, safeBase.lon], { radius: 100, color: '#22c55e', fillOpacity: 0.1 }).addTo(map);
-            alert("Safe Base Set (100m Radius)");
+            alert("Safe Base Set");
         }
 
         navigator.geolocation.watchPosition(p => {
             const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
             const kmh = (speed || 0) * 3.6;
             
-            // Auto Safe Zone Detection
             if(safeBase) {
                 const distToBase = L.latLng(lat, lon).distanceTo(L.latLng(safeBase.lat, safeBase.lon));
                 isSafeZone = distToBase < 100;
@@ -250,8 +261,10 @@
             lastPos = { lat, lon };
             document.getElementById('speed-out').innerText = kmh.toFixed(1);
             const sBox = document.getElementById('stab-status');
-            sBox.innerText = accuracy < 15 ? "STABLE" : "STABILIZING...";
-            sBox.style.color = accuracy < 15 ? "#22c55e" : "#facc15";
+            if(sBox) {
+                sBox.innerText = accuracy < 15 ? "STABLE" : "STABILIZING...";
+                sBox.style.color = accuracy < 15 ? "#22c55e" : "#facc15";
+            }
             if (userMarker) userMarker.setLatLng([lat, lon]);
         }, null, { enableHighAccuracy: true });
 
@@ -259,13 +272,34 @@
             const list = document.getElementById('log-list');
             const filter = document.getElementById('log-filter').value;
             let sorted = [...trips];
+            
+            // Calculate Daily Analytics
+            const today = new Date().toDateString();
+            const todayTrips = trips.filter(t => new Date(t.ts).toDateString() === today);
+            const todayDist = todayTrips.reduce((a,b) => a + (b.dist || 0), 0);
+            const todayStop = todayTrips.reduce((a,b) => a + (b.duration || 0), 0);
+            
+            document.getElementById('daily-dist').innerHTML = `${todayDist.toFixed(2)} <small class="text-[10px] opacity-40">KM</small>`;
+            document.getElementById('daily-stop').innerHTML = `${Math.floor(todayStop/60)}:${(todayStop%60).toFixed(0).padStart(2,'0')} <small class="text-[10px] opacity-40">MIN</small>`;
+
             if(filter === 'longest') sorted.sort((a,b) => b.duration - a.duration);
-            if(filter === 'category') sorted.sort((a,b) => a.cat.localeCompare(b.cat));
-            else sorted.reverse();
+            else if(filter === 'category') sorted.sort((a,b) => a.cat.localeCompare(b.cat));
+            else sorted.sort((a,b) => b.ts - a.ts);
 
             document.getElementById('log-count').innerText = trips.length;
             list.innerHTML = "";
+            
+            let lastDate = "";
             sorted.forEach(t => {
+                const dateStr = new Date(t.ts).toDateString();
+                if(dateStr !== lastDate && filter === 'newest') {
+                    const dHeader = document.createElement('div');
+                    dHeader.className = "date-header";
+                    dHeader.innerText = dateStr === today ? "TODAY" : dateStr.toUpperCase();
+                    list.appendChild(dHeader);
+                    lastDate = dateStr;
+                }
+
                 const timeStr = new Date(t.ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 const hourGroup = new Date(t.ts).getHours();
                 const el = document.createElement('div');
@@ -274,13 +308,13 @@
                     <div class="flex justify-between items-start">
                         <input type="checkbox" ${selectedLogs.has(t.id)?'checked':''} onclick="toggleSelect(${t.id}, event)" class="mt-1">
                         <div class="flex-1 ml-3" onclick="viewTrip(${t.id})">
-                            <div class="text-white font-black text-[10px] uppercase">${timeStr} | ${hourGroup}:00 BLOCK</div>
+                            <div class="text-white font-black text-[10px] uppercase">${timeStr} | ${hourGroup}:00-${hourGroup+1}:00</div>
                             <div class="text-[14px] text-cyan-400 font-bold">${t.duration.toFixed(1)}s <span class="text-white opacity-40 text-[9px] italic">${t.heading || 'N'}</span></div>
                             <div class="flex gap-2 items-center mt-2">
                                 <select onchange="updateCat(${t.id}, this.value)" class="bg-black text-[9px] text-zinc-400 border border-zinc-800 rounded px-1">
                                     ${CATEGORIES.map(c => `<option ${t.cat===c?'selected':''}>${c}</option>`).join('')}
                                 </select>
-                                <span class="text-[8px] opacity-30 font-bold">${t.dist ? t.dist.toFixed(2) : '0.0'} KM</span>
+                                <span class="text-[8px] opacity-30 font-bold">${(t.dist || 0).toFixed(2)} KM</span>
                             </div>
                         </div>
                         <button onclick="deleteSingle(${t.id})" class="text-red-900 text-[10px] font-black p-2">X</button>
@@ -321,7 +355,7 @@
 
         function viewTrip(id) {
             const t = trips.find(x => x.id === id);
-            if (!t || !t.path.length) return;
+            if (!t || !t.path || t.path.length === 0) return;
             tab('map');
             tripLine.setLatLngs(t.path);
             map.fitBounds(tripLine.getBounds(), {padding: [40,40]});
@@ -341,7 +375,7 @@
         function recenterMap() { if (lastPos.lat !== 0 && map) map.flyTo([lastPos.lat, lastPos.lon], 17); }
         function exportJSON() {
             const blob = new Blob([JSON.stringify(trips)], {type: 'application/json'});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gravity_v18_13.json'; a.click();
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gravity_v18_14.json'; a.click();
         }
     </script>
 </body>
