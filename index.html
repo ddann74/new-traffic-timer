@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Gravity Intel V18.24</title>
+    <title>Gravity Intel V18.25</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap');
-        :root { --accent: #00f2ff; --bg: #050505; }
+        :root { --accent: #00f2ff; --safe-blue: #0077ff; --bg: #050505; }
         body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; position: fixed; width: 100%; }
         .page { display: none; width: 100vw; height: calc(100vh - 85px); flex-direction: column; overflow-y: auto; -webkit-overflow-scrolling: touch; }
         .active-page { display: flex; }
@@ -21,7 +21,8 @@
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.3; color: white; border: none; background: none; transition: 0.2s; font-size: 10px; font-weight: 800; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 4px solid var(--accent); }
         #timer-display { font-size: 24vw; font-weight: 800; color: #fff; line-height: 1; transition: color 0.3s; }
-        .timer-safe { color: #22c55e !important; opacity: 0.5; }
+        /* CHANGED: Timer safe color now Blue */
+        .timer-safe { color: var(--safe-blue) !important; opacity: 0.6; }
         .toggle-switch { width: 40px; height: 20px; background: #333; border-radius: 20px; position: relative; cursor: pointer; }
         .toggle-switch.on { background: var(--accent); }
         .toggle-knob { width: 16px; height: 16px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: 0.2s; }
@@ -59,7 +60,7 @@
         <div id="map-canvas"></div>
         <div class="absolute top-5 left-5 right-5 z-[2000] flex justify-between pointer-events-none">
             <button onclick="recenterMap()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-cyan-400">RECENTER</button>
-            <button onclick="setSafeCenter()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-green-500">SET SAFE BASE</button>
+            <button onclick="setSafeCenter()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-blue-500">SET SAFE BASE</button>
         </div>
     </div>
 
@@ -76,10 +77,10 @@
         <button onclick="exportJSON()" class="w-full bg-white text-black py-5 rounded-2xl font-black text-xs uppercase mb-4">Export Data</button>
         <button onclick="if(confirm('Wipe all logs?')) {trips=[]; saveData(); renderLogs();}" class="w-full bg-red-900/20 text-red-500 py-3 rounded-xl font-black text-[9px] uppercase">Purge Archives</button>
         <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800 text-[10px] leading-relaxed mt-4">
-            <span class="opacity-30 uppercase font-black block mb-2">Build V18.24</span>
+            <span class="opacity-30 uppercase font-black block mb-2">Build V18.25</span>
+            - UI Color: Neon Blue (Safe State)<br>
             - Data Stabilization: ACTIVE<br>
-            - Map Engine: Leaflet OSM<br>
-            - Protocol: User Rule Set Applied
+            - Map Engine: Leaflet OSM
         </div>
     </div>
 
@@ -117,7 +118,8 @@
             const timer = document.getElementById('timer-display');
             if (isSafeZone) {
                 btn.innerText = "SAFE ZONE: ACTIVE";
-                btn.className = "text-[9px] border border-green-500 bg-green-500/20 px-4 py-2 rounded-full font-bold text-green-400";
+                /* UPDATED to Blue Classes */
+                btn.className = "text-[9px] border border-blue-500 bg-blue-500/20 px-4 py-2 rounded-full font-bold text-blue-400";
                 timer.classList.add('timer-safe');
             } else {
                 btn.innerText = "SAFE ZONE: OFF";
@@ -210,7 +212,7 @@
                         map = L.map('map-canvas', { zoomControl: false, attributionControl: false }).setView([lastPos.lat || -34.39, lastPos.lon || 150.89], 16);
                         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
                         userMarker = L.circleMarker([lastPos.lat, lastPos.lon], { color: '#00f2ff', radius: 8, fillOpacity: 0.9 }).addTo(map);
-                        if(safeBase) L.circle([safeBase.lat, safeBase.lon], { radius: 100, color: '#22c55e', weight: 2, fillOpacity: 0.1 }).addTo(map);
+                        if(safeBase) L.circle([safeBase.lat, safeBase.lon], { radius: 100, color: '#0077ff', weight: 2, fillOpacity: 0.1 }).addTo(map);
                     }
                     map.invalidateSize();
                     if (lastPos.lat !== 0) map.panTo([lastPos.lat, lastPos.lon]);
@@ -222,8 +224,9 @@
         function setSafeCenter() {
             safeBase = { lat: lastPos.lat, lon: lastPos.lon };
             localStorage.setItem('G_SAFE_BASE_V3', JSON.stringify(safeBase));
-            if (map) L.circle([safeBase.lat, safeBase.lon], { radius: 100, color: '#22c55e', weight: 2, fillOpacity: 0.1 }).addTo(map);
-            alert("Safe Base Set.");
+            /* Changed map circle to blue as well */
+            if (map) L.circle([safeBase.lat, safeBase.lon], { radius: 100, color: '#0077ff', weight: 2, fillOpacity: 0.1 }).addTo(map);
+            alert("Safe Base Locked (Blue Zone).");
         }
 
         function recenterMap() { if (map && lastPos.lat !== 0) map.setView([lastPos.lat, lastPos.lon], 16); }
