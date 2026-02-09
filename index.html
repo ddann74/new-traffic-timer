@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Gravity Intel V18.20</title>
+    <title>Gravity Intel V18.21</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -15,7 +15,11 @@
         body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; position: fixed; width: 100%; }
         .page { display: none; width: 100vw; height: calc(100vh - 85px); flex-direction: column; overflow-y: auto; -webkit-overflow-scrolling: touch; }
         .active-page { display: flex; }
-        #map-canvas { height: 100%; width: 100%; background: #000; z-index: 1; }
+        
+        /* Map specific fix */
+        #page-map { background: #111; position: relative; }
+        #map-canvas { height: 100%; width: 100%; position: absolute !important; top:0; bottom:0; z-index: 10; }
+        
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #111; z-index: 5000; padding-bottom: env(safe-area-inset-bottom); }
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.3; color: white; border: none; background: none; transition: 0.2s; font-size: 10px; font-weight: 800; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 4px solid var(--accent); }
@@ -34,7 +38,7 @@
     <div id="page-dash" class="page active-page p-6">
         <div class="flex justify-between items-start mb-4">
             <div>
-                <div id="stab-status" class="text-[10px] font-black uppercase tracking-widest opacity-40">Initializing...</div>
+                <div id="stab-status" class="text-[10px] font-black uppercase tracking-widest opacity-40">Syncing...</div>
                 <div class="flex gap-2 mt-2">
                     <button onclick="toggleSafeZone()" id="safe-btn" class="text-[9px] border border-zinc-700 px-3 py-1 rounded-full font-bold">SAFE ZONE: OFF</button>
                 </div>
@@ -48,17 +52,17 @@
 
         <div class="flex-1 flex flex-col justify-center items-center text-center">
             <div id="timer-display">0.0</div>
-            <div id="phase-note" class="text-[10px] font-bold opacity-40 uppercase mt-4 tracking-widest">Ready for Recon</div>
+            <div id="phase-note" class="text-[10px] font-bold opacity-40 uppercase mt-4 tracking-widest">Ready</div>
             <button id="master-toggle" onclick="toggleEngine()" class="mt-10 w-full py-6 bg-zinc-900 border-2 border-zinc-800 rounded-[32px] font-black text-zinc-500 uppercase active:scale-95 transition-all">Initiate Recon</button>
         </div>
     </div>
 
-    <div id="page-map" class="page" style="padding:0; position:relative;">
+    <div id="page-map" class="page">
+        <div id="map-canvas"></div>
         <div class="absolute top-5 left-5 right-5 z-[2000] flex justify-between pointer-events-none">
             <button onclick="recenterMap()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-cyan-400">RECENTER</button>
             <button onclick="setSafeCenter()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-green-500">SET SAFE BASE</button>
         </div>
-        <div id="map-canvas"></div>
     </div>
 
     <div id="page-logs" class="page p-6">
@@ -68,15 +72,15 @@
     <div id="page-sys" class="page p-8">
         <h2 class="text-xl font-black text-white uppercase mb-8">System Manifest</h2>
         <div class="flex justify-between items-center p-4 bg-zinc-900 rounded-2xl border border-zinc-800 mb-4">
-            <span class="text-[10px] font-black uppercase">Auto-Pause in Safe Zone</span>
+            <span class="text-[10px] font-black uppercase">Auto-Pause (Safe Zone)</span>
             <div id="safe-logic-toggle" onclick="toggleSafeLogic()" class="toggle-switch on"><div class="toggle-knob"></div></div>
         </div>
         <button onclick="exportJSON()" class="w-full bg-white text-black py-5 rounded-2xl font-black text-xs uppercase mb-4">Export Data</button>
         <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800 text-[10px] leading-relaxed mt-4">
-            <span class="opacity-30 uppercase font-black block mb-2">Build V18.20</span>
-            - Data Stabilization: Tracking Active<br>
-            - Audio/Haptic: Safe Zone Alerts<br>
-            - Map: Leaflet Dark Engine
+            <span class="opacity-30 uppercase font-black block mb-2">Build V18.21</span>
+            - Data Stabilization: Feb 7 Patch<br>
+            - Map Engine: OpenStreet Standard<br>
+            - Feedback: Audio/Haptic Active
         </div>
     </div>
 
@@ -88,11 +92,11 @@
     </nav>
 
     <script>
-        const STORAGE_KEY = 'GRAVITY_V18_20';
+        const STORAGE_KEY = 'GRAVITY_V18_21_STORE';
         let trips = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
         let isArmed = false, isClocking = false, startT = 0, clockRef = null;
-        let map, userMarker, safeCircle, lastPos = { lat: 0, lon: 0 };
-        let safeBase = JSON.parse(localStorage.getItem('G_SAFE_BASE') || 'null');
+        let map, userMarker, safeCircle, lastPos = { lat: -34.39, lon: 150.89 }; // Defaults to Fairy Meadow coords
+        let safeBase = JSON.parse(localStorage.getItem('G_SAFE_BASE_V2') || 'null');
         let safeLogicEnabled = JSON.parse(localStorage.getItem('G_SAFE_LOGIC') ?? 'true');
         let totalDist = 0, currentAccuracy = 0, isSafeZone = false;
 
@@ -108,13 +112,6 @@
             if ("vibrate" in navigator) {
                 type === 'enter' ? navigator.vibrate(200) : navigator.vibrate([100, 50, 100]);
             }
-        }
-
-        function toggleSafeZone() {
-            isSafeZone = !isSafeZone;
-            updateSafeUI();
-            triggerFeedback(isSafeZone ? 'enter' : 'exit');
-            if(isSafeZone && isClocking && safeLogicEnabled) stopClock();
         }
 
         function updateSafeUI() {
@@ -186,33 +183,43 @@
             }
             lastPos = { lat, lon };
             if(map && userMarker) userMarker.setLatLng([lat, lon]);
-        }, null, { enableHighAccuracy: true });
+        }, e => console.log(e), { enableHighAccuracy: true });
+
+        function initMap() {
+            if(map) return;
+            map = L.map('map-canvas', { zoomControl: false }).setView([lastPos.lat, lastPos.lon], 16);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19
+            }).addTo(map);
+            userMarker = L.circleMarker([lastPos.lat, lastPos.lon], { color: '#00f2ff', radius: 8, fillOpacity: 0.8 }).addTo(map);
+            
+            if(safeBase) {
+                L.circle([safeBase.lat, safeBase.lon], { radius: 100, color: '#22c55e', weight: 2, fillOpacity: 0.1 }).addTo(map);
+            }
+        }
 
         function tab(n) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
             document.getElementById('page-'+n).classList.add('active-page');
+            
             if(n === 'map') {
-                if(!map) {
-                    map = L.map('map-canvas', { zoomControl: false }).setView([lastPos.lat, lastPos.lon], 16);
-                    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
-                    userMarker = L.circleMarker([lastPos.lat, lastPos.lon], { color: '#00f2ff', radius: 6 }).addTo(map);
-                    if(safeBase) {
-                        L.circle([safeBase.lat, safeBase.lon], { radius: 100, color: '#22c55e', fillOpacity: 0.1 }).addTo(map);
-                    }
-                }
-                setTimeout(() => map.invalidateSize(), 200);
+                setTimeout(() => {
+                    initMap();
+                    map.invalidateSize();
+                }, 100);
             }
             if(n === 'logs') renderLogs();
         }
 
         function setSafeCenter() {
             safeBase = { lat: lastPos.lat, lon: lastPos.lon };
-            localStorage.setItem('G_SAFE_BASE', JSON.stringify(safeBase));
-            if(map) L.circle([safeBase.lat, safeBase.lon], { radius: 100, color: '#22c55e', fillOpacity: 0.1 }).addTo(map);
-            alert("Safe Base Locked.");
+            localStorage.setItem('G_SAFE_BASE_V2', JSON.stringify(safeBase));
+            if(map) L.circle([safeBase.lat, safeBase.lon], { radius: 100, color: '#22c55e', weight: 2, fillOpacity: 0.1 }).addTo(map);
+            alert("Safe Base Set.");
         }
 
         function recenterMap() { if(map) map.setView([lastPos.lat, lastPos.lon], 16); }
+        
         function renderLogs() {
             const list = document.getElementById('log-list');
             list.innerHTML = `<h2 class="text-xl font-black text-white italic mb-4">Archives</h2>`;
@@ -231,7 +238,7 @@
         function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(trips)); }
         function exportJSON() {
             const blob = new Blob([JSON.stringify(trips)], {type: 'application/json'});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gravity_data.json'; a.click();
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gravity_logs.json'; a.click();
         }
     </script>
 </body>
