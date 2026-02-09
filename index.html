@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Gravity Intel V18.14</title>
+    <title>Gravity Intel V18.15</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -23,6 +23,7 @@
         .record-flash { animation: flash-red 0.4s infinite !important; }
         @keyframes flash-red { 0%, 100% { color: #ff0000; } 50% { opacity: 0.5; } }
         .date-header { padding: 10px 0; border-bottom: 1px solid #222; margin-top: 20px; color: #555; font-size: 10px; font-weight: 800; letter-spacing: 2px; }
+        .stab-tag { font-size: 7px; padding: 1px 4px; border-radius: 3px; font-weight: 900; }
     </style>
 </head>
 <body>
@@ -53,8 +54,8 @@
     <div id="page-map" class="page" style="padding:0; position:relative;">
         <div class="absolute top-5 left-5 right-5 z-[2000] flex flex-col gap-2 pointer-events-none">
             <div class="flex justify-between">
-                <button onclick="recenterMap()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-cyan-400 shadow-lg">RECENTER</button>
-                <button onclick="setSafeCenter()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-green-500 shadow-lg">SET SAFE BASE</button>
+                <button onclick="recenterMap()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-cyan-400">RECENTER</button>
+                <button onclick="setSafeCenter()" class="pointer-events-auto bg-black/80 text-white px-4 py-2 rounded-lg font-black text-[9px] border border-green-500">SET SAFE BASE</button>
             </div>
         </div>
         <div id="map-canvas"></div>
@@ -98,10 +99,10 @@
         <h2 class="text-xl font-black text-white uppercase mb-8">System Manifest</h2>
         <button onclick="exportJSON()" class="w-full bg-white text-black py-5 rounded-2xl font-black text-xs uppercase mb-4">Export Trip Logs</button>
         <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800 text-[10px] leading-relaxed mt-4">
-            <span class="opacity-30 uppercase font-black block mb-2">Build V18.14</span>
-            - Group by Date Enabled<br>
-            - Daily Stop/Distance Totals<br>
-            - Map State Persistence
+            <span class="opacity-30 uppercase font-black block mb-2">Build V18.15</span>
+            - Record Verification: Persistence Check<br>
+            - Added Data Stabilization Tag<br>
+            - Daily KPI Summary
         </div>
     </div>
 
@@ -122,6 +123,7 @@
         let totalDist = 0, sessionStartTime = 0;
         let selectedLogs = new Set();
         let isSafeZone = false;
+        let currentAccuracy = 0;
 
         const CATEGORIES = ["General", "Logistics", "Traffic", "Security", "Safe Zone"];
 
@@ -164,7 +166,8 @@
                         ts: Date.now(), 
                         cat: isSafeZone ? "Safe Zone" : "General",
                         dist: d,
-                        heading: getHeading(currentTripPath)
+                        heading: getHeading(currentTripPath),
+                        stab: currentAccuracy < 15 ? 'HIGH' : 'LOW'
                     });
                     saveData();
                 }
@@ -238,6 +241,7 @@
 
         navigator.geolocation.watchPosition(p => {
             const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
+            currentAccuracy = accuracy;
             const kmh = (speed || 0) * 3.6;
             
             if(safeBase) {
@@ -273,7 +277,6 @@
             const filter = document.getElementById('log-filter').value;
             let sorted = [...trips];
             
-            // Calculate Daily Analytics
             const today = new Date().toDateString();
             const todayTrips = trips.filter(t => new Date(t.ts).toDateString() === today);
             const todayDist = todayTrips.reduce((a,b) => a + (b.dist || 0), 0);
@@ -302,13 +305,18 @@
 
                 const timeStr = new Date(t.ts).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 const hourGroup = new Date(t.ts).getHours();
+                const stabColor = t.stab === 'HIGH' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400';
+                
                 const el = document.createElement('div');
                 el.className = `p-4 rounded-2xl border transition-all ${selectedLogs.has(t.id) ? 'bg-cyan-900/40 border-cyan-400' : 'bg-zinc-900 border-zinc-800'}`;
                 el.innerHTML = `
                     <div class="flex justify-between items-start">
                         <input type="checkbox" ${selectedLogs.has(t.id)?'checked':''} onclick="toggleSelect(${t.id}, event)" class="mt-1">
                         <div class="flex-1 ml-3" onclick="viewTrip(${t.id})">
-                            <div class="text-white font-black text-[10px] uppercase">${timeStr} | ${hourGroup}:00-${hourGroup+1}:00</div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <div class="text-white font-black text-[10px] uppercase">${timeStr} | ${hourGroup}:00</div>
+                                <span class="stab-tag ${stabColor}">${t.stab || 'N/A'} STAB</span>
+                            </div>
                             <div class="text-[14px] text-cyan-400 font-bold">${t.duration.toFixed(1)}s <span class="text-white opacity-40 text-[9px] italic">${t.heading || 'N'}</span></div>
                             <div class="flex gap-2 items-center mt-2">
                                 <select onchange="updateCat(${t.id}, this.value)" class="bg-black text-[9px] text-zinc-400 border border-zinc-800 rounded px-1">
@@ -370,12 +378,11 @@
             if(n === 'logs') renderLogs();
         }
 
-        function clearMapPath() { if(tripLine) tripLine.setLatLngs([]); }
         function saveData() { localStorage.setItem(STORAGE_KEY, JSON.stringify(trips)); }
         function recenterMap() { if (lastPos.lat !== 0 && map) map.flyTo([lastPos.lat, lastPos.lon], 17); }
         function exportJSON() {
             const blob = new Blob([JSON.stringify(trips)], {type: 'application/json'});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gravity_v18_14.json'; a.click();
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gravity_v18_15.json'; a.click();
         }
     </script>
 </body>
