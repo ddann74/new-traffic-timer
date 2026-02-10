@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V18.35</title>
+    <title>Gravity Intel V18.36</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -60,8 +60,8 @@
         <div id="map-drawer" class="absolute bottom-0 left-0 right-0 bg-black/95 border-t-2 border-cyan-500 z-[3000] translate-y-full p-6 rounded-t-[30px] shadow-[0_-20px_50px_rgba(0,0,0,1)]">
             <div class="flex justify-between items-center mb-6">
                 <div>
-                    <h3 class="text-white font-black italic text-xl">TRIP DATA</h3>
-                    <div id="drawer-trip-id" class="text-[10px] text-zinc-500 font-bold uppercase">Archive Record</div>
+                    <h3 class="text-white font-black italic text-xl text-cyan-400">TRIP DATA</h3>
+                    <div id="drawer-trip-id" class="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Archive Record</div>
                 </div>
                 <button onclick="closeDrawer()" class="bg-zinc-800 text-white px-6 py-3 rounded-full font-black text-[10px] uppercase">Close</button>
             </div>
@@ -84,16 +84,45 @@
         <div class="space-y-6">
             <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800">
                 <div class="text-xs font-bold opacity-40 mb-4 uppercase tracking-widest">Data Management</div>
-                <button onclick="wipeAllData()" class="w-full bg-red-900/20 text-red-500 py-4 rounded-2xl font-black text-xs uppercase">Purge Local Storage</button>
+                <button onclick="wipeAllData()" class="w-full bg-red-900/20 text-red-500 py-4 rounded-2xl font-black text-xs uppercase mb-3">Purge Local Storage</button>
             </div>
+
             <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800">
-                <div class="text-[10px] font-black text-zinc-500 uppercase mb-4">Development Roadmap</div>
-                <ul class="text-[10px] text-zinc-400 space-y-2 list-disc ml-4">
-                    <li>Data Stabilization Indicator (V19)</li>
-                    <li>PDF Export Utility</li>
-                    <li>Fuel Efficiency Algorithm</li>
-                    <li>Automatic Distance Filter</li>
-                </ul>
+                <div class="text-[10px] font-black text-zinc-500 uppercase mb-4 tracking-widest">Future Features Roadmap</div>
+                <div class="space-y-4">
+                    <div class="flex items-start gap-3">
+                        <div class="w-2 h-2 rounded-full bg-yellow-500 mt-1"></div>
+                        <div>
+                            <div class="text-[11px] font-black text-white">Data Stabilization Indicator</div>
+                            <div class="text-[9px] text-zinc-500 italic">Visual GPS health tracking to prevent drift.</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <div class="w-2 h-2 rounded-full bg-zinc-700 mt-1"></div>
+                        <div>
+                            <div class="text-[11px] font-black text-white">Export to PDF</div>
+                            <div class="text-[9px] text-zinc-500 italic">Downloadable trip summaries & cluster maps.</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <div class="w-2 h-2 rounded-full bg-zinc-700 mt-1"></div>
+                        <div>
+                            <div class="text-[11px] font-black text-white">Fuel Efficiency Estimate</div>
+                            <div class="text-[9px] text-zinc-500 italic">Algorithm based on stationary vs. drive time.</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <div class="w-2 h-2 rounded-full bg-zinc-700 mt-1"></div>
+                        <div>
+                            <div class="text-[11px] font-black text-white">Automatic Distance Filter</div>
+                            <div class="text-[9px] text-zinc-500 italic">Ignore micro-movements under 100m.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800 text-[10px] font-bold text-zinc-500 uppercase">
+                Hardware: Tok Tok Link Active | V18.36
             </div>
         </div>
     </div>
@@ -106,9 +135,27 @@
     </nav>
 
     <script>
-        // Core Database Key
         const DB_KEY = 'GRAVITY_DATA_V35';
-        let trips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+        
+        // --- RECOVERY LOGIC ---
+        function migrateData() {
+            const oldKeys = ['GRAVITY_DATA', 'GRAVITY_DATA_V17', 'GRAVITY_DATA_V18'];
+            let current = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+            
+            oldKeys.forEach(key => {
+                let old = JSON.parse(localStorage.getItem(key));
+                if (old && Array.isArray(old)) {
+                    old.forEach(trip => {
+                        if (!current.find(t => t.id === trip.id)) current.push(trip);
+                    });
+                    localStorage.removeItem(key); // Cleanup
+                }
+            });
+            localStorage.setItem(DB_KEY, JSON.stringify(current));
+            return current;
+        }
+
+        let trips = migrateData();
         let currentTrip = null, isArmed = false, isClocking = false, startT = 0, clockRef = null;
         let map, userMarker, safeBase = JSON.parse(localStorage.getItem('G_BASE_V35') || 'null');
         let isSafeZone = false, manualOverride = false, lastPos = null;
@@ -193,13 +240,7 @@
             document.getElementById('timer-display').innerText = "0.0";
         }
 
-        function manualSafeToggle() { 
-            manualOverride = !manualOverride; 
-            isSafeZone = manualOverride; 
-            updateSafeUI(); 
-            if (isSafeZone) stopClock(); 
-        }
-
+        function manualSafeToggle() { manualOverride = !manualOverride; isSafeZone = manualOverride; updateSafeUI(); if (isSafeZone) stopClock(); }
         function updateSafeUI() {
             const btn = document.getElementById('safe-btn');
             btn.innerText = isSafeZone ? "Safe Zone: ACTIVE" : "Safe Zone: OFF";
@@ -226,10 +267,14 @@
             tab('map');
             setTimeout(() => {
                 map.eachLayer(l => { if(l instanceof L.Polyline || l instanceof L.CircleMarker) if(l !== userMarker) map.removeLayer(l); });
+                if (!trip.path || trip.path.length < 2) return;
+
                 const poly = L.polyline(trip.path.map(p => [p.lat, p.lon]), {color: 'cyan', weight: 5}).addTo(map);
-                
                 let trafficT = 0, stationT = 0;
-                const totalDur = (trip.path[trip.path.length-1].time - trip.path[0].time) / 1000;
+                
+                // Fallback for older records without path timestamps
+                const totalDur = trip.path[trip.path.length-1].time ? 
+                    (trip.path[trip.path.length-1].time - trip.path[0].time) / 1000 : 3600;
 
                 const rows = trip.stops.map((s, i) => {
                     let isCluster = trip.stops.some((os, oi) => i !== oi && L.latLng(s.pos).distanceTo(L.latLng(os.pos)) < 150);
@@ -250,7 +295,7 @@
                     <div class="grid grid-cols-2 gap-2 mb-4">
                         <div class="bg-zinc-800 p-4 rounded-2xl border border-zinc-700">
                             <div class="text-[10px] opacity-50 uppercase font-black">Stopped</div>
-                            <div class="text-2xl font-black">${stopP}%</div>
+                            <div class="text-2xl font-black text-white">${stopP}%</div>
                         </div>
                         <div class="bg-zinc-800 p-4 rounded-2xl border border-zinc-700">
                             <div class="text-[10px] opacity-50 uppercase font-black">Driving</div>
@@ -266,9 +311,9 @@
 
         function closeDrawer() { document.getElementById('map-drawer').classList.add('translate-y-full'); }
         function recenterMap() { if(lastPos) map.setView(lastPos, 16); }
-        function setSafeCenter() { if(lastPos) { safeBase = {lat: lastPos[0], lon: lastPos[1]}; localStorage.setItem('G_BASE_V35', JSON.stringify(safeBase)); alert("Safe Base Locked"); } }
-        function clearSafeZone() { safeBase = null; localStorage.removeItem('G_BASE_V35'); updateSafeUI(); alert("Safe Base Cleared"); }
-        function wipeAllData() { if(confirm("Confirm: Purge all archived history?")) { localStorage.removeItem(DB_KEY); location.reload(); } }
+        function setSafeCenter() { if(lastPos) { safeBase = {lat: lastPos[0], lon: lastPos[1]}; localStorage.setItem('G_BASE_V35', JSON.stringify(safeBase)); alert("Base Locked"); } }
+        function clearSafeZone() { safeBase = null; localStorage.removeItem('G_BASE_V35'); updateSafeUI(); alert("Base Cleared"); }
+        function wipeAllData() { if(confirm("Purge History?")) { localStorage.clear(); location.reload(); } }
     </script>
 </body>
 </html>
