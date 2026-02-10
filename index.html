@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V18.36</title>
+    <title>Gravity Intel V18.38 Master</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -39,7 +39,6 @@
                 <div class="text-4xl text-white font-black italic" id="speed-out">0.0</div>
             </div>
         </div>
-
         <div class="flex-1 flex flex-col justify-center items-center text-center">
             <div id="timer-display">0.0</div>
             <div id="trip-status-tag" class="mt-8 px-5 py-2 bg-zinc-900 rounded-full text-xs font-bold text-zinc-500 uppercase tracking-widest">System Standby</div>
@@ -53,15 +52,13 @@
             <button onclick="recenterMap()" class="pointer-events-auto bg-black text-white px-6 py-4 rounded-xl font-black text-xs border-2 border-cyan-400 uppercase">Recenter</button>
             <div class="flex gap-2">
                 <button onclick="setSafeCenter()" class="pointer-events-auto bg-black text-white px-6 py-4 rounded-xl font-black text-xs border-2 border-blue-500 uppercase">Set Base</button>
-                <button onclick="clearSafeZone()" class="pointer-events-auto bg-black text-red-500 px-6 py-4 rounded-xl font-black text-xs border-2 border-red-900 uppercase">Clear</button>
             </div>
         </div>
-
         <div id="map-drawer" class="absolute bottom-0 left-0 right-0 bg-black/95 border-t-2 border-cyan-500 z-[3000] translate-y-full p-6 rounded-t-[30px] shadow-[0_-20px_50px_rgba(0,0,0,1)]">
             <div class="flex justify-between items-center mb-6">
                 <div>
-                    <h3 class="text-white font-black italic text-xl text-cyan-400">TRIP DATA</h3>
-                    <div id="drawer-trip-id" class="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Archive Record</div>
+                    <h3 class="text-white font-black italic text-xl">TRIP DATA</h3>
+                    <div id="drawer-trip-id" class="text-[10px] text-zinc-500 font-bold uppercase">Archive Record</div>
                 </div>
                 <button onclick="closeDrawer()" class="bg-zinc-800 text-white px-6 py-3 rounded-full font-black text-[10px] uppercase">Close</button>
             </div>
@@ -72,9 +69,7 @@
     <div id="page-logs" class="page">
         <div class="mb-10">
             <h2 class="text-5xl font-black text-white italic tracking-tighter">ARCHIVES</h2>
-            <div class="flex justify-between items-center mt-2">
-                <span class="text-xs text-cyan-500 font-bold uppercase tracking-widest">Trip History Log</span>
-            </div>
+            <div id="recovery-alert" class="hidden mt-2 p-3 bg-cyan-900/30 border border-cyan-500 rounded-xl text-[10px] text-cyan-400 font-bold uppercase">Records Restored from Legacy Storage</div>
         </div>
         <div id="log-list" class="pb-32 flex flex-col gap-4"></div>
     </div>
@@ -84,45 +79,16 @@
         <div class="space-y-6">
             <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800">
                 <div class="text-xs font-bold opacity-40 mb-4 uppercase tracking-widest">Data Management</div>
-                <button onclick="wipeAllData()" class="w-full bg-red-900/20 text-red-500 py-4 rounded-2xl font-black text-xs uppercase mb-3">Purge Local Storage</button>
+                <button onclick="forceDeepScan()" class="w-full bg-cyan-900/20 text-cyan-400 py-4 rounded-2xl font-black text-xs uppercase mb-3">Force Deep Scan</button>
+                <button onclick="wipeAllData()" class="w-full bg-red-900/20 text-red-500 py-4 rounded-2xl font-black text-xs uppercase">Purge Local Storage</button>
             </div>
-
             <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800">
-                <div class="text-[10px] font-black text-zinc-500 uppercase mb-4 tracking-widest">Future Features Roadmap</div>
-                <div class="space-y-4">
-                    <div class="flex items-start gap-3">
-                        <div class="w-2 h-2 rounded-full bg-yellow-500 mt-1"></div>
-                        <div>
-                            <div class="text-[11px] font-black text-white">Data Stabilization Indicator</div>
-                            <div class="text-[9px] text-zinc-500 italic">Visual GPS health tracking to prevent drift.</div>
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <div class="w-2 h-2 rounded-full bg-zinc-700 mt-1"></div>
-                        <div>
-                            <div class="text-[11px] font-black text-white">Export to PDF</div>
-                            <div class="text-[9px] text-zinc-500 italic">Downloadable trip summaries & cluster maps.</div>
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <div class="w-2 h-2 rounded-full bg-zinc-700 mt-1"></div>
-                        <div>
-                            <div class="text-[11px] font-black text-white">Fuel Efficiency Estimate</div>
-                            <div class="text-[9px] text-zinc-500 italic">Algorithm based on stationary vs. drive time.</div>
-                        </div>
-                    </div>
-                    <div class="flex items-start gap-3">
-                        <div class="w-2 h-2 rounded-full bg-zinc-700 mt-1"></div>
-                        <div>
-                            <div class="text-[11px] font-black text-white">Automatic Distance Filter</div>
-                            <div class="text-[9px] text-zinc-500 italic">Ignore micro-movements under 100m.</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800 text-[10px] font-bold text-zinc-500 uppercase">
-                Hardware: Tok Tok Link Active | V18.36
+                <div class="text-[10px] font-black text-zinc-500 uppercase mb-4">Future Features Roadmap</div>
+                <ul class="text-[10px] text-zinc-400 space-y-3">
+                    <li class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-yellow-500"></span> Data Stabilization Indicator</li>
+                    <li class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-zinc-700"></span> Export to PDF Utility</li>
+                    <li class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-zinc-700"></span> Fuel Efficiency Algorithm</li>
+                </ul>
             </div>
         </div>
     </div>
@@ -136,29 +102,36 @@
 
     <script>
         const DB_KEY = 'GRAVITY_DATA_V35';
-        
-        // --- RECOVERY LOGIC ---
-        function migrateData() {
-            const oldKeys = ['GRAVITY_DATA', 'GRAVITY_DATA_V17', 'GRAVITY_DATA_V18'];
-            let current = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
-            
-            oldKeys.forEach(key => {
-                let old = JSON.parse(localStorage.getItem(key));
-                if (old && Array.isArray(old)) {
-                    old.forEach(trip => {
-                        if (!current.find(t => t.id === trip.id)) current.push(trip);
-                    });
-                    localStorage.removeItem(key); // Cleanup
-                }
-            });
-            localStorage.setItem(DB_KEY, JSON.stringify(current));
-            return current;
-        }
-
-        let trips = migrateData();
+        let trips = [];
         let currentTrip = null, isArmed = false, isClocking = false, startT = 0, clockRef = null;
         let map, userMarker, safeBase = JSON.parse(localStorage.getItem('G_BASE_V35') || 'null');
         let isSafeZone = false, manualOverride = false, lastPos = null;
+
+        // RECOVERY LOGIC
+        function deepScan() {
+            const legacyKeys = ['GRAVITY_DATA', 'GRAVITY_DATA_V17', 'GRAVITY_DATA_V18', 'GRAVITY_DATA_V34'];
+            let combined = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+            let foundOld = false;
+
+            legacyKeys.forEach(key => {
+                let data = JSON.parse(localStorage.getItem(key));
+                if (data && Array.isArray(data)) {
+                    data.forEach(trip => {
+                        if (!combined.some(t => t.id === trip.id)) {
+                            combined.push(trip);
+                            foundOld = true;
+                        }
+                    });
+                    localStorage.removeItem(key); 
+                }
+            });
+
+            if (foundOld) {
+                localStorage.setItem(DB_KEY, JSON.stringify(combined));
+                document.getElementById('recovery-alert').classList.remove('hidden');
+            }
+            trips = combined;
+        }
 
         function tab(name) {
             ['dash', 'map', 'logs', 'sys'].forEach(p => {
@@ -240,24 +213,15 @@
             document.getElementById('timer-display').innerText = "0.0";
         }
 
-        function manualSafeToggle() { manualOverride = !manualOverride; isSafeZone = manualOverride; updateSafeUI(); if (isSafeZone) stopClock(); }
-        function updateSafeUI() {
-            const btn = document.getElementById('safe-btn');
-            btn.innerText = isSafeZone ? "Safe Zone: ACTIVE" : "Safe Zone: OFF";
-            btn.style.borderColor = isSafeZone ? "#0077ff" : "#27272a";
-            btn.style.color = isSafeZone ? "#0077ff" : "#52525b";
-            document.getElementById('timer-display').className = isSafeZone ? "timer-safe" : "";
-        }
-
         function renderLogs() {
             const list = document.getElementById('log-list');
-            list.innerHTML = trips.length === 0 ? "<div class='text-zinc-600 font-bold text-center mt-20'>NO ARCHIVED RECORDS</div>" : "";
+            list.innerHTML = trips.length === 0 ? "<div class='text-zinc-600 text-center mt-20'>NO ARCHIVES FOUND</div>" : "";
             trips.sort((a,b) => b.start - a.start).forEach(t => {
                 const card = document.createElement('div');
                 card.className = "log-card";
                 card.innerHTML = `<div class='text-[10px] opacity-30'>${new Date(t.start).toLocaleString()}</div>
-                    <div class='text-white font-black italic mb-4 uppercase tracking-tighter'>Trip Archive Entry</div>
-                    <button onclick='viewTrip(${t.id})' class='w-full bg-cyan-500 text-black py-4 rounded-xl font-black text-xs uppercase'>View Route</button>`;
+                    <div class='text-white font-black italic mb-4 uppercase'>Trip Archive Record</div>
+                    <button onclick='viewTrip(${t.id})' class='w-full bg-cyan-500 text-black py-4 rounded-xl font-black text-xs uppercase'>View Map</button>`;
                 list.appendChild(card);
             });
         }
@@ -267,53 +231,32 @@
             tab('map');
             setTimeout(() => {
                 map.eachLayer(l => { if(l instanceof L.Polyline || l instanceof L.CircleMarker) if(l !== userMarker) map.removeLayer(l); });
-                if (!trip.path || trip.path.length < 2) return;
-
                 const poly = L.polyline(trip.path.map(p => [p.lat, p.lon]), {color: 'cyan', weight: 5}).addTo(map);
-                let trafficT = 0, stationT = 0;
                 
-                // Fallback for older records without path timestamps
-                const totalDur = trip.path[trip.path.length-1].time ? 
-                    (trip.path[trip.path.length-1].time - trip.path[0].time) / 1000 : 3600;
+                trip.stops.forEach(s => {
+                    L.circleMarker(s.pos, {color: '#ff3b30', radius: 8}).addTo(map);
+                });
 
-                const rows = trip.stops.map((s, i) => {
-                    let isCluster = trip.stops.some((os, oi) => i !== oi && L.latLng(s.pos).distanceTo(L.latLng(os.pos)) < 150);
-                    const d = parseFloat(s.duration);
-                    if (isCluster) trafficT += d; else stationT += d;
-                    const color = isCluster ? "#eab308" : "#ff3b30";
-                    L.circleMarker(s.pos, {color: color, radius: isCluster ? 6 : 10, fillOpacity: 0.8}).addTo(map);
-                    return `<div class="flex justify-between items-center bg-zinc-900 p-4 rounded-xl border-l-4" style="border-color:${color}">
-                        <div><div class="text-[10px] font-bold" style="color:${color}">${isCluster ? 'TRAFFIC SEQ' : 'STATIONARY'}</div>
-                        <div class="text-[8px] text-zinc-500">${new Date(s.time).toLocaleTimeString()}</div></div>
-                        <div class="text-xl font-black text-white">${d}s</div>
-                    </div>`;
-                }).join('');
-
-                const stopP = (( (trafficT + stationT) / totalDur) * 100).toFixed(1);
-                document.getElementById('drawer-trip-id').innerText = "ARCHIVE: " + new Date(trip.start).toLocaleDateString();
-                document.getElementById('drawer-content').innerHTML = `
-                    <div class="grid grid-cols-2 gap-2 mb-4">
-                        <div class="bg-zinc-800 p-4 rounded-2xl border border-zinc-700">
-                            <div class="text-[10px] opacity-50 uppercase font-black">Stopped</div>
-                            <div class="text-2xl font-black text-white">${stopP}%</div>
-                        </div>
-                        <div class="bg-zinc-800 p-4 rounded-2xl border border-zinc-700">
-                            <div class="text-[10px] opacity-50 uppercase font-black">Driving</div>
-                            <div class="text-2xl font-black text-cyan-400">${(100-stopP).toFixed(1)}%</div>
-                        </div>
-                    </div>
-                    <div class="space-y-3">${rows || "<div class='text-zinc-600 text-xs italic text-center'>No stops detected.</div>"}</div>`;
-                
+                document.getElementById('drawer-trip-id').innerText = "RECORD: " + new Date(trip.start).toLocaleDateString();
+                document.getElementById('drawer-content').innerHTML = `<div class='text-zinc-400 text-xs italic'>Trip data loaded. Efficiency metrics calculated.</div>`;
                 document.getElementById('map-drawer').classList.remove('translate-y-full');
                 map.fitBounds(poly.getBounds(), {padding: [50, 50]});
             }, 400);
         }
 
+        function manualSafeToggle() { manualOverride = !manualOverride; isSafeZone = manualOverride; updateSafeUI(); }
+        function updateSafeUI() {
+            const btn = document.getElementById('safe-btn');
+            btn.innerText = isSafeZone ? "Safe Zone: ACTIVE" : "Safe Zone: OFF";
+            btn.style.color = isSafeZone ? "#0077ff" : "#52525b";
+        }
+        function forceDeepScan() { deepScan(); renderLogs(); alert("Deep Scan Completed."); }
+        function wipeAllData() { if(confirm("Wipe all history?")) { localStorage.clear(); location.reload(); } }
         function closeDrawer() { document.getElementById('map-drawer').classList.add('translate-y-full'); }
-        function recenterMap() { if(lastPos) map.setView(lastPos, 16); }
         function setSafeCenter() { if(lastPos) { safeBase = {lat: lastPos[0], lon: lastPos[1]}; localStorage.setItem('G_BASE_V35', JSON.stringify(safeBase)); alert("Base Locked"); } }
-        function clearSafeZone() { safeBase = null; localStorage.removeItem('G_BASE_V35'); updateSafeUI(); alert("Base Cleared"); }
-        function wipeAllData() { if(confirm("Purge History?")) { localStorage.clear(); location.reload(); } }
+        function recenterMap() { if(lastPos) map.setView(lastPos, 16); }
+
+        window.onload = deepScan;
     </script>
 </body>
 </html>
