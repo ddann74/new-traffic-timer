@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V17.0</title>
+    <title>Gravity Intel V17.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -54,8 +54,9 @@
     <script>
         const DB_KEY = 'GRAVITY_DATA_V35';
         let trips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
-        let currentTrip = null, isArmed = false, isClocking = false, startT = 0, lastPos = null;
-        let map, userMarker, frameId = null;
+        let currentTrip = null, isArmed = false;
+        let activeToken = null; // GLOBAL EXECUTION TOKEN
+        let map, userMarker, lastPos = null;
 
         function tab(name) {
             ['dash', 'map', 'logs', 'sys'].forEach(p => {
@@ -87,6 +88,8 @@
             const stab = document.getElementById('stab-status');
             
             if (isArmed) {
+                // Generate new token for this session
+                activeToken = Math.random().toString(36).substring(7);
                 btn.innerText = "ACTIVE"; 
                 btn.style.color = "#00f2ff";
                 statusTag.innerText = "Monitoring Motion";
@@ -94,7 +97,10 @@
                 stab.style.color = "#22c55e";
                 currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [] };
             } else {
-                stopClock();
+                // KILL THE TOKEN - This forces any running timer to stop
+                activeToken = null; 
+                
+                document.getElementById('timer-display').innerText = "0.0";
                 btn.innerText = "Initiate Engine"; 
                 btn.style.color = "#52525b";
                 statusTag.innerText = "Engine Standby";
@@ -116,44 +122,49 @@
                 document.getElementById('speed-out').innerText = kmh.toFixed(1);
                 lastPos = [lat, lon];
 
-                if (isArmed && currentTrip) {
+                if (isArmed && activeToken && currentTrip) {
                     currentTrip.path.push({lat, lon, time: Date.now()});
                     if (kmh < 1.0) {
-                        if (!isClocking) startClock();
-                    } else {
-                        if (isClocking) stopClock();
+                        runTimer(activeToken);
                     }
                 }
                 if (userMarker) userMarker.setLatLng(lastPos);
             }, null, { enableHighAccuracy: true });
         }
 
-        function startClock() {
-            if (isClocking || !isArmed) return;
-            isClocking = true;
-            startT = Date.now();
-            updateTimer();
+        let isTimerRunning = false;
+        function runTimer(token) {
+            if (isTimerRunning) return;
+            isTimerRunning = true;
+            let startT = Date.now();
+
+            function update() {
+                // TOKEN CHECK: If token doesn't match current activeToken, KILL loop
+                if (!activeToken || token !== activeToken) {
+                    isTimerRunning = false;
+                    document.getElementById('timer-display').innerText = "0.0";
+                    return; 
+                }
+
+                // If speed increases above threshold, stop this specific timer instance
+                let currentSpeed = parseFloat(document.getElementById('speed-out').innerText);
+                if (currentSpeed > 3.5) {
+                    isTimerRunning = false;
+                    saveStop(document.getElementById('timer-display').innerText);
+                    document.getElementById('timer-display').innerText = "0.0";
+                    return;
+                }
+
+                document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1);
+                requestAnimationFrame(update);
+            }
+            requestAnimationFrame(update);
         }
 
-        function updateTimer() {
-            if (!isClocking || !isArmed) {
-                cancelAnimationFrame(frameId);
-                return;
+        function saveStop(duration) {
+            if (currentTrip && parseFloat(duration) > 1.0) {
+                currentTrip.stops.push({time: Date.now(), duration: duration, pos: lastPos});
             }
-            const elapsed = ((Date.now() - startT) / 1000).toFixed(1);
-            document.getElementById('timer-display').innerText = elapsed;
-            frameId = requestAnimationFrame(updateTimer);
-        }
-
-        function stopClock() {
-            isClocking = false;
-            cancelAnimationFrame(frameId);
-            
-            let dur = document.getElementById('timer-display').innerText;
-            if (currentTrip && parseFloat(dur) > 1.0) {
-                currentTrip.stops.push({time: Date.now(), duration: dur, pos: lastPos});
-            }
-            document.getElementById('timer-display').innerText = "0.0";
         }
 
         function renderLogs() {
