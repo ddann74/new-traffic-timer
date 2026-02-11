@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V18.42</title>
+    <title>Gravity Intel V18.43</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -11,20 +11,16 @@
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;800&display=swap');
         :root { --accent: #00f2ff; --safe-blue: #0077ff; --bg: #050505; }
         body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; }
-        
         .page { display: none; width: 100vw; height: calc(100vh - 90px); flex-direction: column; overflow-y: auto; padding: 25px; }
         .active-page { display: flex !important; }
-        
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 90px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 2px solid #222; z-index: 9999; }
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; color: #fff; font-size: 14px; font-weight: 800; border: none; background: none; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 5px solid var(--accent); }
-        
         #timer-display { font-size: 32vw; font-weight: 800; color: #fff; line-height: 0.8; transition: color 0.3s; }
         .timer-safe { color: var(--safe-blue) !important; text-shadow: 0 0 20px var(--safe-blue); }
         #map-canvas { height: 100%; width: 100%; background: #000; position: absolute; top: 0; left: 0; }
         .log-card { background: #111; border: 2px solid #222; border-radius: 20px; padding: 20px; margin-bottom: 20px; }
         #map-drawer { transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-        
         .pulse { animation: pulse 2s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
     </style>
@@ -44,7 +40,7 @@
         </div>
         <div class="flex-1 flex flex-col justify-center items-center text-center">
             <div id="timer-display">0.0</div>
-            <div id="status-tag" class="mt-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Engine Standby</div>
+            <div id="status-tag" class="mt-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">System Ready</div>
             <button id="master-toggle" onclick="toggleEngine()" class="mt-12 w-full py-10 bg-zinc-900 border-2 border-zinc-700 rounded-[50px] font-black text-2xl uppercase">Initiate Engine</button>
         </div>
     </div>
@@ -83,9 +79,9 @@
                 </div>
             </div>
             <div class="p-6 bg-zinc-900 rounded-3xl border border-zinc-800">
-                <div class="text-[10px] font-black text-zinc-500 uppercase mb-4">Storage</div>
+                <div class="text-[10px] font-black text-zinc-500 uppercase mb-4">Diagnostics</div>
                 <button onclick="forceDeepScan()" class="w-full bg-cyan-900/20 text-cyan-400 py-4 rounded-2xl font-black text-xs uppercase mb-3">Recovery Scan</button>
-                <button onclick="wipeAllData()" class="w-full bg-red-900/20 text-red-500 py-4 rounded-2xl font-black text-xs uppercase">Purge All</button>
+                <button onclick="wipeAllData()" class="w-full bg-red-900/20 text-red-500 py-4 rounded-2xl font-black text-xs uppercase">Purge All Records</button>
             </div>
         </div>
     </div>
@@ -133,12 +129,13 @@
             const btn = document.getElementById('master-toggle');
             const statusTag = document.getElementById('status-tag');
             if (isArmed) {
-                btn.innerText = "ACTIVE"; btn.style.color = "#00f2ff";
-                statusTag.innerText = "Monitoring Motion";
+                btn.innerText = "ENGINE ACTIVE"; btn.style.color = "#00f2ff";
+                statusTag.innerText = "MONITORING MOTION";
                 currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [] };
             } else {
+                stopClock(); // Hard stop timer on engine kill
                 btn.innerText = "Initiate Engine"; btn.style.color = "#52525b";
-                statusTag.innerText = "Engine Standby";
+                statusTag.innerText = "System Ready";
                 if (currentTrip && currentTrip.path.length > 2) {
                     trips.push(currentTrip);
                     localStorage.setItem(DB_KEY, JSON.stringify(trips));
@@ -162,7 +159,6 @@
                 sBox.style.color = "#eab308"; sBox.classList.add('pulse');
             }
 
-            // Safe Zone Logic
             if (safeBase && !manualOverride) {
                 const dist = L.latLng(lat, lon).distanceTo(L.latLng(safeBase.lat, safeBase.lon));
                 isSafeZone = dist < 150;
@@ -171,14 +167,16 @@
 
             if (isArmed && currentTrip) {
                 currentTrip.path.push({lat, lon, time: Date.now()});
-                if (kmh < 1.5 && !isClocking && !isSafeZone) startClock();
+                // SENSITIVITY FIX: Stop if under 2km/h, start if over 4.5km/h
+                if (kmh < 2.0 && !isClocking && !isSafeZone) startClock();
                 if (kmh > 4.5 && isClocking) stopClock();
+                if (isSafeZone && isClocking) stopClock();
             }
             if (userMarker) userMarker.setLatLng(lastPos);
         }, null, { enableHighAccuracy: true });
 
         function startClock() {
-            if(isClocking) return;
+            if(isClocking || isSafeZone) return;
             isClocking = true; startT = Date.now();
             clockRef = setInterval(() => {
                 document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1);
@@ -198,7 +196,7 @@
         function manualSafeToggle() { 
             manualOverride = !manualOverride; 
             isSafeZone = manualOverride; 
-            if(isSafeZone) stopClock();
+            if(isSafeZone) stopClock(); 
             updateSafeUI(); 
         }
 
@@ -215,7 +213,7 @@
             if(lastPos) {
                 safeBase = {lat: lastPos[0], lon: lastPos[1]};
                 localStorage.setItem('G_BASE_V35', JSON.stringify(safeBase));
-                alert("Home Base Set.");
+                alert("Base Locked to Current Position.");
             }
         }
 
@@ -229,7 +227,7 @@
 
         function renderLogs() {
             const list = document.getElementById('log-list');
-            list.innerHTML = trips.length === 0 ? "<div class='mt-20 text-center opacity-30'>NO RECORDS</div>" : "";
+            list.innerHTML = trips.length === 0 ? "<div class='mt-20 text-center opacity-30'>NO ARCHIVES FOUND</div>" : "";
             trips.sort((a,b) => b.start - a.start).forEach(t => {
                 const card = document.createElement('div');
                 card.className = "log-card";
@@ -245,28 +243,22 @@
             tab('map');
             setTimeout(() => {
                 map.eachLayer(l => { if(l instanceof L.Polyline || l instanceof L.CircleMarker) if(l !== userMarker) map.removeLayer(l); });
-                const poly = L.polyline(trip.path.map(p => [p.lat, p.lon]), {color: 'cyan', weight: 5}).addTo(map);
-                trip.stops.forEach(s => L.circleMarker(s.pos, {color: '#ff3b30', radius: 6}).addTo(map));
-                map.fitBounds(poly.getBounds(), {padding: [50, 50]});
-                document.getElementById('drawer-content').innerText = "Trip ID: " + trip.id;
+                if(trip.path.length > 0) {
+                    const poly = L.polyline(trip.path.map(p => [p.lat, p.lon]), {color: 'cyan', weight: 5}).addTo(map);
+                    trip.stops.forEach(s => L.circleMarker(s.pos, {color: '#ff3b30', radius: 6}).addTo(map));
+                    map.fitBounds(poly.getBounds(), {padding: [50, 50]});
+                }
+                document.getElementById('drawer-content').innerText = "TRIP ID: " + trip.id;
                 document.getElementById('map-drawer').classList.remove('translate-y-full');
             }, 400);
         }
 
-        function exportData() {
-            navigator.clipboard.writeText(JSON.stringify(trips)).then(() => alert("Exported to clipboard."));
-        }
-
-        function importData() {
-            const str = prompt("Paste Backup String:");
-            if (str) {
-                try {
-                    trips = JSON.parse(str);
-                    localStorage.setItem(DB_KEY, JSON.stringify(trips));
-                    renderLogs();
-                    alert("Imported successfully.");
-                } catch(e) { alert("Invalid data."); }
-            }
+        function exportData() { navigator.clipboard.writeText(JSON.stringify(trips)).then(() => alert("Copied to Clipboard.")); }
+        function importData() { 
+            const str = prompt("Paste Data String:"); 
+            if (str) { 
+                try { trips = JSON.parse(str); localStorage.setItem(DB_KEY, JSON.stringify(trips)); renderLogs(); alert("Success."); } catch(e) { alert("Fail."); }
+            } 
         }
 
         function forceDeepScan() {
@@ -275,13 +267,13 @@
                 if (d) d.forEach(item => { if(!trips.some(x=>x.id===item.id)) trips.push(item); });
             });
             localStorage.setItem(DB_KEY, JSON.stringify(trips));
-            alert("Scan complete.");
+            alert("Recovery complete.");
             renderLogs();
         }
 
         function closeDrawer() { document.getElementById('map-drawer').classList.add('translate-y-full'); }
         function recenterMap() { if(lastPos) map.setView(lastPos, 16); }
-        function wipeAllData() { if(confirm("Purge?")) { localStorage.clear(); location.reload(); } }
+        function wipeAllData() { if(confirm("Wipe all?")) { localStorage.clear(); location.reload(); } }
     </script>
 </body>
 </html>
