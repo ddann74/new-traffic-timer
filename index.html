@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V18.53</title>
+    <title>Gravity Intel V18.54</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -28,9 +28,9 @@
     <div id="page-dash" class="page active-page">
         <div class="flex justify-between items-start mb-10">
             <div>
-                <div id="stab-status" class="text-[10px] font-black uppercase tracking-widest text-zinc-500">Awaiting Signal...</div>
-                <div id="accuracy-val" class="text-[8px] text-zinc-600 font-bold mt-1">---</div>
-                <button onclick="resetGPS()" class="mt-3 border border-zinc-800 text-[9px] px-3 py-1 rounded-md text-zinc-400 font-bold uppercase">Hard Reset GPS</button>
+                <div id="stab-status" class="text-[10px] font-black uppercase tracking-widest text-zinc-500">Initializing...</div>
+                <div id="accuracy-val" class="text-[8px] text-zinc-600 font-bold mt-1">Ready</div>
+                <button onclick="resetGPS()" class="mt-3 border border-zinc-800 text-[9px] px-3 py-1 rounded-md text-zinc-400 font-bold uppercase">Reset GPS</button>
             </div>
             <div class="text-right">
                 <div class="text-[10px] opacity-40 font-black tracking-widest text-white italic">Velocity</div>
@@ -38,9 +38,9 @@
             </div>
         </div>
         <div class="flex-1 flex flex-col justify-center items-center text-center">
-            <div id="timer-display" onclick="vacuumIntervals()">0.0</div>
+            <div id="timer-display" onclick="forceKillTimer()">0.0</div>
             <div id="status-tag" class="mt-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest italic">Engine Standby</div>
-            <button id="master-toggle" onclick="toggleEngine()" class="mt-12 w-full py-10 bg-zinc-900 border-2 border-zinc-700 rounded-[50px] font-black text-2xl uppercase">Initiate Engine</button>
+            <button id="master-toggle" onclick="toggleEngine()" class="mt-12 w-full py-10 bg-zinc-900 border-2 border-zinc-700 rounded-[50px] font-black text-2xl uppercase shadow-lg">Initiate Engine</button>
         </div>
     </div>
 
@@ -87,15 +87,19 @@
 
         function resetGPS() {
             if (watchId) navigator.geolocation.clearWatch(watchId);
-            document.getElementById('stab-status').innerText = "RE-SYNCING...";
+            document.getElementById('stab-status').innerText = "SYNCING...";
             speedBuffer = [];
             initGPS();
         }
 
-        function vacuumIntervals() {
+        // --- HARD KILL LOGIC ---
+        function forceKillTimer() {
+            // Kill every active interval in the browser window
             let killId = window.setInterval(() => {}, 0);
             while (killId--) { window.clearInterval(killId); }
-            clockRef = null; isClocking = false;
+            
+            clockRef = null;
+            isClocking = false;
             document.getElementById('timer-display').innerText = "0.0";
             document.getElementById('timer-display').style.color = "#fff";
         }
@@ -103,12 +107,21 @@
         function toggleEngine() {
             isArmed = !isArmed;
             const btn = document.getElementById('master-toggle');
+            const statusTag = document.getElementById('status-tag');
+            
             if (isArmed) {
-                btn.innerText = "ACTIVE"; btn.style.color = "#00f2ff";
+                btn.innerText = "ACTIVE"; 
+                btn.classList.add('bg-cyan-900', 'border-cyan-400');
+                statusTag.innerText = "Monitoring Motion";
                 currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [] };
             } else {
-                vacuumIntervals();
-                btn.innerText = "Initiate Engine"; btn.style.color = "#52525b";
+                // RUN THE HARD KILL IMMEDIATELY
+                forceKillTimer();
+                
+                btn.innerText = "Initiate Engine"; 
+                btn.classList.remove('bg-cyan-900', 'border-cyan-400');
+                statusTag.innerText = "Engine Standby";
+                
                 if (currentTrip && currentTrip.path.length > 2) {
                     trips.push(currentTrip);
                     localStorage.setItem(DB_KEY, JSON.stringify(trips));
@@ -122,15 +135,14 @@
                 const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
                 lastPos = [lat, lon];
                 
-                // Speed Filter (SMA)
                 let rawKmh = (speed || 0) * 3.6;
                 speedBuffer.push(rawKmh);
                 if (speedBuffer.length > 5) speedBuffer.shift();
                 let avgKmh = speedBuffer.reduce((a, b) => a + b, 0) / speedBuffer.length;
-                let finalSpeed = avgKmh < 0.9 ? 0.0 : avgKmh;
+                let finalSpeed = avgKmh < 0.8 ? 0.0 : avgKmh;
                 document.getElementById('speed-out').innerText = finalSpeed.toFixed(1);
 
-                // Stabilization Update
+                // DATA STABILIZATION INDICATOR
                 const sBox = document.getElementById('stab-status');
                 const aBox = document.getElementById('accuracy-val');
                 aBox.innerText = `Precision: ±${Math.round(accuracy)}m`;
@@ -146,17 +158,23 @@
                     if (finalSpeed > 3.5 && isClocking) stopClock();
                 }
                 if (userMarker) userMarker.setLatLng(lastPos);
-            }, e => {
-                document.getElementById('stab-status').innerText = "GPS ERROR: " + e.message;
-            }, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+            }, null, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
         }
 
         function startClock() {
+            // STATE CHECK: If we aren't armed, don't even start
             if (isClocking || !isArmed) return;
-            isClocking = true; startT = Date.now();
+            isClocking = true; 
+            startT = Date.now();
+            
             if (clockRef) clearInterval(clockRef);
+            
             clockRef = setInterval(() => {
-                if (!isArmed) { vacuumIntervals(); return; }
+                // SECONDARY GUARD: If engine was deactivated, the timer kills itself
+                if (!isArmed) {
+                    forceKillTimer();
+                    return;
+                }
                 document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1);
             }, 100);
         }
@@ -175,14 +193,16 @@
             const list = document.getElementById('log-list');
             list.innerHTML = trips.length === 0 ? "<div class='mt-20 text-center opacity-30'>NO RECORDS</div>" : "";
             trips.sort((a,b) => b.start - a.start).forEach(t => {
-                const card = document.createElement('div'); card.className = "log-card";
+                const card = document.createElement('div');
+                card.className = "log-card";
                 card.innerHTML = `<div class='text-[10px] opacity-30 font-bold'>${new Date(t.start).toLocaleString()}</div><div class='text-white font-black italic uppercase mb-4'>Trip Entry</div><button onclick='viewTrip(${t.id})' class='w-full bg-cyan-500 text-black py-4 rounded-xl font-black text-xs uppercase'>View Map</button>`;
                 list.appendChild(card);
             });
         }
 
         function viewTrip(id) {
-            const trip = trips.find(t => t.id === id); tab('map');
+            const trip = trips.find(t => t.id === id);
+            tab('map');
             setTimeout(() => {
                 map.eachLayer(l => { if(l instanceof L.Polyline || l instanceof L.CircleMarker) if(l !== userMarker) map.removeLayer(l); });
                 const poly = L.polyline(trip.path.map(p => [p.lat, p.lon]), {color: 'cyan', weight: 5}).addTo(map);
@@ -190,8 +210,8 @@
             }, 400);
         }
 
-        function exportData() { navigator.clipboard.writeText(JSON.stringify(trips)).then(() => alert("Copied.")); }
-        function wipeAllData() { if(confirm("Wipe all?")) { localStorage.clear(); location.reload(); } }
+        function exportData() { navigator.clipboard.writeText(JSON.stringify(trips)).then(() => alert("Copied to Clipboard.")); }
+        function wipeAllData() { if(confirm("Wipe all data?")) { localStorage.clear(); location.reload(); } }
 
         initGPS();
     </script>
