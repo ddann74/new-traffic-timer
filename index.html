@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V18.44</title>
+    <title>Gravity Intel V18.45</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -40,7 +40,7 @@
         </div>
         <div class="flex-1 flex flex-col justify-center items-center text-center">
             <div id="timer-display">0.0</div>
-            <div id="status-tag" class="mt-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">System Ready</div>
+            <div id="status-tag" class="mt-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Engine Ready</div>
             <button id="master-toggle" onclick="toggleEngine()" class="mt-12 w-full py-10 bg-zinc-900 border-2 border-zinc-700 rounded-[50px] font-black text-2xl uppercase">Initiate Engine</button>
         </div>
     </div>
@@ -131,18 +131,22 @@
             const timerDisplay = document.getElementById('timer-display');
 
             if (isArmed) {
-                btn.innerText = "ENGINE ACTIVE"; btn.style.color = "#00f2ff";
+                btn.innerText = "ENGINE ACTIVE"; 
+                btn.style.color = "#00f2ff";
                 statusTag.innerText = "MONITORING MOTION";
                 currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [] };
             } else {
-                // FIXED: Force timer to stop and reset when engine is deactivated
-                if (isClocking) {
-                    stopClock();
+                // ABSOLUTE KILL COMMAND
+                if (clockRef) {
+                    clearInterval(clockRef);
+                    clockRef = null;
                 }
-                timerDisplay.innerText = "0.0"; 
+                isClocking = false;
+                timerDisplay.innerText = "0.0";
                 
-                btn.innerText = "Initiate Engine"; btn.style.color = "#52525b";
-                statusTag.innerText = "System Ready";
+                btn.innerText = "Initiate Engine"; 
+                btn.style.color = "#52525b";
+                statusTag.innerText = "Engine Standby";
                 
                 if (currentTrip && currentTrip.path.length > 2) {
                     trips.push(currentTrip);
@@ -184,9 +188,18 @@
 
         function startClock() {
             if(isClocking || isSafeZone || !isArmed) return;
-            isClocking = true; startT = Date.now();
+            isClocking = true; 
+            startT = Date.now();
+            
+            if (clockRef) clearInterval(clockRef); // Prevent duplicate intervals
+            
             clockRef = setInterval(() => {
-                if(!isArmed) { stopClock(); return; } // Safety double-check
+                // SECONDARY SAFETY CHECK
+                if(!isArmed || isSafeZone) {
+                    stopClock();
+                    document.getElementById('timer-display').innerText = "0.0";
+                    return;
+                }
                 document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1);
             }, 100);
         }
@@ -194,14 +207,15 @@
         function stopClock() {
             if(!isClocking) return;
             isClocking = false; 
-            clearInterval(clockRef);
-            clockRef = null;
+            if (clockRef) {
+                clearInterval(clockRef);
+                clockRef = null;
+            }
             
             let dur = document.getElementById('timer-display').innerText;
             if (currentTrip && parseFloat(dur) > 1) {
                 currentTrip.stops.push({time: Date.now(), duration: dur, pos: lastPos});
             }
-            // Display is reset to 0.0 in toggleEngine or on next startClock
         }
 
         function manualSafeToggle() { 
@@ -227,7 +241,7 @@
             if(lastPos) {
                 safeBase = {lat: lastPos[0], lon: lastPos[1]};
                 localStorage.setItem('G_BASE_V35', JSON.stringify(safeBase));
-                alert("Base Locked to Current Position.");
+                alert("Base Locked.");
             }
         }
 
@@ -241,7 +255,7 @@
 
         function renderLogs() {
             const list = document.getElementById('log-list');
-            list.innerHTML = trips.length === 0 ? "<div class='mt-20 text-center opacity-30'>NO ARCHIVES FOUND</div>" : "";
+            list.innerHTML = trips.length === 0 ? "<div class='mt-20 text-center opacity-30'>NO ARCHIVES</div>" : "";
             trips.sort((a,b) => b.start - a.start).forEach(t => {
                 const card = document.createElement('div');
                 card.className = "log-card";
@@ -281,7 +295,7 @@
                 if (d) d.forEach(item => { if(!trips.some(x=>x.id===item.id)) trips.push(item); });
             });
             localStorage.setItem(DB_KEY, JSON.stringify(trips));
-            alert("Recovery complete.");
+            alert("Scan complete.");
             renderLogs();
         }
 
