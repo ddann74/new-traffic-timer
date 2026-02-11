@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V16.9</title>
+    <title>Gravity Intel V17.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -54,8 +54,8 @@
     <script>
         const DB_KEY = 'GRAVITY_DATA_V35';
         let trips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
-        let currentTrip = null, isArmed = false, isClocking = false, startT = 0, clockRef = null, watchId = null;
-        let map, userMarker, lastPos = null;
+        let currentTrip = null, isArmed = false, isClocking = false, startT = 0, lastPos = null;
+        let map, userMarker, frameId = null;
 
         function tab(name) {
             ['dash', 'map', 'logs', 'sys'].forEach(p => {
@@ -94,14 +94,7 @@
                 stab.style.color = "#22c55e";
                 currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [] };
             } else {
-                // HARD STOP REINFORCED [cite: 1]
-                isClocking = false;
-                if (clockRef) {
-                    clearInterval(clockRef);
-                    clockRef = null;
-                }
-                
-                document.getElementById('timer-display').innerText = "0.0";
+                stopClock();
                 btn.innerText = "Initiate Engine"; 
                 btn.style.color = "#52525b";
                 statusTag.innerText = "Engine Standby";
@@ -117,7 +110,7 @@
         }
 
         function initGPS() {
-            watchId = navigator.geolocation.watchPosition(p => {
+            navigator.geolocation.watchPosition(p => {
                 const { latitude: lat, longitude: lon, speed } = p.coords;
                 const kmh = (speed || 0) * 3.6;
                 document.getElementById('speed-out').innerText = kmh.toFixed(1);
@@ -139,30 +132,22 @@
             if (isClocking || !isArmed) return;
             isClocking = true;
             startT = Date.now();
-            
-            if (clockRef) clearInterval(clockRef);
-            
-            clockRef = setInterval(() => {
-                // Self-Destruct Guard: If engine is disarmed, the timer must die
-                if (!isArmed) {
-                    isClocking = false;
-                    clearInterval(clockRef);
-                    clockRef = null;
-                    document.getElementById('timer-display').innerText = "0.0";
-                    return;
-                }
-                document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1);
-            }, 100);
+            updateTimer();
+        }
+
+        function updateTimer() {
+            if (!isClocking || !isArmed) {
+                cancelAnimationFrame(frameId);
+                return;
+            }
+            const elapsed = ((Date.now() - startT) / 1000).toFixed(1);
+            document.getElementById('timer-display').innerText = elapsed;
+            frameId = requestAnimationFrame(updateTimer);
         }
 
         function stopClock() {
-            if (!isClocking) return;
             isClocking = false;
-            
-            if (clockRef) {
-                clearInterval(clockRef);
-                clockRef = null;
-            }
+            cancelAnimationFrame(frameId);
             
             let dur = document.getElementById('timer-display').innerText;
             if (currentTrip && parseFloat(dur) > 1.0) {
