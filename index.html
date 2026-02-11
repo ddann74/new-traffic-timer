@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V18.50</title>
+    <title>Gravity Intel V18.51</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -21,7 +21,7 @@
         .log-card { background: #111; border: 2px solid #222; border-radius: 20px; padding: 20px; margin-bottom: 20px; }
         .pulse { animation: pulse 2s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
-        .btn-reset { border: 1px solid #333; color: #666; font-size: 9px; padding: 4px 8px; border-radius: 8px; text-transform: uppercase; font-weight: 800; }
+        .btn-reset { border: 1px solid #333; color: #666; font-size: 9px; padding: 4px 10px; border-radius: 8px; text-transform: uppercase; font-weight: 800; }
     </style>
 </head>
 <body>
@@ -30,7 +30,7 @@
         <div class="flex justify-between items-start mb-10">
             <div>
                 <div id="stab-status" class="text-[10px] font-black uppercase tracking-widest text-zinc-500">Initializing...</div>
-                <button onclick="resetGPS()" class="btn-reset mt-2">Reset GPS Hardware</button>
+                <button onclick="resetGPS()" class="btn-reset mt-2">Force GPS Sync</button>
             </div>
             <div class="text-right">
                 <div class="text-[10px] opacity-40 font-black tracking-widest text-white italic">Velocity</div>
@@ -44,26 +44,9 @@
         </div>
     </div>
 
-    <div id="page-map" class="page !p-0">
-        <div id="map-canvas"></div>
-        <div class="absolute top-6 left-6 z-[2000]">
-            <button onclick="recenterMap()" class="bg-black text-white px-5 py-3 rounded-xl font-black text-[10px] border-2 border-cyan-400 uppercase">Recenter</button>
-        </div>
-    </div>
-
-    <div id="page-logs" class="page">
-        <h2 class="text-5xl font-black text-white italic mb-10">ARCHIVES</h2>
-        <div id="log-list" class="pb-32"></div>
-    </div>
-
-    <div id="page-sys" class="page">
-        <h2 class="text-4xl font-black text-white italic mb-10 uppercase">SYSTEM</h2>
-        <div class="space-y-6">
-            <button onclick="resetGPS()" class="w-full bg-zinc-900 border border-zinc-800 text-cyan-400 py-6 rounded-3xl font-black text-xs uppercase">Hard Reset GPS Hardware</button>
-            <button onclick="exportData()" class="w-full bg-zinc-900 border border-zinc-800 text-white py-6 rounded-3xl font-black text-xs uppercase">Copy Trip Backup</button>
-            <button onclick="wipeAllData()" class="w-full bg-red-900/20 text-red-500 py-6 rounded-3xl font-black text-xs uppercase">Purge All Data</button>
-        </div>
-    </div>
+    <div id="page-map" class="page !p-0"><div id="map-canvas"></div><div class="absolute top-6 left-6 z-[2000]"><button onclick="recenterMap()" class="bg-black text-white px-5 py-3 rounded-xl font-black text-[10px] border-2 border-cyan-400 uppercase">Recenter</button></div></div>
+    <div id="page-logs" class="page"><h2 class="text-5xl font-black text-white italic mb-10">ARCHIVES</h2><div id="log-list" class="pb-32"></div></div>
+    <div id="page-sys" class="page"><h2 class="text-4xl font-black text-white italic mb-10 uppercase text-white">SYSTEM</h2><div class="space-y-6"><button onclick="resetGPS()" class="w-full bg-zinc-900 border border-zinc-800 text-cyan-400 py-6 rounded-3xl font-black text-xs uppercase">Hard Reset GPS</button><button onclick="exportData()" class="w-full bg-zinc-900 border border-zinc-800 text-white py-6 rounded-3xl font-black text-xs uppercase">Copy Trip Backup</button><button onclick="wipeAllData()" class="w-full bg-red-900/20 text-red-500 py-6 rounded-3xl font-black text-xs uppercase">Purge All Data</button></div></div>
 
     <nav class="nav-bar">
         <button onclick="tab('dash')" id="tab-dash" class="nav-btn nav-btn-active">DASH</button>
@@ -77,6 +60,10 @@
         let trips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         let currentTrip = null, isArmed = false, isClocking = false, startT = 0, clockRef = null, watchId = null;
         let map, userMarker, lastPos = null;
+        
+        // Speed Filtering Variables
+        let speedBuffer = [];
+        const BUFFER_SIZE = 5; 
 
         function tab(name) {
             ['dash', 'map', 'logs', 'sys'].forEach(p => {
@@ -101,12 +88,12 @@
             }, 200);
         }
 
-        // --- NEW HARD GPS RESET ---
         function resetGPS() {
             if (watchId) navigator.geolocation.clearWatch(watchId);
-            document.getElementById('speed-out').innerText = "---";
-            document.getElementById('stab-status').innerText = "RESTARTING...";
-            setTimeout(() => initGPS(), 1000);
+            speedBuffer = []; 
+            document.getElementById('speed-out').innerText = "0.0";
+            document.getElementById('stab-status').innerText = "SYNCING...";
+            setTimeout(() => initGPS(), 800);
         }
 
         function vacuumIntervals() {
@@ -123,14 +110,12 @@
             const statusTag = document.getElementById('status-tag');
             
             if (isArmed) {
-                btn.innerText = "ACTIVE"; 
-                btn.style.color = "#00f2ff";
+                btn.innerText = "ACTIVE"; btn.style.color = "#00f2ff";
                 statusTag.innerText = "Monitoring Motion";
                 currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [] };
             } else {
                 vacuumIntervals();
-                btn.innerText = "Initiate Engine"; 
-                btn.style.color = "#52525b";
+                btn.innerText = "Initiate Engine"; btn.style.color = "#52525b";
                 statusTag.innerText = "Engine Standby";
                 if (currentTrip && currentTrip.path.length > 2) {
                     trips.push(currentTrip);
@@ -144,11 +129,21 @@
             if (watchId) navigator.geolocation.clearWatch(watchId);
             watchId = navigator.geolocation.watchPosition(p => {
                 const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
-                const kmh = (speed || 0) * 3.6;
-                document.getElementById('speed-out').innerText = kmh.toFixed(1);
                 lastPos = [lat, lon];
 
-                // DATA STABILIZATION INDICATOR (As requested)
+                // --- SPEED SMOOTHING LOGIC ---
+                let rawKmh = (speed || 0) * 3.6;
+                speedBuffer.push(rawKmh);
+                if (speedBuffer.length > BUFFER_SIZE) speedBuffer.shift();
+                
+                // Average the buffer
+                let avgKmh = speedBuffer.reduce((a, b) => a + b, 0) / speedBuffer.length;
+                
+                // Dead Zone: Anything under 0.8 km/h is treated as stationary
+                let finalSpeed = avgKmh < 0.8 ? 0.0 : avgKmh;
+                document.getElementById('speed-out').innerText = finalSpeed.toFixed(1);
+
+                // DATA STABILIZATION INDICATOR
                 const sBox = document.getElementById('stab-status');
                 if (accuracy < 15) {
                     sBox.innerText = "Data Stabilized"; sBox.style.color = "#22c55e"; sBox.classList.remove('pulse');
@@ -158,17 +153,17 @@
 
                 if (isArmed && currentTrip) {
                     currentTrip.path.push({lat, lon, time: Date.now()});
-                    if (kmh < 1.0 && !isClocking) startClock();
-                    if (kmh > 4.5 && isClocking) stopClock();
+                    // Timer triggers based on smoothed speed
+                    if (finalSpeed < 1.0 && !isClocking) startClock();
+                    if (finalSpeed > 4.0 && isClocking) stopClock();
                 }
                 if (userMarker) userMarker.setLatLng(lastPos);
-            }, e => console.error(e), { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
+            }, null, { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 });
         }
 
         function startClock() {
             if (isClocking || !isArmed) return;
-            isClocking = true; 
-            startT = Date.now();
+            isClocking = true; startT = Date.now();
             if (clockRef) clearInterval(clockRef);
             clockRef = setInterval(() => {
                 if (!isArmed) { vacuumIntervals(); return; }
@@ -186,27 +181,9 @@
             document.getElementById('timer-display').innerText = "0.0";
         }
 
-        function renderLogs() {
-            const list = document.getElementById('log-list');
-            list.innerHTML = trips.length === 0 ? "<div class='mt-20 text-center opacity-30'>NO RECORDS</div>" : "";
-            trips.sort((a,b) => b.start - a.start).forEach(t => {
-                const card = document.createElement('div');
-                card.className = "log-card";
-                card.innerHTML = `<div class='text-[10px] opacity-30 font-bold'>${new Date(t.start).toLocaleString()}</div><div class='text-white font-black italic uppercase mb-4'>Trip Entry</div><button onclick='viewTrip(${t.id})' class='w-full bg-cyan-500 text-black py-4 rounded-xl font-black text-xs uppercase'>View Map</button>`;
-                list.appendChild(card);
-            });
-        }
-
-        function viewTrip(id) {
-            const trip = trips.find(t => t.id === id);
-            tab('map');
-            setTimeout(() => {
-                map.eachLayer(l => { if(l instanceof L.Polyline || l instanceof L.CircleMarker) if(l !== userMarker) map.removeLayer(l); });
-                const poly = L.polyline(trip.path.map(p => [p.lat, p.lon]), {color: 'cyan', weight: 5}).addTo(map);
-                map.fitBounds(poly.getBounds(), {padding: [50, 50]});
-            }, 400);
-        }
-
+        // Helpers
+        function renderLogs() { const list = document.getElementById('log-list'); list.innerHTML = trips.length === 0 ? "<div class='mt-20 text-center opacity-30'>NO RECORDS</div>" : ""; trips.sort((a,b) => b.start - a.start).forEach(t => { const card = document.createElement('div'); card.className = "log-card"; card.innerHTML = `<div class='text-[10px] opacity-30 font-bold'>${new Date(t.start).toLocaleString()}</div><div class='text-white font-black italic uppercase mb-4'>Trip Entry</div><button onclick='viewTrip(${t.id})' class='w-full bg-cyan-500 text-black py-4 rounded-xl font-black text-xs uppercase'>View Map</button>`; list.appendChild(card); }); }
+        function viewTrip(id) { const trip = trips.find(t => t.id === id); tab('map'); setTimeout(() => { map.eachLayer(l => { if(l instanceof L.Polyline || l instanceof L.CircleMarker) if(l !== userMarker) map.removeLayer(l); }); const poly = L.polyline(trip.path.map(p => [p.lat, p.lon]), {color: 'cyan', weight: 5}).addTo(map); map.fitBounds(poly.getBounds(), {padding: [50, 50]}); }, 400); }
         function exportData() { navigator.clipboard.writeText(JSON.stringify(trips)).then(() => alert("Copied.")); }
         function recenterMap() { if(lastPos) map.setView(lastPos, 16); }
         function wipeAllData() { if(confirm("Purge?")) { localStorage.clear(); location.reload(); } }
