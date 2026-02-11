@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V18.45</title>
+    <title>Gravity Intel V18.46</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -16,7 +16,7 @@
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 90px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 2px solid #222; z-index: 9999; }
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; color: #fff; font-size: 14px; font-weight: 800; border: none; background: none; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 5px solid var(--accent); }
-        #timer-display { font-size: 32vw; font-weight: 800; color: #fff; line-height: 0.8; transition: color 0.3s; }
+        #timer-display { font-size: 32vw; font-weight: 800; color: #fff; line-height: 0.8; transition: color 0.3s; pointer-events: none; }
         .timer-safe { color: var(--safe-blue) !important; text-shadow: 0 0 20px var(--safe-blue); }
         #map-canvas { height: 100%; width: 100%; background: #000; position: absolute; top: 0; left: 0; }
         .log-card { background: #111; border: 2px solid #222; border-radius: 20px; padding: 20px; margin-bottom: 20px; }
@@ -40,8 +40,8 @@
         </div>
         <div class="flex-1 flex flex-col justify-center items-center text-center">
             <div id="timer-display">0.0</div>
-            <div id="status-tag" class="mt-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Engine Ready</div>
-            <button id="master-toggle" onclick="toggleEngine()" class="mt-12 w-full py-10 bg-zinc-900 border-2 border-zinc-700 rounded-[50px] font-black text-2xl uppercase">Initiate Engine</button>
+            <div id="status-tag" class="mt-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest italic">Engine Standby</div>
+            <button id="master-toggle" onclick="toggleEngine()" class="mt-12 w-full py-10 bg-zinc-900 border-2 border-zinc-700 rounded-[50px] font-black text-2xl uppercase tracking-tighter shadow-2xl">Initiate Engine</button>
         </div>
     </div>
 
@@ -133,19 +133,28 @@
             if (isArmed) {
                 btn.innerText = "ENGINE ACTIVE"; 
                 btn.style.color = "#00f2ff";
+                btn.style.borderColor = "#00f2ff";
                 statusTag.innerText = "MONITORING MOTION";
                 currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [] };
             } else {
-                // ABSOLUTE KILL COMMAND
+                // HARD RESET ON DEACTIVATE
+                isClocking = false;
                 if (clockRef) {
                     clearInterval(clockRef);
                     clockRef = null;
                 }
-                isClocking = false;
-                timerDisplay.innerText = "0.0";
                 
+                // Clear all browser intervals to ensure no "ghost" timers remain
+                let id = window.setInterval(function() {}, 0);
+                while (id--) { window.clearInterval(id); }
+                
+                // Re-start the GPS listener since we cleared ALL intervals
+                startGPSWatcher(); 
+
+                timerDisplay.innerText = "0.0";
                 btn.innerText = "Initiate Engine"; 
                 btn.style.color = "#52525b";
+                btn.style.borderColor = "#3f3f46";
                 statusTag.innerText = "Engine Standby";
                 
                 if (currentTrip && currentTrip.path.length > 2) {
@@ -156,47 +165,52 @@
             }
         }
 
-        navigator.geolocation.watchPosition(p => {
-            const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
-            const kmh = (speed || 0) * 3.6;
-            document.getElementById('speed-out').innerText = kmh.toFixed(1);
-            lastPos = [lat, lon];
+        function startGPSWatcher() {
+            navigator.geolocation.watchPosition(p => {
+                const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
+                const kmh = (speed || 0) * 3.6;
+                document.getElementById('speed-out').innerText = kmh.toFixed(1);
+                lastPos = [lat, lon];
 
-            const sBox = document.getElementById('stab-status');
-            if (accuracy < 15) {
-                sBox.innerText = "DATA STABILIZED";
-                sBox.style.color = "#22c55e"; sBox.classList.remove('pulse');
-            } else {
-                sBox.innerText = "STABILIZING...";
-                sBox.style.color = "#eab308"; sBox.classList.add('pulse');
-            }
+                const sBox = document.getElementById('stab-status');
+                if (accuracy < 15) {
+                    sBox.innerText = "DATA STABILIZED";
+                    sBox.style.color = "#22c55e"; sBox.classList.remove('pulse');
+                } else {
+                    sBox.innerText = "STABILIZING...";
+                    sBox.style.color = "#eab308"; sBox.classList.add('pulse');
+                }
 
-            if (safeBase && !manualOverride) {
-                const dist = L.latLng(lat, lon).distanceTo(L.latLng(safeBase.lat, safeBase.lon));
-                isSafeZone = dist < 150;
-                updateSafeUI();
-            }
+                if (safeBase && !manualOverride) {
+                    const dist = L.latLng(lat, lon).distanceTo(L.latLng(safeBase.lat, safeBase.lon));
+                    isSafeZone = dist < 150;
+                    updateSafeUI();
+                }
 
-            if (isArmed && currentTrip) {
-                currentTrip.path.push({lat, lon, time: Date.now()});
-                if (kmh < 2.0 && !isClocking && !isSafeZone) startClock();
-                if (kmh > 4.5 && isClocking) stopClock();
-                if (isSafeZone && isClocking) stopClock();
-            }
-            if (userMarker) userMarker.setLatLng(lastPos);
-        }, null, { enableHighAccuracy: true });
+                if (isArmed && currentTrip) {
+                    currentTrip.path.push({lat, lon, time: Date.now()});
+                    // New logic: If the engine is ON, check speed for clock
+                    if (kmh < 2.0 && !isClocking && !isSafeZone) startClock();
+                    if (kmh > 4.5 && isClocking) stopClock();
+                    if (isSafeZone && isClocking) stopClock();
+                }
+                if (userMarker) userMarker.setLatLng(lastPos);
+            }, null, { enableHighAccuracy: true });
+        }
 
         function startClock() {
             if(isClocking || isSafeZone || !isArmed) return;
             isClocking = true; 
             startT = Date.now();
             
-            if (clockRef) clearInterval(clockRef); // Prevent duplicate intervals
+            if (clockRef) clearInterval(clockRef);
             
             clockRef = setInterval(() => {
-                // SECONDARY SAFETY CHECK
-                if(!isArmed || isSafeZone) {
-                    stopClock();
+                // INTERNAL KILL SWITCH
+                if(!isArmed) {
+                    isClocking = false;
+                    clearInterval(clockRef);
+                    clockRef = null;
                     document.getElementById('timer-display').innerText = "0.0";
                     return;
                 }
@@ -211,7 +225,6 @@
                 clearInterval(clockRef);
                 clockRef = null;
             }
-            
             let dur = document.getElementById('timer-display').innerText;
             if (currentTrip && parseFloat(dur) > 1) {
                 currentTrip.stops.push({time: Date.now(), duration: dur, pos: lastPos});
@@ -302,6 +315,9 @@
         function closeDrawer() { document.getElementById('map-drawer').classList.add('translate-y-full'); }
         function recenterMap() { if(lastPos) map.setView(lastPos, 16); }
         function wipeAllData() { if(confirm("Wipe all history?")) { localStorage.clear(); location.reload(); } }
+
+        // Initial Start
+        startGPSWatcher();
     </script>
 </body>
 </html>
