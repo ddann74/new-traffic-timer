@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V16.8</title>
+    <title>Gravity Intel V16.9</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -26,7 +26,7 @@
     <div id="page-dash" class="page active-page">
         <div class="flex justify-between items-start mb-10">
             <div>
-                <div class="text-[10px] font-black uppercase tracking-widest text-zinc-500">System Ready</div>
+                <div id="stab-status" class="text-[10px] font-black uppercase tracking-widest text-zinc-600">Stabilization: Off</div>
             </div>
             <div class="text-right">
                 <div class="text-[10px] opacity-40 font-black tracking-widest text-white italic">Velocity</div>
@@ -40,22 +40,9 @@
         </div>
     </div>
 
-    <div id="page-map" class="page !p-0">
-        <div id="map-canvas"></div>
-    </div>
-
-    <div id="page-logs" class="page">
-        <h2 class="text-5xl font-black text-white italic mb-10">ARCHIVES</h2>
-        <div id="log-list" class="pb-32"></div>
-    </div>
-
-    <div id="page-sys" class="page">
-        <h2 class="text-4xl font-black text-white italic mb-10 uppercase">SYSTEM</h2>
-        <div class="space-y-4">
-            <button onclick="exportData()" class="w-full bg-zinc-900 border border-zinc-800 text-white py-6 rounded-3xl font-black text-xs uppercase">Copy Trip Backup</button>
-            <button onclick="wipeAllData()" class="w-full bg-red-900/20 text-red-500 py-6 rounded-3xl font-black text-xs uppercase">Purge All Data</button>
-        </div>
-    </div>
+    <div id="page-map" class="page !p-0"><div id="map-canvas"></div></div>
+    <div id="page-logs" class="page"><h2 class="text-5xl font-black text-white italic mb-10">ARCHIVES</h2><div id="log-list" class="pb-32"></div></div>
+    <div id="page-sys" class="page"><h2 class="text-4xl font-black text-white italic mb-10 uppercase">SYSTEM</h2><div class="space-y-4"><button onclick="exportData()" class="w-full bg-zinc-900 border border-zinc-800 text-white py-6 rounded-3xl font-black text-xs uppercase">Copy Trip Backup</button><button onclick="wipeAllData()" class="w-full bg-red-900/20 text-red-500 py-6 rounded-3xl font-black text-xs uppercase">Purge All Data</button></div></div>
 
     <nav class="nav-bar">
         <button onclick="tab('dash')" id="tab-dash" class="nav-btn nav-btn-active">DASH</button>
@@ -97,18 +84,31 @@
             isArmed = !isArmed;
             const btn = document.getElementById('master-toggle');
             const statusTag = document.getElementById('status-tag');
+            const stab = document.getElementById('stab-status');
             
             if (isArmed) {
                 btn.innerText = "ACTIVE"; 
                 btn.style.color = "#00f2ff";
                 statusTag.innerText = "Monitoring Motion";
+                stab.innerText = "Stabilization: Active";
+                stab.style.color = "#22c55e";
                 currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [] };
             } else {
-                // Version 16.8 Stop Logic
-                stopClock(); 
+                // IMMEDIATE HARD STOP
+                isClocking = false;
+                if (clockRef) {
+                    clearInterval(clockRef);
+                    clockRef = null;
+                }
+                
+                // Clear UI
+                document.getElementById('timer-display').innerText = "0.0";
+                
                 btn.innerText = "Initiate Engine"; 
                 btn.style.color = "#52525b";
                 statusTag.innerText = "Engine Standby";
+                stab.innerText = "Stabilization: Off";
+                stab.style.color = "#52525b";
                 
                 if (currentTrip && currentTrip.path.length > 2) {
                     trips.push(currentTrip);
@@ -125,30 +125,49 @@
                 document.getElementById('speed-out').innerText = kmh.toFixed(1);
                 lastPos = [lat, lon];
 
+                // Logic: Only run if Armed
                 if (isArmed && currentTrip) {
                     currentTrip.path.push({lat, lon, time: Date.now()});
-                    if (kmh < 1.0 && !isClocking) startClock();
-                    if (kmh > 4.5 && isClocking) stopClock();
+                    if (kmh < 1.0) {
+                        if (!isClocking) startClock();
+                    } else {
+                        if (isClocking) stopClock();
+                    }
                 }
                 if (userMarker) userMarker.setLatLng(lastPos);
             }, null, { enableHighAccuracy: true });
         }
 
         function startClock() {
-            if (isClocking) return;
+            if (isClocking || !isArmed) return;
             isClocking = true;
             startT = Date.now();
+            
+            // Clear any existing accidental interval first
+            if (clockRef) clearInterval(clockRef);
+            
             clockRef = setInterval(() => {
+                // Secondary Guard: If engine was turned off, kill itself
+                if (!isArmed) {
+                    isClocking = false;
+                    clearInterval(clockRef);
+                    clockRef = null;
+                    document.getElementById('timer-display').innerText = "0.0";
+                    return;
+                }
                 document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1);
             }, 100);
         }
 
         function stopClock() {
+            if (!isClocking) return;
             isClocking = false;
+            
             if (clockRef) {
                 clearInterval(clockRef);
                 clockRef = null;
             }
+            
             let dur = document.getElementById('timer-display').innerText;
             if (currentTrip && parseFloat(dur) > 1.0) {
                 currentTrip.stops.push({time: Date.now(), duration: dur, pos: lastPos});
