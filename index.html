@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V18.48</title>
+    <title>Gravity Intel V18.49</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -16,7 +16,7 @@
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 90px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 2px solid #222; z-index: 9999; }
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; color: #fff; font-size: 14px; font-weight: 800; border: none; background: none; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 5px solid var(--accent); }
-        #timer-display { font-size: 32vw; font-weight: 800; color: #fff; line-height: 0.8; }
+        #timer-display { font-size: 32vw; font-weight: 800; color: #fff; line-height: 0.8; cursor: pointer; }
         #map-canvas { height: 100%; width: 100%; background: #000; position: absolute; top: 0; left: 0; }
         .log-card { background: #111; border: 2px solid #222; border-radius: 20px; padding: 20px; margin-bottom: 20px; }
         .pulse { animation: pulse 2s infinite; }
@@ -28,8 +28,8 @@
     <div id="page-dash" class="page active-page">
         <div class="flex justify-between items-start mb-10">
             <div>
-                <div id="stab-status" class="text-[10px] font-black uppercase tracking-widest text-zinc-500">Stabilizing...</div>
-                <div class="text-[8px] opacity-30 uppercase font-bold mt-1">V18.48 State-Lock</div>
+                <div id="stab-status" class="text-[10px] font-black uppercase tracking-widest text-zinc-500">Initializing...</div>
+                <div class="text-[8px] opacity-20 uppercase font-bold mt-1">Engine v18.49 / Ghost-Kill Enabled</div>
             </div>
             <div class="text-right">
                 <div class="text-[10px] opacity-40 font-black tracking-widest text-white italic">Velocity</div>
@@ -37,9 +37,9 @@
             </div>
         </div>
         <div class="flex-1 flex flex-col justify-center items-center text-center">
-            <div id="timer-display">0.0</div>
+            <div id="timer-display" onclick="vacuumIntervals()">0.0</div>
             <div id="status-tag" class="mt-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest italic">Engine Standby</div>
-            <button id="master-toggle" onclick="toggleEngine()" class="mt-12 w-full py-10 bg-zinc-900 border-2 border-zinc-700 rounded-[50px] font-black text-2xl uppercase">Initiate Engine</button>
+            <button id="master-toggle" onclick="toggleEngine()" class="mt-12 w-full py-10 bg-zinc-900 border-2 border-zinc-700 rounded-[50px] font-black text-2xl uppercase tracking-tighter shadow-2xl">Initiate Engine</button>
         </div>
     </div>
 
@@ -83,20 +83,39 @@
             }, 200);
         }
 
+        // --- THE "VACUUM" MECHANISM ---
+        function vacuumIntervals() {
+            // This kills EVERY active interval in the browser window
+            let killId = window.setInterval(() => {}, 0);
+            while (killId--) { window.clearInterval(killId); }
+            
+            clockRef = null;
+            isClocking = false;
+            document.getElementById('timer-display').innerText = "0.0";
+            document.getElementById('timer-display').style.color = "#fff";
+            
+            // Re-start the GPS listener since vacuuming might have killed its refresh interval
+            initGPS(); 
+        }
+
         function toggleEngine() {
             isArmed = !isArmed;
             const btn = document.getElementById('master-toggle');
             const statusTag = document.getElementById('status-tag');
             
             if (isArmed) {
-                btn.innerText = "ACTIVE"; btn.style.color = "#00f2ff";
+                btn.innerText = "ACTIVE"; 
+                btn.style.color = "#00f2ff";
                 statusTag.innerText = "Monitoring Motion";
                 currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [] };
             } else {
-                // HARD KILL ON DISABLE
-                stopClock();
-                btn.innerText = "Initiate Engine"; btn.style.color = "#52525b";
+                // RUN THE VACUUM
+                vacuumIntervals();
+                
+                btn.innerText = "Initiate Engine"; 
+                btn.style.color = "#52525b";
                 statusTag.innerText = "Engine Standby";
+                
                 if (currentTrip && currentTrip.path.length > 2) {
                     trips.push(currentTrip);
                     localStorage.setItem(DB_KEY, JSON.stringify(trips));
@@ -105,44 +124,41 @@
             }
         }
 
-        navigator.geolocation.watchPosition(p => {
-            const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
-            const kmh = (speed || 0) * 3.6;
-            document.getElementById('speed-out').innerText = kmh.toFixed(1);
-            lastPos = [lat, lon];
+        function initGPS() {
+            navigator.geolocation.watchPosition(p => {
+                const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
+                const kmh = (speed || 0) * 3.6;
+                document.getElementById('speed-out').innerText = kmh.toFixed(1);
+                lastPos = [lat, lon];
 
-            // Data Stabilization Indicator
-            const sBox = document.getElementById('stab-status');
-            if (accuracy < 15) {
-                sBox.innerText = "Data Stabilized"; sBox.style.color = "#22c55e"; sBox.classList.remove('pulse');
-            } else {
-                sBox.innerText = "Stabilizing..."; sBox.style.color = "#eab308"; sBox.classList.add('pulse');
-            }
+                // Data Stabilization Indicator
+                const sBox = document.getElementById('stab-status');
+                if (accuracy < 15) {
+                    sBox.innerText = "Data Stabilized"; sBox.style.color = "#22c55e"; sBox.classList.remove('pulse');
+                } else {
+                    sBox.innerText = "Stabilizing..."; sBox.style.color = "#eab308"; sBox.classList.add('pulse');
+                }
 
-            if (isArmed && currentTrip) {
-                currentTrip.path.push({lat, lon, time: Date.now()});
-                // Logic: Start timer if nearly still, stop if moving
-                if (kmh < 1.0 && !isClocking) startClock();
-                if (kmh > 4.5 && isClocking) stopClock();
-            }
-            if (userMarker) userMarker.setLatLng(lastPos);
-        }, null, { enableHighAccuracy: true });
+                if (isArmed && currentTrip) {
+                    currentTrip.path.push({lat, lon, time: Date.now()});
+                    if (kmh < 1.0 && !isClocking) startClock();
+                    if (kmh > 4.5 && isClocking) stopClock();
+                }
+                if (userMarker) userMarker.setLatLng(lastPos);
+            }, null, { enableHighAccuracy: true });
+        }
 
         function startClock() {
             if (isClocking || !isArmed) return;
             isClocking = true; 
             startT = Date.now();
             
-            // Clean up any existing interval first
             if (clockRef) clearInterval(clockRef);
 
             clockRef = setInterval(() => {
-                // INTERNAL SAFETY LOCK: If engine is deactivated, the timer kills itself
+                // Secondary Guard: Kill self if engine is off
                 if (!isArmed) {
-                    clearInterval(clockRef);
-                    clockRef = null;
-                    isClocking = false;
-                    document.getElementById('timer-display').innerText = "0.0";
+                    vacuumIntervals();
                     return;
                 }
                 document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1);
@@ -189,6 +205,9 @@
         function exportData() { navigator.clipboard.writeText(JSON.stringify(trips)).then(() => alert("Copied.")); }
         function recenterMap() { if(lastPos) map.setView(lastPos, 16); }
         function wipeAllData() { if(confirm("Purge?")) { localStorage.clear(); location.reload(); } }
+
+        // Start GPS
+        initGPS();
     </script>
 </body>
 </html>
