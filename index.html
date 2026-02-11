@@ -94,16 +94,14 @@
                 stab.style.color = "#22c55e";
                 currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [] };
             } else {
-                // IMMEDIATE HARD STOP
+                // HARD STOP REINFORCED [cite: 1]
                 isClocking = false;
                 if (clockRef) {
                     clearInterval(clockRef);
                     clockRef = null;
                 }
                 
-                // Clear UI
                 document.getElementById('timer-display').innerText = "0.0";
-                
                 btn.innerText = "Initiate Engine"; 
                 btn.style.color = "#52525b";
                 statusTag.innerText = "Engine Standby";
@@ -125,7 +123,6 @@
                 document.getElementById('speed-out').innerText = kmh.toFixed(1);
                 lastPos = [lat, lon];
 
-                // Logic: Only run if Armed
                 if (isArmed && currentTrip) {
                     currentTrip.path.push({lat, lon, time: Date.now()});
                     if (kmh < 1.0) {
@@ -143,11 +140,10 @@
             isClocking = true;
             startT = Date.now();
             
-            // Clear any existing accidental interval first
             if (clockRef) clearInterval(clockRef);
             
             clockRef = setInterval(() => {
-                // Secondary Guard: If engine was turned off, kill itself
+                // Self-Destruct Guard: If engine is disarmed, the timer must die
                 if (!isArmed) {
                     isClocking = false;
                     clearInterval(clockRef);
