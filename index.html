@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V18.43</title>
+    <title>Gravity Intel V18.44</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -128,14 +128,22 @@
             isArmed = !isArmed;
             const btn = document.getElementById('master-toggle');
             const statusTag = document.getElementById('status-tag');
+            const timerDisplay = document.getElementById('timer-display');
+
             if (isArmed) {
                 btn.innerText = "ENGINE ACTIVE"; btn.style.color = "#00f2ff";
                 statusTag.innerText = "MONITORING MOTION";
                 currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [] };
             } else {
-                stopClock(); // Hard stop timer on engine kill
+                // FIXED: Force timer to stop and reset when engine is deactivated
+                if (isClocking) {
+                    stopClock();
+                }
+                timerDisplay.innerText = "0.0"; 
+                
                 btn.innerText = "Initiate Engine"; btn.style.color = "#52525b";
                 statusTag.innerText = "System Ready";
+                
                 if (currentTrip && currentTrip.path.length > 2) {
                     trips.push(currentTrip);
                     localStorage.setItem(DB_KEY, JSON.stringify(trips));
@@ -167,7 +175,6 @@
 
             if (isArmed && currentTrip) {
                 currentTrip.path.push({lat, lon, time: Date.now()});
-                // SENSITIVITY FIX: Stop if under 2km/h, start if over 4.5km/h
                 if (kmh < 2.0 && !isClocking && !isSafeZone) startClock();
                 if (kmh > 4.5 && isClocking) stopClock();
                 if (isSafeZone && isClocking) stopClock();
@@ -176,27 +183,34 @@
         }, null, { enableHighAccuracy: true });
 
         function startClock() {
-            if(isClocking || isSafeZone) return;
+            if(isClocking || isSafeZone || !isArmed) return;
             isClocking = true; startT = Date.now();
             clockRef = setInterval(() => {
+                if(!isArmed) { stopClock(); return; } // Safety double-check
                 document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1);
             }, 100);
         }
 
         function stopClock() {
             if(!isClocking) return;
-            isClocking = false; clearInterval(clockRef);
+            isClocking = false; 
+            clearInterval(clockRef);
+            clockRef = null;
+            
             let dur = document.getElementById('timer-display').innerText;
             if (currentTrip && parseFloat(dur) > 1) {
                 currentTrip.stops.push({time: Date.now(), duration: dur, pos: lastPos});
             }
-            document.getElementById('timer-display').innerText = "0.0";
+            // Display is reset to 0.0 in toggleEngine or on next startClock
         }
 
         function manualSafeToggle() { 
             manualOverride = !manualOverride; 
             isSafeZone = manualOverride; 
-            if(isSafeZone) stopClock(); 
+            if(isSafeZone) {
+                stopClock();
+                document.getElementById('timer-display').innerText = "0.0";
+            }
             updateSafeUI(); 
         }
 
@@ -273,7 +287,7 @@
 
         function closeDrawer() { document.getElementById('map-drawer').classList.add('translate-y-full'); }
         function recenterMap() { if(lastPos) map.setView(lastPos, 16); }
-        function wipeAllData() { if(confirm("Wipe all?")) { localStorage.clear(); location.reload(); } }
+        function wipeAllData() { if(confirm("Wipe all history?")) { localStorage.clear(); location.reload(); } }
     </script>
 </body>
 </html>
