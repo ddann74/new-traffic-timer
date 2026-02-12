@@ -3,27 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V26.0 - STABLE</title>
+    <title>Gravity Intel V27.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;800&display=swap');
         :root { --accent: #00f2ff; --bg: #050505; }
-        
         html, body { height: 100%; margin: 0; padding: 0; background: var(--bg); color: var(--accent); font-family: 'JetBrains Mono', monospace; overflow: hidden; }
         .app-container { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
-
-        .page { display: none; flex: 1; overflow-y: auto; padding: 12px; padding-bottom: 90px; }
+        .page { display: none; flex: 1; overflow-y: auto; padding: 12px; padding-bottom: 100px; }
         .active-page { display: flex !important; flex-direction: column; }
-        
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 80px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #333; z-index: 9999; }
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.3; color: #fff; font-size: 10px; font-weight: 800; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 3px solid var(--accent); }
-
-        #timer-display { font-size: 16vw; font-weight: 800; color: #fff; line-height: 1; margin: 10px 0; }
+        #timer-display { font-size: 16vw; font-weight: 800; color: #fff; line-height: 1; margin: 5px 0; }
         #map-canvas { height: 100%; width: 100%; background: #000; }
-        .btn-ui { background: #111; border: 1px solid #444; padding: 14px; border-radius: 12px; font-size: 11px; font-weight: 800; text-transform: uppercase; width: 100%; }
+        .btn-ui { background: #111; border: 1px solid #444; padding: 12px; border-radius: 10px; font-size: 11px; font-weight: 800; text-transform: uppercase; width: 100%; }
+        input[type=range] { width: 100%; accent-color: var(--accent); height: 15px; }
     </style>
 </head>
 <body>
@@ -31,30 +28,31 @@
 <div class="app-container">
 
     <div id="page-dash" class="page active-page">
-        <div class="grid grid-cols-2 gap-2 mb-3">
-            <button id="master-toggle" onclick="toggleEngine()" class="btn-ui border-cyan-500/50 text-white">Initiate Engine</button>
-            <button onclick="markSafeZone()" class="btn-ui border-yellow-500/50 text-yellow-500">Mark Safe Zone</button>
+        <div class="space-y-2 mb-4">
+            <div class="grid grid-cols-2 gap-2">
+                <button id="master-toggle" onclick="toggleEngine()" class="btn-ui border-cyan-500/50 text-white">Initiate Engine</button>
+                <button onclick="markSafeZone()" class="btn-ui border-yellow-500/50 text-yellow-500">Mark Zone</button>
+            </div>
+            <div class="bg-zinc-900 p-2 rounded-lg border border-zinc-800">
+                <div class="flex justify-between text-[8px] uppercase mb-1"><span>Speed Threshold</span><span id="threshold-val">2.5 km/h</span></div>
+                <input type="range" id="speed-slider" min="0.5" max="10.0" step="0.5" value="2.5" oninput="updateThreshold(this.value)">
+            </div>
         </div>
 
         <div class="bg-zinc-900 border border-zinc-800 p-3 rounded-xl flex justify-between items-center mb-3">
             <div class="flex flex-col">
-                <span id="stab-status" class="text-[9px] font-black uppercase text-red-500">Stabilization: Waiting</span>
-                <span id="threshold-out" class="text-[10px] text-cyan-400 font-bold italic">Threshold: 2.5 km/h</span>
+                <span id="stab-status" class="text-[9px] font-black uppercase text-red-500">Stabilization: Off</span>
             </div>
             <div class="text-right">
-                <span class="text-[8px] text-zinc-500 block uppercase">Velocity</span>
-                <span id="speed-out" class="text-2xl font-black italic">0.0</span>
+                <span id="speed-out" class="text-3xl font-black italic">0.0</span>
+                <span class="text-[8px] text-zinc-500 block uppercase">KM/H</span>
             </div>
         </div>
 
-        <div class="flex-1 flex flex-col justify-center items-center border border-zinc-900 bg-zinc-950/50 rounded-2xl">
-            <div id="safe-zone-alert" class="bg-yellow-500 text-black text-[9px] font-black px-2 py-0.5 rounded mb-1 hidden">SAFE ZONE INHIBIT</div>
+        <div class="flex-1 flex flex-col justify-center items-center border border-zinc-900 bg-zinc-950/40 rounded-2xl">
+            <div id="safe-zone-alert" class="bg-yellow-500 text-black text-[9px] font-black px-2 py-0.5 rounded mb-1 hidden">SAFE ZONE ACTIVE</div>
             <div id="timer-display">0.0</div>
-            <div id="status-tag" class="text-[10px] text-zinc-600 uppercase tracking-widest mt-1">System Standby</div>
-        </div>
-
-        <div class="mt-4 p-3 bg-zinc-900 rounded-xl border border-zinc-800">
-            <input type="range" id="speed-slider" min="0.5" max="10.0" step="0.5" value="2.5" oninput="updateThreshold(this.value)" class="w-full">
+            <div id="status-tag" class="text-[10px] text-zinc-600 uppercase tracking-widest">Engine Standby</div>
         </div>
     </div>
 
@@ -62,25 +60,22 @@
 
     <div id="page-logs" class="page">
         <h2 class="text-xl font-black uppercase italic mb-4">Archives</h2>
-        <div id="log-list" class="space-y-2"></div>
+        <div id="log-list" class="space-y-3 pb-10"></div>
     </div>
 
     <div id="page-sys" class="page">
-        <h2 class="text-xl font-black uppercase italic mb-6 text-center">System & Data</h2>
+        <h2 class="text-xl font-black uppercase italic mb-6 text-center">System</h2>
         <div class="grid grid-cols-2 gap-2 mb-4">
-            <button onclick="exportData()" class="btn-ui bg-cyan-600 text-black border-none">Export</button>
-            <button onclick="importData()" class="btn-ui bg-zinc-800">Import</button>
+            <button onclick="exportData()" class="btn-ui bg-cyan-600 text-black border-none">Export JSON</button>
+            <button onclick="importData()" class="btn-ui bg-zinc-800">Import JSON</button>
         </div>
         <div class="space-y-4">
+            <button onclick="clearSafeZones()" class="btn-ui border-yellow-900 text-yellow-700">Clear All Safe Zones</button>
             <div class="bg-zinc-900 p-4 rounded-xl border border-zinc-800 text-[10px]">
-                <h3 class="text-cyan-500 font-black uppercase mb-2">Manual</h3>
-                <p class="text-zinc-500 leading-tight">• Use <b>Initiate</b> to start tracking.<br>• <b>Threshold</b> triggers the stop-clock.<br>• <b>Safe Zones</b> auto-pause timer.</p>
+                <h3 class="text-zinc-400 font-black uppercase mb-2">V27.0 Change Log</h3>
+                <div class="text-[9px] text-zinc-600">• Slider Visibility Fix<br>• Nested Stop Data (Duration/Time)<br>• Deletable Safe Zone Markers<br>• Clear All Zones Function</div>
             </div>
-            <div class="bg-zinc-900 p-4 rounded-xl border border-zinc-800 text-[10px]">
-                <h3 class="text-zinc-400 font-black uppercase mb-2">Version Log 26.0</h3>
-                <div class="text-[9px] text-zinc-600">• Fixed Viewport Overlap<br>• Enhanced GPS Center-Lock<br>• Stats: KM, Idle, Ratio</div>
-            </div>
-            <button onclick="wipeAll()" class="text-[9px] text-red-900 uppercase font-black underline w-full text-center">Clear Memory</button>
+            <button onclick="wipeAll()" class="text-[9px] text-red-900 underline w-full text-center">Master System Wipe</button>
         </div>
     </div>
 
@@ -93,9 +88,9 @@
 </div>
 
 <script>
-    const DB_KEY = 'GRAVITY_V26_FINAL';
+    const DB_KEY = 'GRAVITY_V27_FINAL';
     let trips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
-    let safeZones = JSON.parse(localStorage.getItem('GRAVITY_SZ_26') || '[]');
+    let safeZones = JSON.parse(localStorage.getItem('GRAVITY_SZ_27') || '[]');
     let currentTrip = null, isArmed = false, isClocking = false, startT = 0, clockFrame = null, speedThreshold = 2.5, map, userMarker, lastPos = null;
 
     function tab(name) {
@@ -109,7 +104,7 @@
 
     function updateThreshold(v) {
         speedThreshold = parseFloat(v);
-        document.getElementById('threshold-out').innerText = `Threshold: ${v} km/h`;
+        document.getElementById('threshold-val').innerText = `${v} km/h`;
     }
 
     function initMap() {
@@ -120,8 +115,15 @@
     }
 
     function renderSZ() {
-        safeZones.forEach(sz => L.circle([sz.lat, sz.lon], {color: 'yellow', radius: 60, fillOpacity: 0.15, weight: 1}).addTo(map));
+        map.eachLayer(l => { if(l.options && l.options.isSZ) map.removeLayer(l); });
+        safeZones.forEach((sz, idx) => {
+            const c = L.circle([sz.lat, sz.lon], {color: 'yellow', radius: 50, fillOpacity: 0.1, weight: 1, isSZ: true}).addTo(map);
+            c.bindPopup(`<button onclick="delSZ(${idx})" class="text-red-500 font-bold text-[10px]">DELETE SAFE ZONE</button>`);
+        });
     }
+
+    function delSZ(idx) { safeZones.splice(idx, 1); localStorage.setItem('GRAVITY_SZ_27', JSON.stringify(safeZones)); renderSZ(); }
+    function clearSafeZones() { if(confirm("Clear all zones?")) { safeZones = []; localStorage.setItem('GRAVITY_SZ_27', '[]'); renderSZ(); } }
 
     function getDist(p1, p2) {
         const R = 6371;
@@ -140,10 +142,7 @@
         } else {
             stopClock();
             btn.innerText = "Initiate Engine"; btn.style.backgroundColor = "#111";
-            if (currentTrip && currentTrip.path.length > 2) {
-                trips.push(currentTrip);
-                localStorage.setItem(DB_KEY, JSON.stringify(trips));
-            }
+            if (currentTrip && currentTrip.path.length > 2) { trips.push(currentTrip); localStorage.setItem(DB_KEY, JSON.stringify(trips)); }
             currentTrip = null;
         }
     }
@@ -153,22 +152,18 @@
             const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
             const kmh = (speed || 0) * 3.6;
             lastPos = {lat, lon};
-            
             document.getElementById('speed-out').innerText = kmh.toFixed(1);
             const stab = document.getElementById('stab-status');
-            stab.innerText = accuracy < 25 ? "Stabilization: Locked" : "Stabilization: Poor Signal";
+            stab.innerText = accuracy < 25 ? "Stabilization: Locked" : "Stabilization: Low Signal";
             stab.style.color = accuracy < 25 ? "#22c55e" : "#f59e0b";
-
-            const inSZ = safeZones.some(sz => getDist(lastPos, sz) < 0.06);
+            const inSZ = safeZones.some(sz => getDist(lastPos, sz) < 0.05);
             document.getElementById('safe-zone-alert').classList.toggle('hidden', !inSZ);
-
             if (isArmed && currentTrip) {
                 if (currentTrip.path.length > 0) currentTrip.dist += getDist(currentTrip.path[currentTrip.path.length-1], lastPos);
                 currentTrip.path.push({...lastPos, time: Date.now()});
                 if (kmh < speedThreshold && !isClocking && !inSZ) startClock();
                 if ((kmh > (speedThreshold + 0.5) || inSZ) && isClocking) stopClock();
             }
-
             if (userMarker) userMarker.setLatLng([lat, lon]);
             if (map && document.getElementById('page-map').classList.contains('active-page')) map.panTo([lat, lon]);
         }, null, { enableHighAccuracy: true });
@@ -179,7 +174,10 @@
     function stopClock() {
         isClocking = false; cancelAnimationFrame(clockFrame);
         let dur = document.getElementById('timer-display').innerText;
-        if (currentTrip && parseFloat(dur) > 1.5) currentTrip.stops.push({ ...lastPos, dur, cat: 'Unsorted', id: Date.now() });
+        if (currentTrip && parseFloat(dur) > 1.5) {
+            const now = new Date();
+            currentTrip.stops.push({ ...lastPos, dur, time: now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), id: Date.now() });
+        }
         document.getElementById('timer-display').innerText = "0.0";
     }
 
@@ -187,10 +185,14 @@
         const list = document.getElementById('log-list');
         list.innerHTML = trips.slice().reverse().map(t => {
             const idle = t.stops.reduce((a, s) => a + parseFloat(s.dur), 0);
+            const stopDetails = t.stops.map(s => `<div class="flex justify-between border-b border-zinc-800 py-1"><span>[${s.time}]</span><span>Stop: ${s.dur}s</span></div>`).join('');
             return `<div class="bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-[10px]">
                 <div class="flex justify-between text-cyan-400 font-black"><span>${new Date(t.start).toLocaleDateString()}</span><span>${t.dist.toFixed(2)} KM</span></div>
-                <div class="flex justify-between text-zinc-500 mt-1"><span>Idle: ${idle.toFixed(0)}s</span><span>Ratio: ${(idle/(t.dist*10||1)).toFixed(1)}</span></div>
-                <button onclick='viewTrip(${t.id})' class="w-full btn-ui mt-2 py-2 text-[9px]">Analyze Path</button>
+                <div class="mt-2 text-zinc-500 max-h-32 overflow-y-auto bg-black/30 p-2 rounded">
+                    <div class="font-bold text-[8px] uppercase mb-1 border-b border-zinc-700">Stop Records:</div>
+                    ${stopDetails || 'No stops recorded'}
+                </div>
+                <button onclick='viewTrip(${t.id})' class="w-full btn-ui mt-3 py-2 text-[9px] border-cyan-900/30">View on Map</button>
             </div>`;
         }).join('');
     }
@@ -199,36 +201,23 @@
         const trip = trips.find(t => t.id === id);
         tab('map');
         setTimeout(() => {
-            map.eachLayer(l => { if(l instanceof L.Polyline || (l instanceof L.CircleMarker && l !== userMarker)) map.removeLayer(l); });
+            map.eachLayer(l => { if(l instanceof L.Polyline || (l instanceof L.CircleMarker && !l.options.isSZ && l !== userMarker)) map.removeLayer(l); });
             L.polyline(trip.path.map(p => [p.lat, p.lon]), {color: 'cyan', weight: 4}).addTo(map);
             trip.stops.forEach(s => {
                 const m = L.circleMarker([s.lat, s.lon], {color: 'yellow', radius: 6}).addTo(map);
-                m.bindPopup(`<div class="text-[10px] space-y-2"><b>Stop: ${s.dur}s</b><br><button onclick="delStop(${id}, ${s.id})" class="text-red-500 font-bold">DELETE STOP</button></div>`);
+                m.bindPopup(`<div class="text-[10px]"><b>Time: ${s.time}</b><br>Duration: ${s.dur}s</div>`);
             });
             map.fitBounds(L.polyline(trip.path.map(p => [p.lat, p.lon])).getBounds());
         }, 300);
     }
 
-    function delStop(tid, sid) {
-        const t = trips.find(x => x.id === tid);
-        t.stops = t.stops.filter(x => x.id !== sid);
-        localStorage.setItem(DB_KEY, JSON.stringify(trips));
-        viewTrip(tid);
-    }
-
-    function exportData() { navigator.clipboard.writeText(JSON.stringify(trips)).then(() => alert("History Copied")); }
+    function exportData() { navigator.clipboard.writeText(JSON.stringify(trips)).then(() => alert("Copied JSON")); }
     function importData() {
         const raw = prompt("Paste JSON:");
-        if(raw) {
-            try { trips = JSON.parse(raw); localStorage.setItem(DB_KEY, JSON.stringify(trips)); renderLogs(); } catch(e) { alert("Format Error"); }
-        }
+        if(raw) { try { trips = JSON.parse(raw); localStorage.setItem(DB_KEY, JSON.stringify(trips)); renderLogs(); } catch(e) { alert("Format Error"); } }
     }
-
-    function markSafeZone() {
-        if(lastPos) { safeZones.push(lastPos); localStorage.setItem('GRAVITY_SZ_26', JSON.stringify(safeZones)); renderSZ(); alert("Zone Fixed"); }
-    }
-
-    function wipeAll() { if(confirm("Purge Memory?")) { localStorage.clear(); location.reload(); } }
+    function markSafeZone() { if(lastPos) { safeZones.push(lastPos); localStorage.setItem('GRAVITY_SZ_27', JSON.stringify(safeZones)); renderSZ(); alert("Safe Zone Saved"); } }
+    function wipeAll() { if(confirm("Master Reset?")) { localStorage.clear(); location.reload(); } }
     initGPS();
 </script>
 </body>
