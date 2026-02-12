@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V18.2</title>
+    <title>Gravity Intel V18.9</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -11,15 +11,15 @@
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;800&display=swap');
         :root { --accent: #00f2ff; --bg: #050505; }
         body { font-family: 'JetBrains Mono', monospace; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; height: 100vh; }
-        .page { display: none; width: 100vw; height: calc(100vh - 90px); flex-direction: column; padding: 25px; overflow-y: auto; }
+        .page { display: none; width: 100vw; height: calc(100vh - 90px); flex-direction: column; padding: 20px; overflow-y: auto; }
         .active-page { display: flex !important; }
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 90px; background: #000; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 2px solid #222; z-index: 9999; }
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; color: #fff; font-size: 14px; font-weight: 800; border: none; background: none; }
         .nav-btn-active { opacity: 1; color: var(--accent); border-top: 5px solid var(--accent); }
-        #timer-display { font-size: 28vw; font-weight: 800; color: #fff; line-height: 0.8; }
+        #timer-display { font-size: 22vw; font-weight: 800; color: #fff; line-height: 1; margin: 5px 0; }
         #map-canvas { height: 100%; width: 100%; background: #000; position: absolute; top: 0; left: 0; }
         .log-card { background: #111; border: 2px solid #222; border-radius: 20px; padding: 20px; margin-bottom: 15px; }
-        input[type=range] { width: 100%; accent-color: var(--accent); background: #222; height: 8px; border-radius: 5px; appearance: none; }
+        input[type=range] { width: 100%; accent-color: var(--accent); background: #222; height: 18px; border-radius: 10px; appearance: none; outline: none; border: 1px solid #333; }
         .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 10000; padding: 40px; flex-direction: column; justify-content: center; }
     </style>
 </head>
@@ -27,55 +27,59 @@
 
     <div id="stats-modal" class="modal" onclick="this.style.display='none'">
         <div class="bg-zinc-900 border-2 border-cyan-500 p-8 rounded-[40px] text-center">
-            <h3 class="text-cyan-500 font-black italic uppercase mb-6 tracking-tighter">Trip Analytics</h3>
-            <div id="stats-content" class="space-y-4"></div>
-            <button class="mt-8 text-[10px] font-black text-zinc-600 uppercase italic">Close Analysis</button>
+            <h3 class="text-cyan-500 font-black italic uppercase mb-6">Trip Analytics</h3>
+            <div id="stats-content" class="space-y-4 text-white"></div>
+            <button class="mt-8 text-[10px] font-black text-zinc-600 uppercase">Close</button>
         </div>
     </div>
 
     <div id="page-dash" class="page active-page">
-        <div class="flex justify-between items-start mb-6">
-            <div>
-                <div id="stab-status" class="text-[10px] font-black uppercase tracking-widest text-zinc-600">Data Stabilization: Off</div>
-                <div id="threshold-out" class="text-[9px] text-cyan-500 font-bold mt-1 uppercase italic">Safe Zone: 2.5 km/h</div>
-            </div>
-            <div class="text-right">
-                <div class="text-[10px] opacity-40 font-black tracking-widest text-white italic">Velocity (km/h)</div>
-                <div class="text-4xl text-white font-black italic" id="speed-out">0.0</div>
+        <div class="bg-zinc-900/90 p-5 rounded-3xl border border-zinc-700 shadow-2xl">
+            <div class="flex justify-between items-center">
+                <div>
+                    <div id="stab-status" class="text-[10px] font-black uppercase tracking-widest text-zinc-500">Data Stabilization: Offline</div>
+                    <div id="threshold-out" class="text-[12px] text-cyan-500 font-black uppercase italic mt-1">Safe Zone: 2.5 km/h</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-[9px] opacity-40 font-black uppercase text-white">Current Velocity</div>
+                    <div class="text-3xl text-white font-black italic" id="speed-out">0.0</div>
+                </div>
             </div>
         </div>
 
-        <div class="flex-1 flex flex-col justify-center items-center text-center">
+        <div class="flex-1 flex flex-col justify-center items-center py-6">
+            <div id="status-tag" class="text-[10px] font-bold text-zinc-600 uppercase tracking-widest italic mb-2">Engine Standby</div>
             <div id="timer-display">0.0</div>
-            <div id="status-tag" class="mt-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest italic">Engine Standby</div>
-            
-            <div class="w-full mt-12 px-4">
-                <label class="text-[10px] font-black text-zinc-500 uppercase block mb-3">Adjust Safe Zone</label>
+        </div>
+
+        <div class="w-full space-y-6 bg-zinc-900/40 p-6 rounded-[40px] border border-zinc-800 mb-4">
+            <div>
+                <label class="text-[10px] font-black text-zinc-500 uppercase block mb-4 text-center tracking-widest">Adjust Velocity Gate (Safe Zone)</label>
                 <input type="range" id="safe-zone-slider" min="0.5" max="10.0" step="0.5" value="2.5" oninput="updateThreshold(this.value)">
             </div>
-
-            <button id="master-toggle" onclick="toggleEngine()" class="mt-12 w-full py-10 bg-zinc-900 border-2 border-zinc-700 rounded-[50px] font-black text-2xl uppercase">Initiate Engine</button>
+            <button id="master-toggle" onclick="toggleEngine()" class="w-full py-8 bg-zinc-900 border-2 border-zinc-700 rounded-[45px] font-black text-2xl uppercase shadow-lg active:bg-zinc-800">Initiate Engine</button>
         </div>
     </div>
 
     <div id="page-map" class="page !p-0"><div id="map-canvas"></div></div>
 
     <div id="page-logs" class="page">
-        <div class="flex justify-between items-end mb-8">
-            <h2 class="text-4xl font-black text-white italic uppercase leading-none">Archives</h2>
-            <select id="sort-logic" onchange="renderLogs()" class="bg-transparent text-[10px] font-black text-cyan-500 border-b border-cyan-900 pb-1 outline-none uppercase">
-                <option value="date">Sort: Recent</option>
-                <option value="length">Sort: Duration</option>
-            </select>
-        </div>
+        <h2 class="text-4xl font-black text-white italic uppercase mb-8">Archives</h2>
         <div id="log-list" class="pb-32"></div>
     </div>
 
     <div id="page-sys" class="page">
         <h2 class="text-4xl font-black text-white italic mb-10 uppercase text-center">System</h2>
-        <div class="space-y-4">
-            <button onclick="exportData()" class="w-full bg-zinc-900 border border-zinc-800 text-white py-6 rounded-3xl font-black text-xs uppercase">Export JSON Backup</button>
-            <button onclick="wipeAllData()" class="w-full bg-red-900/20 text-red-500 py-6 rounded-3xl font-black text-xs uppercase">Wipe Core Memory</button>
+        <div class="flex flex-col space-y-8">
+            <div class="bg-cyan-500 p-8 rounded-[40px] shadow-2xl">
+                <h3 class="text-black font-black text-xs uppercase tracking-widest mb-4 text-center">Export History</h3>
+                <button onclick="exportData()" class="w-full bg-black text-cyan-500 py-6 rounded-3xl font-black text-sm uppercase shadow-inner active:scale-95 transition-transform">Copy JSON Backup</button>
+                <p class="text-[10px] text-black font-bold mt-4 text-center italic opacity-70">Tap this to copy all logs for your Notepad.</p>
+            </div>
+            
+            <div class="p-4 border-2 border-red-900/20 rounded-[40px]">
+                <button onclick="wipeAllData()" class="w-full text-red-500 py-6 font-black text-xs uppercase">Wipe All Core Memory</button>
+            </div>
         </div>
     </div>
 
@@ -123,18 +127,18 @@
             isArmed = !isArmed;
             const btn = document.getElementById('master-toggle');
             const stab = document.getElementById('stab-status');
-            const statusTag = document.getElementById('status-tag');
+            const tag = document.getElementById('status-tag');
             
             if (isArmed) {
                 btn.innerText = "ACTIVE"; btn.style.color = "#00f2ff"; btn.style.borderColor = "#00f2ff";
                 stab.innerText = "Data Stabilization: Active"; stab.style.color = "#22c55e";
-                statusTag.innerText = "Monitoring Motion Flow";
+                tag.innerText = "Tracking Velocity";
                 currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [], totalTime: 0 };
             } else {
                 stopClock();
                 btn.innerText = "Initiate Engine"; btn.style.color = "#fff"; btn.style.borderColor = "#3f3f46";
-                stab.innerText = "Data Stabilization: Off"; stab.style.color = "#52525b";
-                statusTag.innerText = "Engine Standby";
+                stab.innerText = "Data Stabilization: Offline"; stab.style.color = "#52525b";
+                tag.innerText = "Engine Standby";
                 if (currentTrip && currentTrip.path.length > 5) {
                     currentTrip.totalTime = (Date.now() - currentTrip.start) / 1000;
                     trips.push(currentTrip);
@@ -150,11 +154,10 @@
                 const kmh = (speed || 0) * 3.6;
                 lastPos = [lat, lon];
                 document.getElementById('speed-out').innerText = kmh.toFixed(1);
-                
                 if (isArmed && currentTrip) {
                     currentTrip.path.push({lat, lon, speed: kmh, time: Date.now()});
                     if (kmh < safeZone && !isClocking) startClock();
-                    if (kmh > (safeZone + 1) && isClocking) stopClock();
+                    if (kmh > (safeZone + 1.0) && isClocking) stopClock();
                 }
                 if (userMarker) userMarker.setLatLng(lastPos);
             }, null, { enableHighAccuracy: true });
@@ -162,12 +165,12 @@
 
         function startClock() { isClocking = true; startT = Date.now(); tick(); }
         function tick() {
-            if (!isClocking) return;
+            if (!isClocking || !isArmed) return;
             document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1);
             clockFrame = requestAnimationFrame(tick);
         }
         function stopClock() {
-            isClocking = false; cancelAnimationFrame(clockFrame);
+            isClocking = false; if (clockFrame) cancelAnimationFrame(clockFrame);
             let dur = document.getElementById('timer-display').innerText;
             if (currentTrip && parseFloat(dur) > 1.0) {
                 currentTrip.stops.push({time: Date.now(), duration: dur, pos: lastPos});
@@ -175,50 +178,21 @@
             document.getElementById('timer-display').innerText = "0.0";
         }
 
-        function calculateRatio(trip) {
-            let stopped = trip.stops.reduce((acc, s) => acc + parseFloat(s.duration), 0);
-            let driving = Math.max(0, trip.totalTime - stopped);
-            let ratio = driving > 0 ? (stopped / driving).toFixed(2) : (stopped > 0 ? "INF" : "0.00");
-            let stopPercent = ((stopped / trip.totalTime) * 100).toFixed(0);
-            
-            document.getElementById('stats-content').innerHTML = `
-                <div class="text-white text-4xl font-black italic tracking-tighter">${stopPercent}% STATIC</div>
-                <div class="text-[10px] text-cyan-500 font-bold uppercase tracking-[0.2em] mb-4">Ratio: ${ratio} S/D</div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="bg-black/50 p-4 rounded-2xl border border-zinc-800">
-                        <div class="text-[8px] text-zinc-500 uppercase font-black">Total Stopped</div>
-                        <div class="text-white font-bold text-lg">${Math.round(stopped)}s</div>
-                    </div>
-                    <div class="bg-black/50 p-4 rounded-2xl border border-zinc-800">
-                        <div class="text-[8px] text-zinc-500 uppercase font-black">Total Driving</div>
-                        <div class="text-white font-bold text-lg">${Math.round(driving)}s</div>
-                    </div>
-                </div>
-            `;
-            document.getElementById('stats-modal').style.display = 'flex';
-        }
-
         function renderLogs() {
             const list = document.getElementById('log-list');
-            const logic = document.getElementById('sort-logic').value;
-            let sorted = [...trips];
-            if (logic === 'date') sorted.sort((a,b) => b.start - a.start);
-            if (logic === 'length') sorted.sort((a,b) => b.totalTime - a.totalTime);
-
-            list.innerHTML = sorted.length === 0 ? "<div class='mt-20 text-center opacity-20 font-black italic uppercase'>No Archive Data</div>" : "";
-            sorted.forEach(t => {
+            list.innerHTML = trips.length === 0 ? "<div class='mt-20 text-center opacity-20 uppercase'>No Trips Recorded</div>" : "";
+            trips.slice().reverse().forEach(t => {
                 const card = document.createElement('div');
                 card.className = "log-card";
                 card.innerHTML = `
                     <div class="flex justify-between items-start mb-4">
-                        <div class="text-[9px] text-zinc-500 font-black uppercase tracking-widest">${new Date(t.start).toLocaleDateString()} @ ${new Date(t.start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                        <div class="text-[9px] text-zinc-500 uppercase font-black">${new Date(t.start).toLocaleDateString()}</div>
                         <div class="text-[10px] text-cyan-500 font-black italic">${(t.totalTime/60).toFixed(1)}m</div>
                     </div>
                     <div class="grid grid-cols-2 gap-2">
-                        <button onclick='viewTrip(${t.id})' class='bg-zinc-800 text-white py-3 rounded-xl font-black text-[9px] uppercase italic tracking-widest'>Map</button>
-                        <button onclick='calculateRatio(trips.find(x=>x.id===${t.id}))' class='bg-cyan-500 text-black py-3 rounded-xl font-black text-[9px] uppercase italic tracking-widest'>Stats</button>
-                    </div>
-                `;
+                        <button onclick='viewTrip(${t.id})' class='bg-zinc-800 text-white py-3 rounded-xl font-black text-[9px] uppercase'>Path</button>
+                        <button onclick='alert("Stopped: "+trips.find(x=>x.id===${t.id}).stops.length+" times")' class='bg-cyan-500 text-black py-3 rounded-xl font-black text-[9px] uppercase'>Stops</button>
+                    </div>`;
                 list.appendChild(card);
             });
         }
@@ -228,15 +202,21 @@
             tab('map');
             setTimeout(() => {
                 map.eachLayer(l => { if(l instanceof L.Polyline || (l instanceof L.CircleMarker && l !== userMarker)) map.removeLayer(l); });
-                const pathCoords = trip.path.map(p => [p.lat, p.lon]);
-                const poly = L.polyline(pathCoords, {color: 'cyan', weight: 4, opacity: 0.8}).addTo(map);
-                trip.stops.forEach(s => L.circleMarker(s.pos, {radius: 8, color: 'red', weight: 2, fillOpacity: 0.1}).addTo(map));
-                map.fitBounds(poly.getBounds(), {padding: [50, 50]});
+                const poly = L.polyline(trip.path.map(p => [p.lat, p.lon]), {color: 'cyan', weight: 4}).addTo(map);
+                map.fitBounds(poly.getBounds());
             }, 400);
         }
 
-        function exportData() { navigator.clipboard.writeText(JSON.stringify(trips)).then(() => alert("Backup Copied to Clipboard.")); }
-        function wipeAllData() { if(confirm("Permanently wipe all archives?")) { trips = []; localStorage.clear(); renderLogs(); } }
+        function exportData() {
+            const dataStr = JSON.stringify(trips, null, 2);
+            navigator.clipboard.writeText(dataStr).then(() => {
+                alert("History Copied to Clipboard!");
+            }).catch(() => {
+                alert("Please manually copy from console or check browser permissions.");
+            });
+        }
+
+        function wipeAllData() { if(confirm("Wipe Core Memory?")) { trips = []; localStorage.clear(); renderLogs(); } }
         initGPS();
     </script>
 </body>
