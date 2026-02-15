@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V35.0</title>
+    <title>Gravity Intel V36.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -20,9 +20,6 @@
         #timer-display { font-size: 22vw; font-weight: 800; color: #fff; line-height: 1; margin: 5px 0; }
         .btn-ui { background: #111; border: 1px solid #444; padding: 14px; border-radius: 12px; font-size: 11px; font-weight: 800; text-transform: uppercase; width: 100%; transition: 0.2s; }
         .btn-active { background: #062e3d; border-color: var(--accent); color: var(--accent); }
-        input[type=range] { width: 100%; accent-color: var(--accent); height: 30px; }
-        #page-map { padding: 0 !important; margin: 0 !important; height: calc(100vh - 80px); }
-        #map-canvas { height: 100%; width: 100%; min-height: 100%; background: #050505; }
     </style>
 </head>
 <body>
@@ -30,12 +27,11 @@
 <div class="app-container">
     <div id="page-dash" class="page active-page">
         <div class="mb-4 text-center">
-            <div id="debug-info" class="text-[7px] text-zinc-500 font-mono mb-2 flex justify-center gap-4 opacity-50">
+            <div id="debug-info" class="text-[7px] text-zinc-500 font-mono mb-2 flex justify-center gap-4">
                 <span>PINGS: <span id="ping-count">0</span></span>
-                <span>LIVE DIST: <span id="live-dist">0.00</span>km</span>
+                <span>DIST: <span id="live-dist">0.00</span>km</span>
             </div>
             <div id="wake-status" class="text-[8px] font-black text-zinc-700 mb-1 tracking-widest uppercase">Wake Lock: Inactive</div>
-            <div id="stab-status" class="text-[9px] font-black uppercase text-zinc-600 mb-1 tracking-widest italic">V35 Forensic</div>
             <div class="flex justify-center items-baseline gap-2">
                 <span id="speed-out" class="text-6xl font-black italic tracking-tighter text-white">0.0</span>
                 <span class="text-xs font-bold text-cyan-500">KM/H</span>
@@ -46,24 +42,23 @@
             <div id="timer-display">0.0</div>
             <div id="status-tag" class="text-[9px] text-zinc-500 uppercase tracking-widest">System Ready</div>
         </div>
-        <div class="space-y-3">
-            <div class="grid grid-cols-2 gap-2">
-                <button id="master-toggle" onclick="toggleEngine()" class="btn-ui">Initiate Engine</button>
-                <button id="sz-toggle" onclick="toggleSafeZoneShield()" class="btn-ui border-yellow-700/50 text-yellow-600">Shield: ON</button>
-            </div>
-            <button onclick="markSafeZone()" class="text-[9px] font-bold text-zinc-500 uppercase tracking-widest w-full border border-zinc-900 py-2 rounded-lg">Mark Current Location</button>
+        <div class="grid grid-cols-2 gap-2">
+            <button id="master-toggle" onclick="toggleEngine()" class="btn-ui">Initiate Engine</button>
+            <button id="sz-toggle" onclick="toggleSafeZoneShield()" class="btn-ui border-yellow-700/50 text-yellow-600">Shield: ON</button>
         </div>
     </div>
 
-    <div id="page-map" class="page"><div id="map-canvas"></div></div>
-    <div id="page-logs" class="page !justify-start !pt-10"><div id="log-list" class="space-y-4"></div></div>
+    <div id="page-map" class="page"><div id="map-canvas" class="h-full w-full bg-zinc-950"></div></div>
+    
+    <div id="page-logs" class="page !justify-start !pt-10">
+        <h2 class="text-xl font-black italic mb-4">TRIP ARCHIVES</h2>
+        <div id="log-list" class="space-y-4"></div>
+    </div>
+
     <div id="page-sys" class="page !justify-start !pt-10">
-        <div class="grid grid-cols-2 gap-2">
-            <button onclick="exportData()" class="btn-ui bg-cyan-600 text-black border-none">Export</button>
-            <button onclick="importData()" class="btn-ui bg-zinc-800">Import</button>
-        </div>
-        <button onclick="clearSafeZones()" class="btn-ui border-red-900/30 text-red-700 mt-4">Wipe Safe Zones</button>
-        <button onclick="wipeAll()" class="text-[10px] text-zinc-800 underline w-full mt-10">Factory Reset</button>
+        <button onclick="exportToFile()" class="btn-ui bg-cyan-600 text-black mb-4">Export to .txt File</button>
+        <button onclick="importData()" class="btn-ui bg-zinc-800 mb-8">Import Data</button>
+        <button onclick="wipeAll()" class="text-red-900 text-[10px] font-bold">FACTORY RESET</button>
     </div>
 
     <nav class="nav-bar">
@@ -74,45 +69,42 @@
     </nav>
 </div>
 
-<video id="nosleep" loop playsinline muted style="position:fixed; top:0; left:0; width:1px; height:1px; opacity:0; pointer-events:none;"><source src="data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAAZptb292AAAAbG12aGQAAAAA3u9fS97vX0sAAAPoAAAAKAABAAABAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAGWlvZHMBAf//B///BAAAAAAAZHRyYWsAAABcdGtoZAAAAADe719L3u9fSwAAAAEAAAAAAAACAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAABcbWRpYQAAACBtZGhkAAAAAN7vX0ve719LAAALuAAAVGMAAAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABOG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAxyZW0AAAAAAAAAAQAAALNzdGJsAAAAb3N0c2QAAAAAAAAAAQAAAF9hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAIAAgABIAAAASAAAAAAAAAAAOSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABj//wAAADVhdmNDAWQAHv/hABhnZAAerjB9AQA9AQAW4AAKBAAAAwAKAAAALBIsmXmXvAAAAAAhYnRyYWsAAABcdGtoZAAAAADe719L3u9fSwAAAAEAAAAAAAACAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAABcbWRpYQAAACBtZGhkAAAAAN7vX0ve719LAAALuAAAVGMAAAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABOG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAxyZW0AAAAAAAAAAQAAALNzdGJsAAAAb3N0c2QAAAAAAAAAAQAAAF9hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAIAAgABIAAAASAAAAAAAAAAAOSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABj//wAAADVhdmNDAWQAHv/hABhnZAAerjB9AQA9AQAW4AAKBAAAAwAKAAAALBIsmXmXvAAAAAAhYnRyYWs=" type="video/mp4"></video>
+<video id="nosleep" loop playsinline muted style="display:none;"><source src="data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAAZptb292AAAAbG12aGQAAAAA3u9fS97vX0sAAAPoAAAAKAABAAABAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAGWlvZHMBAf//B///BAAAAAAAZHRyYWsAAABcdGtoZAAAAADe719L3u9fSwAAAAEAAAAAAAACAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAABcbWRpYQAAACBtZGhkAAAAAN7vX0ve719LAAALuAAAVGMAAAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABOG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAxyZW0AAAAAAAAAAQAAALNzdGJsAAAAb3N0c2QAAAAAAAAAAQAAAF9hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAIAAgABIAAAASAAAAAAAAAAAOSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABj//wAAADVhdmNDAWQAHv/hABhnZAAerjB9AQA9AQAW4AAKBAAAAwAKAAAALBIsmXmXvAAAAAAhYnRyYWs=" type="video/mp4"></video>
 
 <script>
-    const DB_KEY = 'GRAVITY_V35_DEBUG';
+    const DB_KEY = 'GRAVITY_V36_HARD';
     let trips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
-    let safeZones = JSON.parse(localStorage.getItem('GRAVITY_SZ_35') || '[]');
+    let safeZones = JSON.parse(localStorage.getItem('GRAVITY_SZ_36') || '[]');
     let currentTrip = null, isArmed = false, isClocking = false, startT = 0, clockFrame = null, speedThreshold = 2.5, map, userMarker, lastPos = null;
     let shieldEnabled = true, wakeLock = null, pingCount = 0;
+    
+    // ADJUSTED RESPONSE (ISSUE 7 FIX)
     let smoothedKmh = 0;
-    const ALPHA_UP = 0.2, ALPHA_DOWN = 0.8;
+    const ALPHA_UP = 0.5;   // Increased from 0.2 for better responsiveness
+    const ALPHA_DOWN = 0.9; // Snappier deceleration
 
-    async function toggleEngine() {
-        isArmed = !isArmed;
-        const btn = document.getElementById('master-toggle');
-        const v = document.getElementById('nosleep');
-        btn.classList.toggle('btn-active', isArmed);
-        if (isArmed) {
-            btn.innerText = "ENGINE ACTIVE";
-            currentTrip = { id: Date.now(), start: Date.now(), end: null, path: [], stops: [], dist: 0, totalIdle: 0 };
-            pingCount = 0;
-            try { await v.play(); if ('wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); document.getElementById('wake-status').innerText = "Wake Lock: ACTIVE"; } } catch(e) {}
-        } else {
-            stopClock();
-            v.pause();
-            if(wakeLock) { wakeLock.release(); wakeLock = null; }
-            document.getElementById('wake-status').innerText = "Wake Lock: Inactive";
-            btn.innerText = "Initiate Engine";
-            if (currentTrip && currentTrip.path.length > 1) { currentTrip.end = Date.now(); trips.push(currentTrip); localStorage.setItem(DB_KEY, JSON.stringify(trips)); }
-            currentTrip = null;
-        }
+    function tab(name) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
+        document.getElementById('page-' + name).classList.add('active-page');
+        document.getElementById('tab-' + name).classList.add('nav-btn-active');
+        if (name === 'map') { if(!map) initMap(); else setTimeout(() => map.invalidateSize(), 200); }
+        if (name === 'logs') renderLogs();
+    }
+
+    function initMap() {
+        if(map) return;
+        map = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 8, fillOpacity: 1}).addTo(map);
     }
 
     function initGPS() {
         navigator.geolocation.watchPosition(p => {
-            const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
+            const { latitude: lat, longitude: lon, speed } = p.coords;
             const newPos = {lat, lon};
             const rawKmh = (speed || 0) * 3.6;
             
-            // ASYMMETRIC FILTER
             if (rawKmh === 0) smoothedKmh = 0;
             else if (rawKmh < smoothedKmh) smoothedKmh = (ALPHA_DOWN * rawKmh) + ((1 - ALPHA_DOWN) * smoothedKmh);
             else smoothedKmh = (ALPHA_UP * rawKmh) + ((1 - ALPHA_UP) * smoothedKmh);
@@ -122,18 +114,11 @@
             if (isArmed && currentTrip) {
                 pingCount++;
                 document.getElementById('ping-count').innerText = pingCount;
-                if (lastPos) {
-                    const segmentDist = getDist(lastPos, newPos);
-                    // FILTER: Ignore tiny movements (< 2 meters) to prevent distance "bloat" from jitter
-                    if (segmentDist > 0.002) { 
-                        currentTrip.dist += segmentDist;
-                        document.getElementById('live-dist').innerText = currentTrip.dist.toFixed(2);
-                    }
-                }
+                if (lastPos) currentTrip.dist += getDist(lastPos, newPos);
+                document.getElementById('live-dist').innerText = currentTrip.dist.toFixed(2);
                 currentTrip.path.push({...newPos, time: Date.now()});
                 
-                const inPhysicalZone = safeZones.some(sz => getDist(newPos, sz) < 0.04);
-                const shieldIsTriggered = inPhysicalZone && shieldEnabled;
+                const shieldIsTriggered = shieldEnabled && safeZones.some(sz => getDist(newPos, sz) < 0.05);
                 document.getElementById('safe-zone-alert').classList.toggle('hidden', !shieldIsTriggered);
 
                 if (smoothedKmh < speedThreshold && !isClocking && !shieldIsTriggered) startClock();
@@ -141,8 +126,73 @@
             }
             lastPos = newPos;
             if (userMarker) userMarker.setLatLng([lat, lon]);
-            if (map && document.getElementById('page-map').classList.contains('active-page')) map.panTo([lat, lon]);
         }, null, { enableHighAccuracy: true });
+    }
+
+    function startClock() { isClocking = true; startT = Date.now(); tick(); }
+    function tick() { if (!isClocking) return; document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1); clockFrame = requestAnimationFrame(tick); }
+    function stopClock() {
+        isClocking = false; cancelAnimationFrame(clockFrame);
+        let dur = parseFloat(document.getElementById('timer-display').innerText);
+        if (currentTrip && dur > 2.0) {
+            currentTrip.stops.push({ ...lastPos, dur, time: new Date().toLocaleTimeString() });
+            currentTrip.totalIdle += dur;
+        }
+        document.getElementById('timer-display').innerText = "0.0";
+    }
+
+    function renderLogs() {
+        const list = document.getElementById('log-list');
+        list.innerHTML = trips.slice().reverse().map(t => {
+            return `
+            <div class="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                <div class="flex justify-between font-black text-cyan-400 mb-2">
+                    <span>${new Date(t.start).toLocaleDateString()}</span>
+                    <span>${t.dist.toFixed(2)} KM</span>
+                </div>
+                <div class="text-[10px] text-zinc-500 mb-3">IDLE: ${Math.floor(t.totalIdle/60)}m ${Math.floor(t.totalIdle%60)}s | STOPS: ${t.stops.length}</div>
+                <button onclick="viewTrip(${t.id})" class="btn-ui text-[9px] py-2 border-zinc-600">VIEW ON MAP</button>
+            </div>`;
+        }).join('');
+    }
+
+    function viewTrip(id) {
+        const trip = trips.find(t => t.id === id);
+        tab('map');
+        setTimeout(() => {
+            map.eachLayer(l => { if(l instanceof L.Polyline || (l instanceof L.CircleMarker && l !== userMarker)) map.removeLayer(l); });
+            const pts = trip.path.map(p => [p.lat, p.lon]);
+            L.polyline(pts, {color: 'cyan', weight: 3}).addTo(map);
+            trip.stops.forEach(s => L.circleMarker([s.lat, s.lon], {color:'yellow', radius:5}).addTo(map));
+            map.fitBounds(L.polyline(pts).getBounds());
+        }, 300);
+    }
+
+    async function toggleEngine() {
+        isArmed = !isArmed;
+        const btn = document.getElementById('master-toggle');
+        btn.classList.toggle('btn-active', isArmed);
+        if (isArmed) {
+            btn.innerText = "ENGINE ACTIVE";
+            currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [], dist: 0, totalIdle: 0 };
+            document.getElementById('nosleep').play();
+            if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+        } else {
+            stopClock();
+            document.getElementById('nosleep').pause();
+            if(wakeLock) wakeLock.release();
+            if (currentTrip && currentTrip.path.length > 2) { trips.push(currentTrip); localStorage.setItem(DB_KEY, JSON.stringify(trips)); }
+            currentTrip = null;
+            btn.innerText = "Initiate Engine";
+        }
+    }
+
+    function exportToFile() {
+        const blob = new Blob([JSON.stringify(trips, null, 2)], {type: 'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `gravity_intel_backup_${Date.now()}.txt`;
+        a.click();
     }
 
     function getDist(p1, p2) {
@@ -153,47 +203,9 @@
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
-    function tab(name) {
-        document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
-        document.getElementById('page-' + name).classList.add('active-page');
-        document.getElementById('tab-' + name).classList.add('nav-btn-active');
-        if (name === 'map') { if(!map) setTimeout(() => initMap(), 100); else setTimeout(() => { map.invalidateSize(); if(lastPos) map.setView([lastPos.lat, lastPos.lon], 17); }, 100); }
-        if (name === 'logs') renderLogs();
-    }
-
-    function startClock() { isClocking = true; startT = Date.now(); tick(); }
-    function tick() { if (!isClocking) return; document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1); clockFrame = requestAnimationFrame(tick); }
-    function stopClock() {
-        isClocking = false; cancelAnimationFrame(clockFrame);
-        let dur = parseFloat(document.getElementById('timer-display').innerText);
-        if (currentTrip && dur > 1.5) {
-            currentTrip.stops.push({ ...lastPos, dur: dur, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) });
-            currentTrip.totalIdle += dur;
-        }
-        document.getElementById('timer-display').innerText = "0.0";
-    }
-
-    function renderLogs() {
-        const list = document.getElementById('log-list');
-        list.innerHTML = trips.slice().reverse().map(t => {
-            const idleMins = Math.floor(t.totalIdle / 60);
-            return `
-            <div class="bg-zinc-900/50 border border-zinc-800 p-4 rounded-2xl mb-4">
-                <div class="flex justify-between text-cyan-400 font-black text-xs"><span>${new Date(t.start).toLocaleDateString()}</span><span>${t.dist.toFixed(2)} KM</span></div>
-                <div class="text-[9px] text-zinc-500 mt-1 uppercase">Idle: ${idleMins}m | Stops: ${t.stops.length} | Pings: ${t.path.length}</div>
-                <button onclick='viewTrip(${t.id})' class="btn-ui py-2 border-zinc-700 text-[9px] mt-3">View Path</button>
-            </div>`;
-        }).join('');
-    }
-
-    function initMap() { if(map) return; map = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 9, fillOpacity: 1, weight: 3}).addTo(map); renderSZ(); }
-    function renderSZ() { if(!map) return; map.eachLayer(l => { if(l.options && l.options.isSZ) map.removeLayer(l); }); safeZones.forEach(sz => { L.circle([sz.lat, sz.lon], {color: 'yellow', radius: 40, fillOpacity: 0.1, isSZ: true}).addTo(map); }); }
-    function markSafeZone() { if(lastPos) { safeZones.push(lastPos); localStorage.setItem('GRAVITY_SZ_35', JSON.stringify(safeZones)); renderSZ(); alert("Marked"); } }
-    function exportData() { navigator.clipboard.writeText(JSON.stringify(trips)).then(() => alert("Copied")); }
-    function importData() { const raw = prompt("Paste JSON:"); if(raw) { try { trips = JSON.parse(raw); localStorage.setItem(DB_KEY, JSON.stringify(trips)); renderLogs(); } catch(e) {} } }
-    function clearSafeZones() { if(confirm("Wipe?")) { safeZones = []; localStorage.setItem('GRAVITY_SZ_35', '[]'); renderSZ(); } }
-    function wipeAll() { if(confirm("Wipe?")) { localStorage.clear(); location.reload(); } }
+    function importData() { const raw = prompt("Paste JSON:"); if(raw) { try { trips = JSON.parse(raw); localStorage.setItem(DB_KEY, JSON.stringify(trips)); renderLogs(); } catch(e) { alert("Fail"); } } }
+    function wipeAll() { if(confirm("Reset?")) { localStorage.clear(); location.reload(); } }
+    function toggleSafeZoneShield() { shieldEnabled = !shieldEnabled; document.getElementById('sz-toggle').innerText = shieldEnabled ? "Shield: ON" : "Shield: OFF"; }
     initGPS();
 </script>
 </body>
