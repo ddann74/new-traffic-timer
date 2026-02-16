@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V40.4</title>
+    <title>Gravity Intel V40.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -20,11 +20,15 @@
         .btn-ui { background: #111; border: 1px solid #444; padding: 12px; border-radius: 10px; font-size: 10px; font-weight: 800; text-transform: uppercase; transition: 0.2s; text-align: center; }
         .btn-active { background: #062e3d; border-color: var(--accent); color: var(--accent); }
         .log-card { background: #0a0a0a; border: 1px solid #222; border-radius: 15px; padding: 15px; margin-bottom: 15px; }
-        #timer-display { font-size: 20vw; font-weight: 800; color: #fff; line-height: 1; }
+        #timer-display { font-size: 20vw; font-weight: 800; color: #fff; line-height: 1; transition: 0.3s; }
         .stab-bar { height: 4px; border-radius: 2px; transition: width 0.3s, background 0.3s; }
+        
+        /* HUD Mirror Effect */
+        .hud-mirrored #speed-box, .hud-mirrored #timer-display { transform: scaleY(-1); }
+        details summary::-webkit-details-marker { display:none; }
     </style>
 </head>
-<body>
+<body id="main-body">
 <div class="app-container">
     <div id="page-dash" class="page active-page !justify-center">
         <div class="mb-4 px-10">
@@ -33,7 +37,7 @@
                 <div id="stab-bar" class="stab-bar w-0 bg-red-600"></div>
             </div>
         </div>
-        <div class="text-center mb-6">
+        <div id="speed-box" class="text-center mb-6 transition-transform">
             <div class="flex justify-center items-baseline gap-2">
                 <span id="speed-out" class="text-7xl font-black italic tracking-tighter text-white">0.0</span>
                 <span class="text-xs font-bold text-cyan-500">KM/H</span>
@@ -44,11 +48,13 @@
             <div id="timer-display">0.0</div>
             <div class="text-[9px] text-zinc-500 uppercase tracking-widest mt-2">Idle Timer</div>
         </div>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-2 gap-3 mb-3">
             <button id="master-toggle" onclick="toggleEngine()" class="btn-ui h-14">Initiate Engine</button>
-            <button id="sz-toggle" onclick="toggleShield()" class="btn-ui h-14 text-yellow-600">Shield: ON</button>
+            <button id="hud-toggle" onclick="toggleHUD()" class="btn-ui h-14 text-zinc-500">HUD: OFF</button>
         </div>
+        <button id="sz-toggle" onclick="toggleShield()" class="btn-ui w-full h-10 text-yellow-600">Shield Protection: ON</button>
     </div>
+
     <div id="page-map" class="page !p-0"><div id="map-canvas" class="h-full w-full"></div></div>
     <div id="page-logs" class="page"><div id="log-list"></div></div>
     <div id="page-sys" class="page">
@@ -57,6 +63,7 @@
         <label class="btn-ui w-full bg-zinc-800 block cursor-pointer mb-4">Import .txt<input type="file" id="file-input" class="hidden" accept=".txt" onchange="importFromFile(event)"></label>
         <button onclick="wipeAll()" class="btn-ui w-full border-red-900 text-red-700 mt-20">Wipe Data</button>
     </div>
+
     <nav class="nav-bar">
         <div onclick="tab('dash')" id="tab-dash" class="nav-btn nav-btn-active">DASH</div>
         <div onclick="tab('map')" id="tab-map" class="nav-btn">MAP</div>
@@ -64,14 +71,23 @@
         <div onclick="tab('sys')" id="tab-sys" class="nav-btn">SYS</div>
     </nav>
 </div>
+
 <video id="nosleep" loop playsinline muted style="display:none;"><source src="data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAAZptb292AAAAbG12aGQAAAAA3u9fS97vX0sAAAPoAAAAKAABAAABAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAGWlvZHMBAf//B///BAAAAAAAZHRyYWsAAABcdGtoZAAAAADe719L3u9fSwAAAAEAAAAAAAACAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAABcbWRpYQAAACBtZGhkAAAAAN7vX0ve719LAAALuAAAVGMAAAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABOG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAxyZW0AAAAAAAAAAQAAALNzdGJsAAAAb3N0c2QAAAAAAAAAAQAAAF9hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAIAAgABIAAAASAAAAAAAAAAAOSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABj//wAAADVhdmNDAWQAHv/hABhnZAAerjB9AQA9AQAW4AAKBAAAAwAKAAAALBIsmXmXvAAAAAAhYnRyYWs=" type="video/mp4"></video>
+
 <script>
     const DB_KEY = 'GRAVITY_V40_MAIN';
-    let trips = [];
+    let trips = [], isHUD = false;
     try { trips = JSON.parse(localStorage.getItem(DB_KEY) || '[]'); } catch(e) { trips = []; }
     
     let currentTrip = null, isArmed = false, isClocking = false, startT = 0, clockFrame = null, map, userMarker, lastPos = null;
     let wakeLock = null, smoothedKmh = 0, shieldEnabled = true;
+
+    function toggleHUD() {
+        isHUD = !isHUD;
+        document.getElementById('main-body').classList.toggle('hud-mirrored', isHUD);
+        document.getElementById('hud-toggle').innerText = isHUD ? "HUD: ON" : "HUD: OFF";
+        document.getElementById('hud-toggle').classList.toggle('btn-active', isHUD);
+    }
 
     function tab(name) {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
@@ -150,21 +166,42 @@
 
     function renderLogs() {
         const list = document.getElementById('log-list');
-        // Pull fresh from storage just in case
         try { trips = JSON.parse(localStorage.getItem(DB_KEY) || '[]'); } catch(e) {}
-        
         if (!trips || trips.length === 0) {
             list.innerHTML = '<div class="text-center text-zinc-800 text-[10px] mt-20 italic">NO LOGS RECORDED</div>';
             return;
         }
-
         let html = '';
         trips.slice().reverse().forEach(t => {
             try {
                 const totalSecs = Math.max(1, (t.end - t.start) / 1000);
-                const ratio = ((t.totalIdle / totalSecs) * 100).toFixed(1);
+                // INVERTED LOGIC: (Moving Time / Total Time) * 100
+                const movingSecs = totalSecs - t.totalIdle;
+                const flowRatio = ((movingSecs / totalSecs) * 100).toFixed(1);
                 const dateStr = new Date(t.start).toLocaleDateString();
-                html += `<div class="log-card"><div class="flex justify-between font-black text-cyan-400 mb-2"><span>${dateStr}</span><span>${(t.dist || 0).toFixed(2)} KM</span></div><div class="text-[9px] text-zinc-500 uppercase font-bold tracking-tighter">Ratio: ${ratio}% | ${t.stops.length} Stops</div><details class="text-[9px] mb-3 text-zinc-400"><summary class="cursor-pointer text-zinc-600 font-bold uppercase italic mt-2">Stop Details</summary><div class="mt-2">${t.stops.map(s => `<div>• ${s.ts}: ${s.dur.toFixed(0)}s</div>`).join('')}</div></details><button onclick="viewTrip(${t.id})" class="btn-ui w-full !bg-zinc-900 !border-zinc-800">Map Heatmap</button></div>`;
+                html += `
+                <div class="log-card">
+                    <div class="flex justify-between font-black text-cyan-400 mb-2">
+                        <span>${dateStr}</span>
+                        <span>${(t.dist || 0).toFixed(2)} KM</span>
+                    </div>
+                    <div class="text-[9px] text-zinc-500 uppercase font-bold tracking-tighter mb-4">
+                        Flow Score: ${flowRatio}% | ${t.stops.length} Stops
+                    </div>
+                    <div class="flex gap-2">
+                        <details class="flex-1">
+                            <summary class="btn-ui w-full !bg-zinc-800 !border-zinc-700 !text-white !py-4 block cursor-pointer">
+                                STOP DETAILS
+                            </summary>
+                            <div class="mt-2 text-[10px] text-zinc-400 bg-black/50 p-3 rounded-lg border border-zinc-900">
+                                ${t.stops.map(s => `<div class="mb-1">• ${s.ts} — <span class="text-white">${s.dur.toFixed(0)}s</span></div>`).join('') || 'No recorded stops.'}
+                            </div>
+                        </details>
+                        <button onclick="viewTrip(${t.id})" class="btn-ui w-24 !bg-zinc-900 !border-zinc-800 !text-zinc-500 !text-[8px]">
+                            MAP<br>HEAT
+                        </button>
+                    </div>
+                </div>`;
             } catch(e) { console.error("Skip bad trip data"); }
         });
         list.innerHTML = html;
@@ -176,8 +213,9 @@
         setTimeout(() => {
             map.eachLayer(l => { if(l instanceof L.Polyline || (l instanceof L.CircleMarker && l !== userMarker)) map.removeLayer(l); });
             for (let i = 0; i < t.path.length - 1; i++) {
-                const color = t.path[i].speed < 5 ? '#ef4444' : (t.path[i].speed < 20 ? '#eab308' : '#003366');
-                L.polyline([[t.path[i].lat, t.path[i].lon], [t.path[i+1].lat, t.path[i+1].lon]], {color, weight: 5}).addTo(map);
+                const speed = t.path[i].speed;
+                const color = speed > 20 ? '#22c55e' : (speed > 5 ? '#f97316' : '#ef4444');
+                L.polyline([[t.path[i].lat, t.path[i].lon], [t.path[i+1].lat, t.path[i+1].lon]], {color, weight: 6}).addTo(map);
             }
             if (t.path.length > 0) map.fitBounds(L.polyline(t.path.map(p=>[p.lat,p.lon])).getBounds());
         }, 300);
@@ -187,7 +225,7 @@
     function importFromFile(e) { const reader = new FileReader(); reader.onload = (event) => { try { const data = JSON.parse(event.target.result); trips = data; localStorage.setItem(DB_KEY, JSON.stringify(trips)); alert(`Imported ${data.length} logs`); renderLogs(); } catch(err) { alert("Format Error"); } }; reader.readAsText(e.target.files[0]); }
     function initMap() { map = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 6, fillOpacity: 1}).addTo(map); }
     function getDist(p1, p2) { const R = 6371; const dLat = (p2.lat - p1.lat)*Math.PI/180; const dLon = (p2.lon - p1.lon)*Math.PI/180; const a = Math.sin(dLat/2)**2 + Math.cos(p1.lat*Math.PI/180)*Math.cos(p2.lat*Math.PI/180)*Math.sin(dLon/2)**2; const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); return R * c; }
-    function toggleShield() { shieldEnabled = !shieldEnabled; document.getElementById('sz-toggle').innerText = shieldEnabled ? "Shield: ON" : "Shield: OFF"; }
+    function toggleShield() { shieldEnabled = !shieldEnabled; document.getElementById('sz-toggle').innerText = shieldEnabled ? "Shield Protection: ON" : "Shield Protection: OFF"; }
     function wipeAll() { if(confirm("Wipe logs?")) { localStorage.clear(); location.reload(); } }
     initGPS();
 </script>
