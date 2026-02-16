@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V40.8</title>
+    <title>Gravity Intel V40.9</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -176,11 +176,9 @@
                 const movingSecs = totalSecs - t.totalIdle;
                 const flowScore = (movingSecs / totalSecs) * 100;
                 const flowRating = (flowScore / 10).toFixed(1);
-                
-                // Color Logic for Rating
                 const rateColor = flowRating >= 8.0 ? 'text-green-500' : (flowRating >= 4.0 ? 'text-orange-500' : 'text-red-600');
-                
                 const dateStr = new Date(t.start).toLocaleDateString();
+                
                 html += `
                 <div class="log-card">
                     <div class="flex justify-between items-center mb-3">
@@ -191,16 +189,21 @@
                     <div class="text-[9px] text-zinc-600 uppercase font-bold tracking-tighter mb-4">
                         EFFICIENCY: ${flowScore.toFixed(1)}% | ${t.stops.length} STOPS
                     </div>
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 items-stretch">
                         <details class="flex-1">
-                            <summary class="btn-ui w-full !bg-zinc-800 !border-zinc-700 !text-white !py-4 block cursor-pointer">
+                            <summary class="btn-ui h-full !bg-zinc-800 !border-zinc-700 !text-white flex items-center justify-center cursor-pointer">
                                 STOP DETAILS
                             </summary>
                             <div class="mt-2 text-[10px] text-zinc-400 bg-black/50 p-3 rounded-lg border border-zinc-900">
                                 ${t.stops.map(s => `<div class="mb-1">• ${s.ts} — <span class="text-white">${s.dur.toFixed(0)}s</span></div>`).join('') || 'Clean run. No stops.'}
                             </div>
                         </details>
-                        <button onclick="viewTrip(${t.id})" class="btn-ui w-24 !bg-zinc-900 !border-zinc-800 !text-zinc-500 !text-[8px]">
+                        
+                        <button onclick="deleteTrip(${t.id})" class="btn-ui w-12 flex items-center justify-center !border-red-900/50">
+                            <svg class="w-4 h-4 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+
+                        <button onclick="viewTrip(${t.id})" class="btn-ui w-20 !bg-zinc-900 !border-zinc-800 !text-zinc-500 !text-[8px] flex items-center justify-center">
                             MAP<br>HEAT
                         </button>
                     </div>
@@ -208,6 +211,14 @@
             } catch(e) { console.error("Skip bad trip data"); }
         });
         list.innerHTML = html;
+    }
+
+    function deleteTrip(id) {
+        if(confirm("Permanently delete this log?")) {
+            trips = trips.filter(t => t.id !== id);
+            localStorage.setItem(DB_KEY, JSON.stringify(trips));
+            renderLogs();
+        }
     }
 
     function viewTrip(id) {
@@ -229,7 +240,7 @@
     function initMap() { map = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 6, fillOpacity: 1}).addTo(map); }
     function getDist(p1, p2) { const R = 6371; const dLat = (p2.lat - p1.lat)*Math.PI/180; const dLon = (p2.lon - p1.lon)*Math.PI/180; const a = Math.sin(dLat/2)**2 + Math.cos(p1.lat*Math.PI/180)*Math.cos(p2.lat*Math.PI/180)*Math.sin(dLon/2)**2; const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); return R * c; }
     function toggleShield() { shieldEnabled = !shieldEnabled; document.getElementById('sz-toggle').innerText = shieldEnabled ? "Shield Protection: ON" : "Shield Protection: OFF"; }
-    function wipeAll() { if(confirm("Wipe logs?")) { localStorage.clear(); location.reload(); } }
+    function wipeAll() { if(confirm("Wipe all logs?")) { localStorage.clear(); location.reload(); } }
     initGPS();
 </script>
 </body>
