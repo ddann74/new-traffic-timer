@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V40.0</title>
+    <title>Gravity Intel V40.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -34,7 +34,6 @@
                 <div id="stab-bar" class="stab-bar w-0 bg-red-600"></div>
             </div>
         </div>
-
         <div class="text-center mb-6">
             <div class="flex justify-center items-baseline gap-2">
                 <span id="speed-out" class="text-7xl font-black italic tracking-tighter text-white">0.0</span>
@@ -42,12 +41,10 @@
             </div>
             <div class="text-[10px] text-zinc-600 mt-2">DIST: <span id="live-dist" class="text-white">0.00</span> KM</div>
         </div>
-        
         <div class="text-center bg-zinc-900/30 py-8 rounded-[40px] border border-zinc-800/50 mb-6">
             <div id="timer-display">0.0</div>
             <div class="text-[9px] text-zinc-500 uppercase tracking-widest mt-2">Idle Timer</div>
         </div>
-        
         <div class="grid grid-cols-2 gap-3">
             <button id="master-toggle" onclick="toggleEngine()" class="btn-ui h-14">Initiate Engine</button>
             <button id="sz-toggle" onclick="toggleShield()" class="btn-ui h-14 text-yellow-600">Shield: ON</button>
@@ -55,27 +52,11 @@
     </div>
 
     <div id="page-map" class="page !p-0"><div id="map-canvas" class="h-full w-full"></div></div>
-
-    <div id="page-logs" class="page">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-xl font-black italic uppercase">Logs</h2>
-            <select id="log-sort" onchange="renderLogs()" class="bg-black text-[10px] border border-zinc-700 p-1">
-                <option value="date">Sort: Date</option>
-                <option value="dist">Sort: Dist</option>
-            </select>
-        </div>
-        <div id="log-list"></div>
-    </div>
-
+    <div id="page-logs" class="page"><div id="log-list"></div></div>
     <div id="page-sys" class="page">
-        <div class="space-y-4">
-            <button onclick="exportToFile()" class="btn-ui w-full bg-cyan-700 text-black border-none font-black">Export to .txt</button>
-            <label class="btn-ui w-full bg-zinc-800 block cursor-pointer">
-                Import from .txt
-                <input type="file" id="file-input" class="hidden" accept=".txt" onchange="importFromFile(event)">
-            </label>
-            <button onclick="wipeAll()" class="btn-ui w-full border-red-900 text-red-700 mt-20">Wipe Data</button>
-        </div>
+        <button onclick="exportToFile()" class="btn-ui w-full bg-cyan-700 text-black border-none font-black mb-4">Export to .txt</button>
+        <label class="btn-ui w-full bg-zinc-800 block cursor-pointer mb-4">Import .txt<input type="file" id="file-input" class="hidden" accept=".txt" onchange="importFromFile(event)"></label>
+        <button onclick="wipeAll()" class="btn-ui w-full border-red-900 text-red-700 mt-20">Wipe Data</button>
     </div>
 
     <nav class="nav-bar">
@@ -103,19 +84,15 @@
         if (name === 'logs') renderLogs();
     }
 
-    function updateStabilization(accuracy) {
-        const bar = document.getElementById('stab-bar');
-        const val = document.getElementById('stab-val');
-        val.innerText = `${accuracy.toFixed(1)}m`;
-        let pct = 100 - (accuracy * 2); if(pct < 5) pct = 5; if(pct > 100) pct = 100;
-        bar.style.width = pct + '%';
-        bar.className = 'stab-bar ' + (accuracy < 10 ? 'bg-cyan-400' : accuracy < 30 ? 'bg-yellow-500' : 'bg-red-600');
-    }
-
     function initGPS() {
         navigator.geolocation.watchPosition(p => {
             const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
-            updateStabilization(accuracy);
+            const stabBar = document.getElementById('stab-bar');
+            document.getElementById('stab-val').innerText = `${accuracy.toFixed(1)}m`;
+            let pct = Math.max(5, 100 - (accuracy * 2));
+            stabBar.style.width = pct + '%';
+            stabBar.className = 'stab-bar ' + (accuracy < 10 ? 'bg-cyan-400' : accuracy < 30 ? 'bg-yellow-500' : 'bg-red-600');
+
             const rawKmh = (speed || 0) * 3.6;
             smoothedKmh = (rawKmh < smoothedKmh) ? (0.9 * rawKmh + 0.1 * smoothedKmh) : (0.5 * rawKmh + 0.5 * smoothedKmh);
             document.getElementById('speed-out').innerText = smoothedKmh.toFixed(1);
@@ -124,12 +101,12 @@
                 if (lastPos) currentTrip.dist += getDist(lastPos, {lat, lon});
                 document.getElementById('live-dist').innerText = currentTrip.dist.toFixed(2);
                 currentTrip.path.push({lat, lon, ts: new Date().toLocaleTimeString(), speed: smoothedKmh});
+                
                 if (smoothedKmh < 2.5 && !isClocking) { isClocking = true; startT = Date.now(); tick(); }
-                if (smoothedKmh > 2.8 && isClocking) { 
-                    isClocking = false; cancelAnimationFrame(clockFrame);
-                    let dur = parseFloat(document.getElementById('timer-display').innerText);
+                if (smoothedKmh > 3.0 && isClocking) { 
+                    const dur = parseFloat(document.getElementById('timer-display').innerText);
                     if(dur > 2) { currentTrip.stops.push({lat, lon, dur, ts: new Date().toLocaleTimeString()}); currentTrip.totalIdle += dur; }
-                    document.getElementById('timer-display').innerText = "0.0";
+                    isClocking = false; cancelAnimationFrame(clockFrame); document.getElementById('timer-display').innerText = "0.0";
                 }
             }
             lastPos = {lat, lon};
@@ -139,24 +116,36 @@
 
     function tick() { if (!isClocking) return; document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1); clockFrame = requestAnimationFrame(tick); }
 
+    async function toggleEngine() {
+        isArmed = !isArmed; const btn = document.getElementById('master-toggle');
+        btn.classList.toggle('btn-active', isArmed);
+        if (isArmed) {
+            btn.innerText = "ENGINE ACTIVE";
+            currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [], dist: 0, totalIdle: 0 };
+            document.getElementById('nosleep').play();
+            if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+        } else {
+            btn.innerText = "Initiate Engine";
+            if (isClocking) { // Final stop logic before saving
+                const dur = parseFloat(document.getElementById('timer-display').innerText);
+                if(dur > 2) { currentTrip.stops.push({lat: lastPos.lat, lon: lastPos.lon, dur, ts: new Date().toLocaleTimeString()}); currentTrip.totalIdle += dur; }
+                isClocking = false; cancelAnimationFrame(clockFrame); document.getElementById('timer-display').innerText = "0.0";
+            }
+            if (currentTrip && currentTrip.path.length > 2) { 
+                currentTrip.end = Date.now(); 
+                trips.push(currentTrip); 
+                localStorage.setItem(DB_KEY, JSON.stringify(trips)); 
+            }
+            document.getElementById('nosleep').pause(); if(wakeLock) wakeLock.release();
+            currentTrip = null;
+        }
+    }
+
     function renderLogs() {
-        const list = document.getElementById('log-list');
-        list.innerHTML = trips.slice().reverse().map(t => {
-            const totalDur = (t.end - t.start) / 1000;
-            const strRatio = ((t.totalIdle / totalDur) * 100).toFixed(1);
-            const stars = "⭐".repeat(strRatio < 10 ? 5 : strRatio < 25 ? 4 : 3);
-            return `
-            <div class="log-card">
-                <div class="flex justify-between font-black text-cyan-400 mb-2">
-                    <span>${new Date(t.start).toLocaleDateString()}</span>
-                    <span>${t.dist.toFixed(2)} KM</span>
-                </div>
-                <div class="text-[9px] text-zinc-500 mb-3 uppercase font-bold tracking-tighter">${stars} | Ratio: ${strRatio}% | ${t.stops.length} Stops</div>
-                <details class="text-[9px] mb-3 text-zinc-400"><summary class="cursor-pointer text-zinc-600 font-bold uppercase italic">Show Data Points</summary>
-                <div class="mt-2 space-y-1">${t.stops.map(s => `<div>• ${s.ts}: ${s.dur.toFixed(0)}s</div>`).join('')}</div></details>
-                <button onclick="viewTrip(${t.id})" class="btn-ui w-full !bg-zinc-900 !border-zinc-800">Map Heatmap</button>
-            </div>`;
-        }).join('');
+        document.getElementById('log-list').innerHTML = trips.slice().reverse().map(t => {
+            const ratio = (((t.totalIdle / ((t.end - t.start)/1000))) * 100).toFixed(1);
+            return `<div class="log-card"><div class="flex justify-between font-black text-cyan-400 mb-2"><span>${new Date(t.start).toLocaleDateString()}</span><span>${t.dist.toFixed(2)} KM</span></div><div class="text-[9px] text-zinc-500 uppercase font-bold tracking-tighter">Ratio: ${ratio}% | ${t.stops.length} Stops</div><details class="text-[9px] mb-3 text-zinc-400"><summary class="cursor-pointer text-zinc-600 font-bold uppercase italic mt-2">Stop Details</summary><div class="mt-2">${t.stops.map(s => `<div>• ${s.ts}: ${s.dur.toFixed(0)}s</div>`).join('')}</div></details><button onclick="viewTrip(${t.id})" class="btn-ui w-full !bg-zinc-900 !border-zinc-800">Map Heatmap</button></div>`;
+        }).join('') || '<div class="text-center text-zinc-800 text-[10px] mt-20">NO LOGS FOUND</div>';
     }
 
     function viewTrip(id) {
@@ -171,43 +160,10 @@
         }, 300);
     }
 
-    async function toggleEngine() {
-        isArmed = !isArmed; const btn = document.getElementById('master-toggle'); btn.classList.toggle('btn-active', isArmed);
-        if (isArmed) {
-            btn.innerText = "ENGINE ACTIVE";
-            currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [], dist: 0, totalIdle: 0 };
-            document.getElementById('nosleep').play();
-            if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
-        } else {
-            document.getElementById('nosleep').pause(); if(wakeLock) wakeLock.release();
-            if (currentTrip && currentTrip.path.length > 2) { currentTrip.end = Date.now(); trips.push(currentTrip); localStorage.setItem(DB_KEY, JSON.stringify(trips)); }
-            currentTrip = null; btn.innerText = "Initiate Engine";
-        }
-    }
-
-    function importFromFile(e) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            try {
-                const data = JSON.parse(event.target.result);
-                const existing = new Set(trips.map(t => t.id));
-                const filtered = data.filter(t => !existing.has(t.id));
-                trips = [...trips, ...filtered];
-                localStorage.setItem(DB_KEY, JSON.stringify(trips));
-                alert(`Imported ${filtered.length} new records.`);
-                renderLogs();
-            } catch(err) { alert("Format Error"); }
-        };
-        reader.readAsText(e.target.files[0]);
-    }
-
-    function exportToFile() {
-        const blob = new Blob([JSON.stringify(trips, null, 2)], {type: 'text/plain'});
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `gravity_log_${Date.now()}.txt`; a.click();
-    }
-
+    function exportToFile() { const blob = new Blob([JSON.stringify(trips, null, 2)], {type: 'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `gravity_log_${Date.now()}.txt`; a.click(); }
+    function importFromFile(e) { const reader = new FileReader(); reader.onload = (event) => { try { const data = JSON.parse(event.target.result); const existing = new Set(trips.map(t => t.id)); const filtered = data.filter(t => !existing.has(t.id)); trips = [...trips, ...filtered]; localStorage.setItem(DB_KEY, JSON.stringify(trips)); alert(`Imported ${filtered.length}`); renderLogs(); } catch(err) { alert("Format Error"); } }; reader.readAsText(e.target.files[0]); }
     function initMap() { map = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 6, fillOpacity: 1}).addTo(map); }
-    function getDist(p1, p2) { const R = 6371; const dLat = (p2.lat - p1.lat) * Math.PI / 180; const dLon = (p2.lon - p1.lon) * Math.PI / 180; const a = Math.sin(dLat/2)**2 + Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) * Math.sin(dLon/2)**2; return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); }
+    function getDist(p1, p2) { const R = 6371; const dLat = (p2.lat - p1.lat)*Math.PI/180; const dLon = (p2.lon - p1.lon)*Math.PI/180; const a = Math.sin(dLat/2)**2 + Math.cos(p1.lat*Math.PI/180)*Math.cos(p2.lat*Math.PI/180)*Math.sin(dLon/2)**2; return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); }
     function toggleShield() { shieldEnabled = !shieldEnabled; document.getElementById('sz-toggle').innerText = shieldEnabled ? "Shield: ON" : "Shield: OFF"; }
     function wipeAll() { if(confirm("Wipe logs?")) { localStorage.clear(); location.reload(); } }
     initGPS();
