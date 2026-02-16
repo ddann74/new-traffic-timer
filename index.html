@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V40.1</title>
+    <title>Gravity Intel V40.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -25,7 +25,6 @@
     </style>
 </head>
 <body>
-
 <div class="app-container">
     <div id="page-dash" class="page active-page !justify-center">
         <div class="mb-4 px-10">
@@ -50,7 +49,6 @@
             <button id="sz-toggle" onclick="toggleShield()" class="btn-ui h-14 text-yellow-600">Shield: ON</button>
         </div>
     </div>
-
     <div id="page-map" class="page !p-0"><div id="map-canvas" class="h-full w-full"></div></div>
     <div id="page-logs" class="page"><div id="log-list"></div></div>
     <div id="page-sys" class="page">
@@ -58,7 +56,6 @@
         <label class="btn-ui w-full bg-zinc-800 block cursor-pointer mb-4">Import .txt<input type="file" id="file-input" class="hidden" accept=".txt" onchange="importFromFile(event)"></label>
         <button onclick="wipeAll()" class="btn-ui w-full border-red-900 text-red-700 mt-20">Wipe Data</button>
     </div>
-
     <nav class="nav-bar">
         <div onclick="tab('dash')" id="tab-dash" class="nav-btn nav-btn-active">DASH</div>
         <div onclick="tab('map')" id="tab-map" class="nav-btn">MAP</div>
@@ -66,9 +63,7 @@
         <div onclick="tab('sys')" id="tab-sys" class="nav-btn">SYS</div>
     </nav>
 </div>
-
 <video id="nosleep" loop playsinline muted style="display:none;"><source src="data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAAZptb292AAAAbG12aGQAAAAA3u9fS97vX0sAAAPoAAAAKAABAAABAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAGWlvZHMBAf//B///BAAAAAAAZHRyYWsAAABcdGtoZAAAAADe719L3u9fSwAAAAEAAAAAAAACAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAABcbWRpYQAAACBtZGhkAAAAAN7vX0ve719LAAALuAAAVGMAAAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABOG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAxyZW0AAAAAAAAAAQAAALNzdGJsAAAAb3N0c2QAAAAAAAAAAQAAAF9hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAIAAgABIAAAASAAAAAAAAAAAOSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABj//wAAADVhdmNDAWQAHv/hABhnZAAerjB9AQA9AQAW4AAKBAAAAwAKAAAALBIsmXmXvAAAAAAhYnRyYWs=" type="video/mp4"></video>
-
 <script>
     const DB_KEY = 'GRAVITY_V40_MAIN';
     let trips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
@@ -97,19 +92,35 @@
             smoothedKmh = (rawKmh < smoothedKmh) ? (0.9 * rawKmh + 0.1 * smoothedKmh) : (0.5 * rawKmh + 0.5 * smoothedKmh);
             document.getElementById('speed-out').innerText = smoothedKmh.toFixed(1);
             
+            const currentCoords = {lat, lon};
+
             if (isArmed && currentTrip) {
-                if (lastPos) currentTrip.dist += getDist(lastPos, {lat, lon});
-                document.getElementById('live-dist').innerText = currentTrip.dist.toFixed(2);
-                currentTrip.path.push({lat, lon, ts: new Date().toLocaleTimeString(), speed: smoothedKmh});
+                // DISTANCE LOGIC FIX: Ensure lastPos exists or seed it immediately
+                if (!lastPos) {
+                    lastPos = currentCoords;
+                } else {
+                    const moveStep = getDist(lastPos, currentCoords);
+                    if (moveStep > 0) {
+                        currentTrip.dist += moveStep;
+                        document.getElementById('live-dist').innerText = currentTrip.dist.toFixed(2);
+                    }
+                }
+                
+                currentTrip.path.push({...currentCoords, ts: new Date().toLocaleTimeString(), speed: smoothedKmh});
                 
                 if (smoothedKmh < 2.5 && !isClocking) { isClocking = true; startT = Date.now(); tick(); }
                 if (smoothedKmh > 3.0 && isClocking) { 
                     const dur = parseFloat(document.getElementById('timer-display').innerText);
-                    if(dur > 2) { currentTrip.stops.push({lat, lon, dur, ts: new Date().toLocaleTimeString()}); currentTrip.totalIdle += dur; }
-                    isClocking = false; cancelAnimationFrame(clockFrame); document.getElementById('timer-display').innerText = "0.0";
+                    if(dur > 2) { 
+                        currentTrip.stops.push({...currentCoords, dur, ts: new Date().toLocaleTimeString()}); 
+                        currentTrip.totalIdle += dur; 
+                    }
+                    isClocking = false; 
+                    cancelAnimationFrame(clockFrame); 
+                    document.getElementById('timer-display').innerText = "0.0";
                 }
             }
-            lastPos = {lat, lon};
+            lastPos = currentCoords; // Always update lastPos to track movement
             if (userMarker) userMarker.setLatLng([lat, lon]);
         }, null, { enableHighAccuracy: true });
     }
@@ -126,9 +137,9 @@
             if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
         } else {
             btn.innerText = "Initiate Engine";
-            if (isClocking) { // Final stop logic before saving
+            if (isClocking) { 
                 const dur = parseFloat(document.getElementById('timer-display').innerText);
-                if(dur > 2) { currentTrip.stops.push({lat: lastPos.lat, lon: lastPos.lon, dur, ts: new Date().toLocaleTimeString()}); currentTrip.totalIdle += dur; }
+                if(dur > 2 && lastPos) { currentTrip.stops.push({lat: lastPos.lat, lon: lastPos.lon, dur, ts: new Date().toLocaleTimeString()}); currentTrip.totalIdle += dur; }
                 isClocking = false; cancelAnimationFrame(clockFrame); document.getElementById('timer-display').innerText = "0.0";
             }
             if (currentTrip && currentTrip.path.length > 2) { 
@@ -163,7 +174,16 @@
     function exportToFile() { const blob = new Blob([JSON.stringify(trips, null, 2)], {type: 'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `gravity_log_${Date.now()}.txt`; a.click(); }
     function importFromFile(e) { const reader = new FileReader(); reader.onload = (event) => { try { const data = JSON.parse(event.target.result); const existing = new Set(trips.map(t => t.id)); const filtered = data.filter(t => !existing.has(t.id)); trips = [...trips, ...filtered]; localStorage.setItem(DB_KEY, JSON.stringify(trips)); alert(`Imported ${filtered.length}`); renderLogs(); } catch(err) { alert("Format Error"); } }; reader.readAsText(e.target.files[0]); }
     function initMap() { map = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 6, fillOpacity: 1}).addTo(map); }
-    function getDist(p1, p2) { const R = 6371; const dLat = (p2.lat - p1.lat)*Math.PI/180; const dLon = (p2.lon - p1.lon)*Math.PI/180; const a = Math.sin(dLat/2)**2 + Math.cos(p1.lat*Math.PI/180)*Math.cos(p2.lat*Math.PI/180)*Math.sin(dLon/2)**2; return R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); }
+    
+    function getDist(p1, p2) { 
+        const R = 6371; 
+        const dLat = (p2.lat - p1.lat)*Math.PI/180; 
+        const dLon = (p2.lon - p1.lon)*Math.PI/180; 
+        const a = Math.sin(dLat/2)**2 + Math.cos(p1.lat*Math.PI/180)*Math.cos(p2.lat*Math.PI/180)*Math.sin(dLon/2)**2; 
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c; 
+    }
+
     function toggleShield() { shieldEnabled = !shieldEnabled; document.getElementById('sz-toggle').innerText = shieldEnabled ? "Shield: ON" : "Shield: OFF"; }
     function wipeAll() { if(confirm("Wipe logs?")) { localStorage.clear(); location.reload(); } }
     initGPS();
