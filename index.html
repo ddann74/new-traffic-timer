@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V41.5</title>
+    <title>Gravity Intel V41.6</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -24,14 +24,17 @@
         #timer-display { font-size: 20vw; font-weight: 800; color: #fff; line-height: 1; }
         .stab-bar { height: 4px; border-radius: 2px; transition: width 0.3s, background 0.3s; }
         
+        /* ENHANCED MAP LABELS */
         .time-label { 
-            background: rgba(0,0,0,0.85) !important; 
-            border: 1px solid var(--accent) !important; 
+            background: rgba(0,0,0,0.9) !important; 
+            border: 2px solid var(--accent) !important; 
             color: var(--accent) !important; 
             font-family: 'JetBrains Mono', monospace !important;
-            font-size: 7px !important;
+            font-size: 11px !important; /* Increased from 7px */
             font-weight: 800 !important;
-            padding: 1px 3px !important;
+            padding: 4px 8px !important;
+            border-radius: 4px !important;
+            box-shadow: 0 0 10px rgba(0, 242, 255, 0.3);
             white-space: nowrap;
         }
         .leaflet-tooltip-top:before { border-top-color: var(--accent) !important; }
@@ -51,7 +54,7 @@
                 <span id="speed-out" class="text-7xl font-black italic tracking-tighter text-white">0.0</span>
                 <span class="text-xs font-bold text-cyan-500">KM/H</span>
             </div>
-            <div class="text-[10px] text-zinc-600 mt-2">TRIP DIST: <span id="live-dist" class="text-white">0.00</span> KM</div>
+            <div class="text-[10px] text-zinc-600 mt-2">ODO: <span id="live-dist" class="text-white">0.00</span> KM</div>
         </div>
         <div class="text-center bg-zinc-900/30 py-8 rounded-[40px] border border-zinc-800/50 mb-6">
             <div id="timer-display">0.0</div>
@@ -66,9 +69,9 @@
     <div id="page-map" class="page !p-0"><div id="map-canvas" class="h-full w-full"></div></div>
     <div id="page-logs" class="page"><div id="log-list" class="flex flex-col gap-2"></div></div>
     <div id="page-sys" class="page">
-        <button onclick="renderLogs()" class="btn-ui w-full bg-zinc-700 text-white border-none mb-4">Re-Sync Logs</button>
+        <button onclick="renderLogs()" class="btn-ui w-full bg-zinc-700 text-white border-none mb-4">Sync Registry</button>
         <button onclick="exportToFile()" class="btn-ui w-full bg-cyan-700 text-black border-none font-black mb-4">Export .txt</button>
-        <button onclick="wipeAll()" class="btn-ui w-full border-red-900 text-red-700 mt-20">Format Storage</button>
+        <button onclick="wipeAll()" class="btn-ui w-full border-red-900 text-red-700 mt-20">Clear Storage</button>
     </div>
 
     <nav class="nav-bar">
@@ -112,7 +115,6 @@
     }
 
     function initGPS() {
-        // High Accuracy and High Frequency Sampling
         navigator.geolocation.watchPosition(p => {
             const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
             document.getElementById('stab-bar').style.width = Math.max(5, 100 - (accuracy * 1.5)) + '%';
@@ -126,7 +128,6 @@
                 const coords = {lat, lon};
                 if (lastPos) {
                     const d = getDist(lastPos, coords);
-                    // PRECISION FIX: Log point every 2 meters for smoother lines
                     if (d > 0.002) {
                         currentTrip.dist += d;
                         document.getElementById('live-dist').innerText = currentTrip.dist.toFixed(2);
@@ -203,19 +204,16 @@
         tab('map');
         setTimeout(() => {
             map.eachLayer(l => { if(l instanceof L.Polyline || (l instanceof L.CircleMarker && l !== userMarker)) map.removeLayer(l); });
-            
             for (let i = 0; i < t.path.length - 1; i++) {
                 const color = t.path[i].speed > 20 ? '#22c55e' : (t.path[i].speed > 5 ? '#f97316' : '#ef4444');
                 L.polyline([[t.path[i].lat, t.path[i].lon], [t.path[i+1].lat, t.path[i+1].lon]], {color, weight: 6, lineJoin: 'round'}).addTo(map);
             }
-
             t.stops.forEach(s => {
                 const durStr = s.dur > 60 ? (s.dur / 60).toFixed(1) + 'm' : s.dur.toFixed(0) + 's';
                 L.circleMarker([s.lat, s.lon], { radius: 7, fillColor: "#ff4444", color: "#fff", weight: 2, fillOpacity: 0.9 })
                  .addTo(map)
-                 .bindTooltip(`${s.ts} | ${durStr}`, { permanent: true, direction: 'top', className: 'time-label' });
+                 .bindTooltip(`${s.ts} | ${durStr}`, { permanent: true, direction: 'top', className: 'time-label', offset: [0, -10] });
             });
-
             if (t.path.length > 0) map.fitBounds(L.polyline(t.path.map(p=>[p.lat,p.lon])).getBounds());
         }, 300);
     }
@@ -223,7 +221,7 @@
     function exportToFile() { const blob = new Blob([JSON.stringify(trips, null, 2)], {type: 'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `gravity_${Date.now()}.txt`; a.click(); }
     function initMap() { map = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 6, fillOpacity: 1}).addTo(map); }
     function getDist(p1, p2) { const R = 6371; const dLat = (p2.lat-p1.lat)*Math.PI/180; const dLon = (p2.lon-p1.lon)*Math.PI/180; const a = Math.sin(dLat/2)**2 + Math.cos(p1.lat*Math.PI/180)*Math.cos(p2.lat*Math.PI/180)*Math.sin(dLon/2)**2; return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); }
-    function wipeAll() { if(confirm("Format Storage?")) { localStorage.clear(); location.reload(); } }
+    function wipeAll() { if(confirm("Clear Storage?")) { localStorage.clear(); location.reload(); } }
     initGPS();
 </script>
 </body>
