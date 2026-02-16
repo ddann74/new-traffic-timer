@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V41.4</title>
+    <title>Gravity Intel V41.5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -112,6 +112,7 @@
     }
 
     function initGPS() {
+        // High Accuracy and High Frequency Sampling
         navigator.geolocation.watchPosition(p => {
             const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
             document.getElementById('stab-bar').style.width = Math.max(5, 100 - (accuracy * 1.5)) + '%';
@@ -125,19 +126,23 @@
                 const coords = {lat, lon};
                 if (lastPos) {
                     const d = getDist(lastPos, coords);
-                    if (d > 0.001) {
+                    // PRECISION FIX: Log point every 2 meters for smoother lines
+                    if (d > 0.002) {
                         currentTrip.dist += d;
                         document.getElementById('live-dist').innerText = currentTrip.dist.toFixed(2);
                         currentTrip.path.push({...coords, speed: smoothedKmh});
+                        lastPos = coords;
                     }
-                } else { currentTrip.path.push({...coords, speed: smoothedKmh}); }
-                lastPos = coords;
+                } else { 
+                    currentTrip.path.push({...coords, speed: smoothedKmh}); 
+                    lastPos = coords;
+                }
 
                 if (smoothedKmh < 2.5 && !isClocking) startClock();
                 if (smoothedKmh > 3.0 && isClocking) stopClock(coords);
             }
             if (userMarker) userMarker.setLatLng([lat, lon]);
-        }, null, { enableHighAccuracy: true });
+        }, null, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
     }
 
     function startClock() { isClocking = true; startT = Date.now(); tick(); }
@@ -201,7 +206,7 @@
             
             for (let i = 0; i < t.path.length - 1; i++) {
                 const color = t.path[i].speed > 20 ? '#22c55e' : (t.path[i].speed > 5 ? '#f97316' : '#ef4444');
-                L.polyline([[t.path[i].lat, t.path[i].lon], [t.path[i+1].lat, t.path[i+1].lon]], {color, weight: 6}).addTo(map);
+                L.polyline([[t.path[i].lat, t.path[i].lon], [t.path[i+1].lat, t.path[i+1].lon]], {color, weight: 6, lineJoin: 'round'}).addTo(map);
             }
 
             t.stops.forEach(s => {
