@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V41.0</title>
+    <title>Gravity Intel V41.1</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -22,6 +22,7 @@
         .log-card { background: #0a0a0a; border: 1px solid #222; border-radius: 15px; padding: 15px; margin-bottom: 15px; }
         #timer-display { font-size: 20vw; font-weight: 800; color: #fff; line-height: 1; transition: 0.3s; }
         .stab-bar { height: 4px; border-radius: 2px; transition: width 0.3s, background 0.3s; }
+        /* Mirroring Logic */
         .hud-mirrored #speed-box, .hud-mirrored #timer-display, .hud-mirrored #dash-rating { transform: scaleY(-1); }
         details summary::-webkit-details-marker { display:none; }
     </style>
@@ -58,7 +59,7 @@
             <button id="master-toggle" onclick="toggleEngine()" class="btn-ui h-14">Initiate Engine</button>
             <button id="hud-toggle" onclick="toggleHUD()" class="btn-ui h-14 text-zinc-500">HUD: OFF</button>
         </div>
-        <button id="sz-toggle" onclick="toggleShield()" class="btn-ui w-full h-10 text-yellow-600 italic">Shield (100m): ON</button>
+        <button id="sz-toggle" onclick="toggleShield()" class="btn-ui w-full h-10 text-yellow-600 italic">Shield Protection (100m): ON</button>
     </div>
 
     <div id="page-map" class="page !p-0"><div id="map-canvas" class="h-full w-full"></div></div>
@@ -82,8 +83,17 @@
 
 <script>
     const DB_KEY = 'GRAVITY_V41_MAIN';
+    const OLD_KEY = 'GRAVITY_V40_MAIN'; // LINK TO PREVIOUS DATA
     let trips = [], isHUD = false, shieldEnabled = true;
-    try { trips = JSON.parse(localStorage.getItem(DB_KEY) || '[]'); } catch(e) { trips = []; }
+
+    // DATA RESTORATION LOGIC
+    function loadData() {
+        let newTrips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+        let oldTrips = JSON.parse(localStorage.getItem(OLD_KEY) || '[]');
+        trips = [...oldTrips, ...newTrips].filter((v,i,a)=>a.findIndex(t=>(t.id === v.id))===i);
+        localStorage.setItem(DB_KEY, JSON.stringify(trips));
+    }
+    loadData();
     
     let currentTrip = null, isArmed = false, isClocking = false, startT = 0, clockFrame = null, map, userMarker, lastPos = null, startPos = null;
     let wakeLock = null, smoothedKmh = 0;
@@ -119,20 +129,17 @@
             const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
             const currentCoords = {lat, lon};
             
-            // Accuracy Bar
             const stabBar = document.getElementById('stab-bar');
             document.getElementById('stab-val').innerText = `${accuracy.toFixed(1)}m`;
             let pct = Math.max(5, 100 - (accuracy * 2));
             stabBar.style.width = pct + '%';
             stabBar.className = 'stab-bar ' + (accuracy < 10 ? 'bg-cyan-400' : accuracy < 30 ? 'bg-yellow-500' : 'bg-red-600');
             
-            // Speed logic
             const rawKmh = (speed || 0) * 3.6;
             smoothedKmh = (rawKmh < smoothedKmh) ? (0.9 * rawKmh + 0.1 * smoothedKmh) : (0.5 * rawKmh + 0.5 * smoothedKmh);
             document.getElementById('speed-out').innerText = smoothedKmh.toFixed(1);
 
             if (isArmed && currentTrip) {
-                // Check Safe Zone (100m)
                 const distFromStart = startPos ? getDist(startPos, currentCoords) : 0;
                 const outOfShield = !shieldEnabled || distFromStart > 0.1;
 
@@ -145,7 +152,6 @@
                     }
                     currentTrip.path.push({...currentCoords, ts: new Date().toLocaleTimeString(), speed: smoothedKmh});
                     
-                    // Idle logic
                     if (smoothedKmh < 2.5 && !isClocking) { isClocking = true; startT = Date.now(); tick(); }
                     if (smoothedKmh > 3.0 && isClocking) { 
                         const dur = parseFloat(document.getElementById('timer-display').innerText);
@@ -189,7 +195,6 @@
 
     function renderLogs() {
         const list = document.getElementById('log-list');
-        try { trips = JSON.parse(localStorage.getItem(DB_KEY) || '[]'); } catch(e) {}
         if (!trips.length) { list.innerHTML = '<div class="text-center text-zinc-800 text-[10px] mt-20 italic">NO LOGS</div>'; return; }
         
         let html = '';
@@ -241,7 +246,7 @@
     function importFromFile(e) { const reader = new FileReader(); reader.onload = (event) => { try { trips = JSON.parse(event.target.result); localStorage.setItem(DB_KEY, JSON.stringify(trips)); renderLogs(); } catch(err) { alert("Error"); } }; reader.readAsText(e.target.files[0]); }
     function initMap() { map = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 6, fillOpacity: 1}).addTo(map); }
     function getDist(p1, p2) { const R = 6371; const dLat = (p2.lat - p1.lat)*Math.PI/180; const dLon = (p2.lon - p1.lon)*Math.PI/180; const a = Math.sin(dLat/2)**2 + Math.cos(p1.lat*Math.PI/180)*Math.cos(p2.lat*Math.PI/180)*Math.sin(dLon/2)**2; const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); return R * c; }
-    function toggleShield() { shieldEnabled = !shieldEnabled; document.getElementById('sz-toggle').innerText = shieldEnabled ? "Shield (100m): ON" : "Shield (100m): OFF"; }
+    function toggleShield() { shieldEnabled = !shieldEnabled; document.getElementById('sz-toggle').innerText = shieldEnabled ? "Shield Protection (100m): ON" : "Shield Protection (100m): OFF"; }
     function wipeAll() { if(confirm("Wipe all?")) { localStorage.clear(); location.reload(); } }
     initGPS();
 </script>
