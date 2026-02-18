@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V41.1</title>
+    <title>Gravity Intel V41.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -22,7 +22,6 @@
         .log-card { background: #0a0a0a; border: 1px solid #222; border-radius: 15px; padding: 15px; margin-bottom: 15px; }
         #timer-display { font-size: 20vw; font-weight: 800; color: #fff; line-height: 1; transition: 0.3s; }
         .stab-bar { height: 4px; border-radius: 2px; transition: width 0.3s, background 0.3s; }
-        /* Mirroring Logic */
         .hud-mirrored #speed-box, .hud-mirrored #timer-display, .hud-mirrored #dash-rating { transform: scaleY(-1); }
         details summary::-webkit-details-marker { display:none; }
     </style>
@@ -34,14 +33,10 @@
             <span id="live-rate-val" class="text-3xl font-black italic text-zinc-800">0.0</span>
             <div class="text-[8px] text-zinc-600 tracking-widest uppercase">Live Flow Rating</div>
         </div>
-
         <div class="mb-4 px-10">
             <div class="flex justify-between text-[8px] text-zinc-500 mb-1 italic"><span>SIGNAL ACCURACY</span><span id="stab-val">--</span></div>
-            <div class="w-full bg-zinc-900 h-1 rounded-full overflow-hidden">
-                <div id="stab-bar" class="stab-bar w-0 bg-red-600"></div>
-            </div>
+            <div class="w-full bg-zinc-900 h-1 rounded-full overflow-hidden"><div id="stab-bar" class="stab-bar w-0 bg-red-600"></div></div>
         </div>
-
         <div id="speed-box" class="text-center mb-6">
             <div class="flex justify-center items-baseline gap-2">
                 <span id="speed-out" class="text-7xl font-black italic tracking-tighter text-white">0.0</span>
@@ -49,12 +44,10 @@
             </div>
             <div class="text-[10px] text-zinc-600 mt-2 tracking-widest">DIST: <span id="live-dist" class="text-white">0.00</span> KM</div>
         </div>
-
         <div class="text-center bg-zinc-900/30 py-8 rounded-[40px] border border-zinc-800/50 mb-6">
             <div id="timer-display">0.0</div>
             <div class="text-[9px] text-zinc-500 uppercase tracking-widest mt-2">Idle Timer</div>
         </div>
-
         <div class="grid grid-cols-2 gap-3 mb-3">
             <button id="master-toggle" onclick="toggleEngine()" class="btn-ui h-14">Initiate Engine</button>
             <button id="hud-toggle" onclick="toggleHUD()" class="btn-ui h-14 text-zinc-500">HUD: OFF</button>
@@ -83,17 +76,24 @@
 
 <script>
     const DB_KEY = 'GRAVITY_V41_MAIN';
-    const OLD_KEY = 'GRAVITY_V40_MAIN'; // LINK TO PREVIOUS DATA
+    const MIGRATION_KEYS = ['GRAVITY_V40_MAIN', 'GRAVITY_INTEL_TRIPS']; 
     let trips = [], isHUD = false, shieldEnabled = true;
 
-    // DATA RESTORATION LOGIC
-    function loadData() {
-        let newTrips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
-        let oldTrips = JSON.parse(localStorage.getItem(OLD_KEY) || '[]');
-        trips = [...oldTrips, ...newTrips].filter((v,i,a)=>a.findIndex(t=>(t.id === v.id))===i);
+    // Data Migration Bridge
+    function syncData() {
+        let allTrips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+        MIGRATION_KEYS.forEach(key => {
+            let oldData = JSON.parse(localStorage.getItem(key) || '[]');
+            if (oldData.length) {
+                allTrips = [...allTrips, ...oldData];
+                localStorage.removeItem(key); // Cleanup once migrated
+            }
+        });
+        // Deduplicate by ID
+        trips = allTrips.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id))===i);
         localStorage.setItem(DB_KEY, JSON.stringify(trips));
     }
-    loadData();
+    syncData();
     
     let currentTrip = null, isArmed = false, isClocking = false, startT = 0, clockFrame = null, map, userMarker, lastPos = null, startPos = null;
     let wakeLock = null, smoothedKmh = 0;
@@ -128,22 +128,18 @@
         navigator.geolocation.watchPosition(p => {
             const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
             const currentCoords = {lat, lon};
-            
             const stabBar = document.getElementById('stab-bar');
             document.getElementById('stab-val').innerText = `${accuracy.toFixed(1)}m`;
             let pct = Math.max(5, 100 - (accuracy * 2));
             stabBar.style.width = pct + '%';
             stabBar.className = 'stab-bar ' + (accuracy < 10 ? 'bg-cyan-400' : accuracy < 30 ? 'bg-yellow-500' : 'bg-red-600');
-            
             const rawKmh = (speed || 0) * 3.6;
             smoothedKmh = (rawKmh < smoothedKmh) ? (0.9 * rawKmh + 0.1 * smoothedKmh) : (0.5 * rawKmh + 0.5 * smoothedKmh);
             document.getElementById('speed-out').innerText = smoothedKmh.toFixed(1);
 
             if (isArmed && currentTrip) {
                 const distFromStart = startPos ? getDist(startPos, currentCoords) : 0;
-                const outOfShield = !shieldEnabled || distFromStart > 0.1;
-
-                if (outOfShield) {
+                if (!shieldEnabled || distFromStart > 0.1) {
                     if (!lastPos) { lastPos = currentCoords; } 
                     else {
                         const moveStep = getDist(lastPos, currentCoords);
@@ -151,14 +147,10 @@
                         document.getElementById('live-dist').innerText = currentTrip.dist.toFixed(2);
                     }
                     currentTrip.path.push({...currentCoords, ts: new Date().toLocaleTimeString(), speed: smoothedKmh});
-                    
                     if (smoothedKmh < 2.5 && !isClocking) { isClocking = true; startT = Date.now(); tick(); }
                     if (smoothedKmh > 3.0 && isClocking) { 
                         const dur = parseFloat(document.getElementById('timer-display').innerText);
-                        if(dur > 2) { 
-                            currentTrip.stops.push({...currentCoords, dur, ts: new Date().toLocaleTimeString()}); 
-                            currentTrip.totalIdle += dur; 
-                        }
+                        if(dur > 2) { currentTrip.stops.push({...currentCoords, dur, ts: new Date().toLocaleTimeString()}); currentTrip.totalIdle += dur; }
                         isClocking = false; cancelAnimationFrame(clockFrame); document.getElementById('timer-display').innerText = "0.0";
                     }
                     updateLiveRating();
@@ -195,15 +187,13 @@
 
     function renderLogs() {
         const list = document.getElementById('log-list');
-        if (!trips.length) { list.innerHTML = '<div class="text-center text-zinc-800 text-[10px] mt-20 italic">NO LOGS</div>'; return; }
-        
+        if (!trips.length) { list.innerHTML = '<div class="text-center text-zinc-800 text-[10px] mt-20 italic">NO LOGS FOUND</div>'; return; }
         let html = '';
         trips.slice().reverse().forEach(t => {
             const totalSecs = Math.max(1, (t.end - t.start) / 1000);
             const flowScore = ((totalSecs - t.totalIdle) / totalSecs) * 100;
             const flowRating = (flowScore / 10).toFixed(1);
             const rateColor = flowRating >= 8 ? 'text-green-500' : flowRating >= 4 ? 'text-orange-500' : 'text-red-600';
-            
             html += `
             <div class="log-card">
                 <div class="flex justify-between items-center mb-3">
@@ -213,7 +203,7 @@
                 </div>
                 <div class="flex gap-2 items-stretch">
                     <details class="flex-1">
-                        <summary class="btn-ui h-full !bg-zinc-800 !text-white flex items-center justify-center cursor-pointer">DETAILS</summary>
+                        <summary class="btn-ui h-full !bg-zinc-800 !text-white flex items-center justify-center cursor-pointer">STOPS</summary>
                         <div class="mt-2 text-[10px] text-zinc-400 bg-black/50 p-3 rounded-lg border border-zinc-900">
                             ${t.stops.map(s => `<div>• ${s.ts} — ${s.dur.toFixed(0)}s</div>`).join('') || 'No stops.'}
                         </div>
@@ -241,7 +231,6 @@
             if (t.path.length) map.fitBounds(L.polyline(t.path.map(p=>[p.lat,p.lon])).getBounds());
         }, 300);
     }
-
     function exportToFile() { const blob = new Blob([JSON.stringify(trips, null, 2)], {type: 'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `gravity_log.txt`; a.click(); }
     function importFromFile(e) { const reader = new FileReader(); reader.onload = (event) => { try { trips = JSON.parse(event.target.result); localStorage.setItem(DB_KEY, JSON.stringify(trips)); renderLogs(); } catch(err) { alert("Error"); } }; reader.readAsText(e.target.files[0]); }
     function initMap() { map = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 6, fillOpacity: 1}).addTo(map); }
