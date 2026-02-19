@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V41.2</title>
+    <title>Gravity Intel V42.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -22,21 +22,24 @@
         .log-card { background: #0a0a0a; border: 1px solid #222; border-radius: 15px; padding: 15px; margin-bottom: 15px; }
         #timer-display { font-size: 20vw; font-weight: 800; color: #fff; line-height: 1; transition: 0.3s; }
         .stab-bar { height: 4px; border-radius: 2px; transition: width 0.3s, background 0.3s; }
-        .hud-mirrored #speed-box, .hud-mirrored #timer-display, .hud-mirrored #dash-rating { transform: scaleY(-1); }
         details summary::-webkit-details-marker { display:none; }
     </style>
 </head>
-<body id="main-body">
+<body>
 <div class="app-container">
     <div id="page-dash" class="page active-page !justify-center">
         <div id="dash-rating" class="text-center mb-2">
             <span id="live-rate-val" class="text-3xl font-black italic text-zinc-800">0.0</span>
             <div class="text-[8px] text-zinc-600 tracking-widest uppercase">Live Flow Rating</div>
         </div>
+
         <div class="mb-4 px-10">
             <div class="flex justify-between text-[8px] text-zinc-500 mb-1 italic"><span>SIGNAL ACCURACY</span><span id="stab-val">--</span></div>
-            <div class="w-full bg-zinc-900 h-1 rounded-full overflow-hidden"><div id="stab-bar" class="stab-bar w-0 bg-red-600"></div></div>
+            <div class="w-full bg-zinc-900 h-1 rounded-full overflow-hidden">
+                <div id="stab-bar" class="stab-bar w-0 bg-red-600"></div>
+            </div>
         </div>
+
         <div id="speed-box" class="text-center mb-6">
             <div class="flex justify-center items-baseline gap-2">
                 <span id="speed-out" class="text-7xl font-black italic tracking-tighter text-white">0.0</span>
@@ -44,15 +47,14 @@
             </div>
             <div class="text-[10px] text-zinc-600 mt-2 tracking-widest">DIST: <span id="live-dist" class="text-white">0.00</span> KM</div>
         </div>
+
         <div class="text-center bg-zinc-900/30 py-8 rounded-[40px] border border-zinc-800/50 mb-6">
             <div id="timer-display">0.0</div>
             <div class="text-[9px] text-zinc-500 uppercase tracking-widest mt-2">Idle Timer</div>
         </div>
-        <div class="grid grid-cols-2 gap-3 mb-3">
-            <button id="master-toggle" onclick="toggleEngine()" class="btn-ui h-14">Initiate Engine</button>
-            <button id="hud-toggle" onclick="toggleHUD()" class="btn-ui h-14 text-zinc-500">HUD: OFF</button>
-        </div>
-        <button id="sz-toggle" onclick="toggleShield()" class="btn-ui w-full h-10 text-yellow-600 italic">Shield Protection (100m): ON</button>
+
+        <button id="master-toggle" onclick="toggleEngine()" class="btn-ui w-full h-16 mb-3 text-lg">Initiate Engine</button>
+        <button id="sz-toggle" onclick="toggleShield()" class="btn-ui w-full h-12 text-yellow-600 italic border-yellow-900/30">Shield Protection (100m): ON</button>
     </div>
 
     <div id="page-map" class="page !p-0"><div id="map-canvas" class="h-full w-full"></div></div>
@@ -77,19 +79,14 @@
 <script>
     const DB_KEY = 'GRAVITY_V41_MAIN';
     const MIGRATION_KEYS = ['GRAVITY_V40_MAIN', 'GRAVITY_INTEL_TRIPS']; 
-    let trips = [], isHUD = false, shieldEnabled = true;
+    let trips = [], shieldEnabled = true;
 
-    // Data Migration Bridge
     function syncData() {
         let allTrips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
         MIGRATION_KEYS.forEach(key => {
             let oldData = JSON.parse(localStorage.getItem(key) || '[]');
-            if (oldData.length) {
-                allTrips = [...allTrips, ...oldData];
-                localStorage.removeItem(key); // Cleanup once migrated
-            }
+            if (oldData.length) { allTrips = [...allTrips, ...oldData]; localStorage.removeItem(key); }
         });
-        // Deduplicate by ID
         trips = allTrips.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id))===i);
         localStorage.setItem(DB_KEY, JSON.stringify(trips));
     }
@@ -97,13 +94,6 @@
     
     let currentTrip = null, isArmed = false, isClocking = false, startT = 0, clockFrame = null, map, userMarker, lastPos = null, startPos = null;
     let wakeLock = null, smoothedKmh = 0;
-
-    function toggleHUD() {
-        isHUD = !isHUD;
-        document.getElementById('main-body').classList.toggle('hud-mirrored', isHUD);
-        document.getElementById('hud-toggle').innerText = isHUD ? "HUD: ON" : "HUD: OFF";
-        document.getElementById('hud-toggle').classList.toggle('btn-active', isHUD);
-    }
 
     function tab(name) {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
