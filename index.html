@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V42.0</title>
+    <title>Gravity Intel V42.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -23,23 +23,21 @@
         #timer-display { font-size: 20vw; font-weight: 800; color: #fff; line-height: 1; transition: 0.3s; }
         .stab-bar { height: 4px; border-radius: 2px; transition: width 0.3s, background 0.3s; }
         details summary::-webkit-details-marker { display:none; }
+        #save-status { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background: #111; color: var(--accent); padding: 4px 12px; border-radius: 10px; font-size: 8px; font-weight: 800; border: 1px solid #333; z-index: 10000; }
     </style>
 </head>
 <body>
+<div id="save-status">AUTO-SYNC: READY</div>
 <div class="app-container">
     <div id="page-dash" class="page active-page !justify-center">
         <div id="dash-rating" class="text-center mb-2">
             <span id="live-rate-val" class="text-3xl font-black italic text-zinc-800">0.0</span>
             <div class="text-[8px] text-zinc-600 tracking-widest uppercase">Live Flow Rating</div>
         </div>
-
         <div class="mb-4 px-10">
             <div class="flex justify-between text-[8px] text-zinc-500 mb-1 italic"><span>SIGNAL ACCURACY</span><span id="stab-val">--</span></div>
-            <div class="w-full bg-zinc-900 h-1 rounded-full overflow-hidden">
-                <div id="stab-bar" class="stab-bar w-0 bg-red-600"></div>
-            </div>
+            <div class="w-full bg-zinc-900 h-1 rounded-full overflow-hidden"><div id="stab-bar" class="stab-bar w-0 bg-red-600"></div></div>
         </div>
-
         <div id="speed-box" class="text-center mb-6">
             <div class="flex justify-center items-baseline gap-2">
                 <span id="speed-out" class="text-7xl font-black italic tracking-tighter text-white">0.0</span>
@@ -47,12 +45,10 @@
             </div>
             <div class="text-[10px] text-zinc-600 mt-2 tracking-widest">DIST: <span id="live-dist" class="text-white">0.00</span> KM</div>
         </div>
-
         <div class="text-center bg-zinc-900/30 py-8 rounded-[40px] border border-zinc-800/50 mb-6">
             <div id="timer-display">0.0</div>
             <div class="text-[9px] text-zinc-500 uppercase tracking-widest mt-2">Idle Timer</div>
         </div>
-
         <button id="master-toggle" onclick="toggleEngine()" class="btn-ui w-full h-16 mb-3 text-lg">Initiate Engine</button>
         <button id="sz-toggle" onclick="toggleShield()" class="btn-ui w-full h-12 text-yellow-600 italic border-yellow-900/30">Shield Protection (100m): ON</button>
     </div>
@@ -78,22 +74,37 @@
 
 <script>
     const DB_KEY = 'GRAVITY_V41_MAIN';
-    const MIGRATION_KEYS = ['GRAVITY_V40_MAIN', 'GRAVITY_INTEL_TRIPS']; 
     let trips = [], shieldEnabled = true;
 
     function syncData() {
         let allTrips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
-        MIGRATION_KEYS.forEach(key => {
-            let oldData = JSON.parse(localStorage.getItem(key) || '[]');
-            if (oldData.length) { allTrips = [...allTrips, ...oldData]; localStorage.removeItem(key); }
+        const migration = ['GRAVITY_V40_MAIN', 'GRAVITY_INTEL_TRIPS'];
+        migration.forEach(key => {
+            let old = JSON.parse(localStorage.getItem(key) || '[]');
+            if(old.length) { allTrips = [...allTrips, ...old]; localStorage.removeItem(key); }
         });
         trips = allTrips.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id))===i);
         localStorage.setItem(DB_KEY, JSON.stringify(trips));
     }
     syncData();
-    
+
     let currentTrip = null, isArmed = false, isClocking = false, startT = 0, clockFrame = null, map, userMarker, lastPos = null, startPos = null;
     let wakeLock = null, smoothedKmh = 0;
+
+    // AUTO-SAVE LOGIC: Trigger whenever user leaves the app or every 30 seconds
+    document.addEventListener("visibilitychange", () => { if (document.hidden) forceSyncCurrentTrip(); });
+    setInterval(() => { if (isArmed) forceSyncCurrentTrip(); }, 30000);
+
+    function forceSyncCurrentTrip() {
+        if (!isArmed || !currentTrip || currentTrip.path.length < 2) return;
+        currentTrip.end = Date.now();
+        // Remove existing version of current trip if it exists
+        trips = trips.filter(t => t.id !== currentTrip.id);
+        trips.push(currentTrip);
+        localStorage.setItem(DB_KEY, JSON.stringify(trips));
+        document.getElementById('save-status').innerText = "AUTO-SYNC: SUCCESS";
+        setTimeout(() => { document.getElementById('save-status').innerText = isArmed ? "ENGINE ACTIVE" : "AUTO-SYNC: READY"; }, 2000);
+    }
 
     function tab(name) {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
@@ -106,7 +117,7 @@
 
     function updateLiveRating() {
         if (!isArmed || !currentTrip) return;
-        const totalTime = (Date.now() - currentTrip.start) / 1000;
+        const totalTime = Math.max(1, (Date.now() - currentTrip.start) / 1000);
         const flow = Math.max(0, Math.min(100, ((totalTime - currentTrip.totalIdle) / totalTime) * 100));
         const rating = (flow / 10).toFixed(1);
         const el = document.getElementById('live-rate-val');
@@ -129,14 +140,16 @@
 
             if (isArmed && currentTrip) {
                 const distFromStart = startPos ? getDist(startPos, currentCoords) : 0;
-                if (!shieldEnabled || distFromStart > 0.1) {
-                    if (!lastPos) { lastPos = currentCoords; } 
-                    else {
-                        const moveStep = getDist(lastPos, currentCoords);
+                if (!lastPos) { lastPos = currentCoords; } 
+                else {
+                    const moveStep = getDist(lastPos, currentCoords);
+                    if (!shieldEnabled || distFromStart > 0.1) {
                         currentTrip.dist += moveStep;
                         document.getElementById('live-dist').innerText = currentTrip.dist.toFixed(2);
                     }
-                    currentTrip.path.push({...currentCoords, ts: new Date().toLocaleTimeString(), speed: smoothedKmh});
+                }
+                currentTrip.path.push({...currentCoords, ts: new Date().toLocaleTimeString(), speed: smoothedKmh});
+                if (!shieldEnabled || distFromStart > 0.1) {
                     if (smoothedKmh < 2.5 && !isClocking) { isClocking = true; startT = Date.now(); tick(); }
                     if (smoothedKmh > 3.0 && isClocking) { 
                         const dur = parseFloat(document.getElementById('timer-display').innerText);
@@ -156,22 +169,22 @@
     async function toggleEngine() {
         isArmed = !isArmed; const btn = document.getElementById('master-toggle');
         btn.classList.toggle('btn-active', isArmed);
+        const status = document.getElementById('save-status');
         if (isArmed) {
             btn.innerText = "ENGINE ACTIVE";
+            status.innerText = "ENGINE ACTIVE";
             currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [], dist: 0, totalIdle: 0 };
             navigator.geolocation.getCurrentPosition(p => { startPos = {lat: p.coords.latitude, lon: p.coords.longitude}; });
             document.getElementById('nosleep').play();
             if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
         } else {
             btn.innerText = "Initiate Engine";
-            if (currentTrip && (currentTrip.path.length > 0 || currentTrip.dist > 0.01)) { 
-                currentTrip.end = Date.now(); 
-                trips.push(currentTrip); 
-                localStorage.setItem(DB_KEY, JSON.stringify(trips));
-            }
+            status.innerText = "SAVING FINAL...";
+            forceSyncCurrentTrip();
             isClocking = false; cancelAnimationFrame(clockFrame); document.getElementById('timer-display').innerText = "0.0";
             document.getElementById('nosleep').pause(); if(wakeLock) wakeLock.release();
             currentTrip = null; startPos = null;
+            setTimeout(() => status.innerText = "AUTO-SYNC: READY", 2000);
         }
     }
 
@@ -180,7 +193,7 @@
         if (!trips.length) { list.innerHTML = '<div class="text-center text-zinc-800 text-[10px] mt-20 italic">NO LOGS FOUND</div>'; return; }
         let html = '';
         trips.slice().reverse().forEach(t => {
-            const totalSecs = Math.max(1, (t.end - t.start) / 1000);
+            const totalSecs = Math.max(1, ((t.end || Date.now()) - t.start) / 1000);
             const flowScore = ((totalSecs - t.totalIdle) / totalSecs) * 100;
             const flowRating = (flowScore / 10).toFixed(1);
             const rateColor = flowRating >= 8 ? 'text-green-500' : flowRating >= 4 ? 'text-orange-500' : 'text-red-600';
