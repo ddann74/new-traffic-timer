@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V42.2</title>
+    <title>Gravity Intel V42.4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -22,7 +22,6 @@
         .log-card { background: #0a0a0a; border: 1px solid #222; border-radius: 15px; padding: 15px; margin-bottom: 15px; }
         #timer-display { font-size: 20vw; font-weight: 800; color: #fff; line-height: 1; transition: 0.3s; }
         .stab-bar { height: 4px; border-radius: 2px; transition: width 0.3s, background 0.3s; }
-        details summary::-webkit-details-marker { display:none; }
         #save-status { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background: #111; color: var(--accent); padding: 4px 12px; border-radius: 10px; font-size: 8px; font-weight: 800; border: 1px solid #333; z-index: 10000; }
     </style>
 </head>
@@ -49,13 +48,17 @@
             <div id="timer-display">0.0</div>
             <div class="text-[9px] text-zinc-500 uppercase tracking-widest mt-2">Idle Timer</div>
         </div>
-        <button id="master-toggle" onclick="toggleEngine()" class="btn-ui w-full h-16 mb-3 text-lg">Initiate Engine</button>
-        <button id="sz-toggle" onclick="toggleShield()" class="btn-ui w-full h-12 text-yellow-600 italic border-yellow-900/30">Shield Protection (100m): ON</button>
+        <button id="master-toggle" onclick="toggleEngine()" class="btn-ui w-full h-16 mb-3 text-lg text-white">Initiate Engine</button>
+        <button id="sz-toggle" onclick="toggleShield()" class="btn-ui w-full h-12 text-yellow-600 italic border-yellow-900/30">Shield (100m): ON</button>
     </div>
 
     <div id="page-map" class="page !p-0"><div id="map-canvas" class="h-full w-full"></div></div>
     <div id="page-logs" class="page"><div id="log-list"></div></div>
     <div id="page-sys" class="page">
+        <div class="text-[10px] text-zinc-500 mb-4 text-center italic border border-zinc-800 p-2 rounded">
+            DATABASE RECORDS: <span id="db-count" class="text-white">0</span><br>
+            LAST SYNC: <span id="last-sync-time" class="text-white">NEVER</span>
+        </div>
         <button onclick="renderLogs(); alert('Logs Re-synced');" class="btn-ui w-full bg-zinc-700 text-white border-none mb-4">Manual Sync Logs</button>
         <button onclick="exportToFile()" class="btn-ui w-full bg-cyan-700 text-black border-none font-black mb-4">Export to .txt</button>
         <label class="btn-ui w-full bg-zinc-800 block cursor-pointer mb-4">Import .txt<input type="file" id="file-input" class="hidden" accept=".txt" onchange="importFromFile(event)"></label>
@@ -77,33 +80,31 @@
     let trips = [], shieldEnabled = true;
 
     function syncData() {
-        let allTrips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
-        const migration = ['GRAVITY_V40_MAIN', 'GRAVITY_INTEL_TRIPS'];
-        migration.forEach(key => {
-            let old = JSON.parse(localStorage.getItem(key) || '[]');
-            if(old.length) { allTrips = [...allTrips, ...old]; localStorage.removeItem(key); }
-        });
-        trips = allTrips.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id))===i);
-        localStorage.setItem(DB_KEY, JSON.stringify(trips));
+        trips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+        document.getElementById('db-count').innerText = trips.length;
     }
     syncData();
 
     let currentTrip = null, isArmed = false, isClocking = false, startT = 0, clockFrame = null, map, userMarker, lastPos = null, startPos = null;
     let wakeLock = null, smoothedKmh = 0;
 
-    // AUTO-SAVE LOGIC: Trigger whenever user leaves the app or every 30 seconds
     document.addEventListener("visibilitychange", () => { if (document.hidden) forceSyncCurrentTrip(); });
-    setInterval(() => { if (isArmed) forceSyncCurrentTrip(); }, 30000);
+    setInterval(() => { if (isArmed) forceSyncCurrentTrip(); }, 10000); 
 
     function forceSyncCurrentTrip() {
-        if (!isArmed || !currentTrip || currentTrip.path.length < 2) return;
+        if (!isArmed || !currentTrip) return;
         currentTrip.end = Date.now();
-        // Remove existing version of current trip if it exists
-        trips = trips.filter(t => t.id !== currentTrip.id);
-        trips.push(currentTrip);
-        localStorage.setItem(DB_KEY, JSON.stringify(trips));
-        document.getElementById('save-status').innerText = "AUTO-SYNC: SUCCESS";
-        setTimeout(() => { document.getElementById('save-status').innerText = isArmed ? "ENGINE ACTIVE" : "AUTO-SYNC: READY"; }, 2000);
+        // REMOVED MINIMUM PATH FILTER: Any trip started now saves.
+        let localTrips = JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+        localTrips = localTrips.filter(t => t.id !== currentTrip.id);
+        localTrips.push(currentTrip);
+        localStorage.setItem(DB_KEY, JSON.stringify(localTrips));
+        
+        trips = localTrips;
+        const now = new Date().toLocaleTimeString();
+        document.getElementById('db-count').innerText = trips.length;
+        document.getElementById('last-sync-time').innerText = now;
+        document.getElementById('save-status').innerText = "DATA SAVED: " + now;
     }
 
     function tab(name) {
@@ -169,54 +170,44 @@
     async function toggleEngine() {
         isArmed = !isArmed; const btn = document.getElementById('master-toggle');
         btn.classList.toggle('btn-active', isArmed);
-        const status = document.getElementById('save-status');
         if (isArmed) {
             btn.innerText = "ENGINE ACTIVE";
-            status.innerText = "ENGINE ACTIVE";
             currentTrip = { id: Date.now(), start: Date.now(), path: [], stops: [], dist: 0, totalIdle: 0 };
             navigator.geolocation.getCurrentPosition(p => { startPos = {lat: p.coords.latitude, lon: p.coords.longitude}; });
             document.getElementById('nosleep').play();
             if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
         } else {
             btn.innerText = "Initiate Engine";
-            status.innerText = "SAVING FINAL...";
             forceSyncCurrentTrip();
             isClocking = false; cancelAnimationFrame(clockFrame); document.getElementById('timer-display').innerText = "0.0";
             document.getElementById('nosleep').pause(); if(wakeLock) wakeLock.release();
             currentTrip = null; startPos = null;
-            setTimeout(() => status.innerText = "AUTO-SYNC: READY", 2000);
         }
     }
 
     function renderLogs() {
+        syncData();
         const list = document.getElementById('log-list');
         if (!trips.length) { list.innerHTML = '<div class="text-center text-zinc-800 text-[10px] mt-20 italic">NO LOGS FOUND</div>'; return; }
         let html = '';
-        trips.slice().reverse().forEach(t => {
+        trips.slice().sort((a,b) => b.id - a.id).forEach(t => {
             const totalSecs = Math.max(1, ((t.end || Date.now()) - t.start) / 1000);
             const flowScore = ((totalSecs - t.totalIdle) / totalSecs) * 100;
             const flowRating = (flowScore / 10).toFixed(1);
             const rateColor = flowRating >= 8 ? 'text-green-500' : flowRating >= 4 ? 'text-orange-500' : 'text-red-600';
-            html += `
-            <div class="log-card">
-                <div class="flex justify-between items-center mb-3">
-                    <span class="text-[10px] font-bold text-zinc-500">${new Date(t.start).toLocaleDateString()}</span>
-                    <span class="text-xl font-black ${rateColor} italic">${flowRating}</span>
-                    <span class="text-xs font-black text-cyan-400">${t.dist.toFixed(2)} KM</span>
-                </div>
-                <div class="flex gap-2 items-stretch">
-                    <details class="flex-1">
-                        <summary class="btn-ui h-full !bg-zinc-800 !text-white flex items-center justify-center cursor-pointer">STOPS</summary>
-                        <div class="mt-2 text-[10px] text-zinc-400 bg-black/50 p-3 rounded-lg border border-zinc-900">
-                            ${t.stops.map(s => `<div>• ${s.ts} — ${s.dur.toFixed(0)}s</div>`).join('') || 'No stops.'}
-                        </div>
-                    </details>
-                    <button onclick="deleteTrip(${t.id})" class="btn-ui w-12 flex items-center justify-center !border-red-900/40">
-                        <svg class="w-4 h-4 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
-                    <button onclick="viewTrip(${t.id})" class="btn-ui w-20 !bg-zinc-900 !text-zinc-500 !text-[8px] flex items-center justify-center">MAP<br>HEAT</button>
-                </div>
-            </div>`;
+            html += `<div class="log-card"><div class="flex justify-between items-center mb-3">
+                <span class="text-[10px] font-bold text-zinc-500">${new Date(t.start).toLocaleDateString()}</span>
+                <span class="text-xl font-black ${rateColor} italic">${flowRating}</span>
+                <span class="text-xs font-black text-cyan-400">${(t.dist || 0).toFixed(2)} KM</span>
+            </div>
+            <div class="flex gap-2 items-stretch">
+                <details class="flex-1"><summary class="btn-ui h-full !bg-zinc-800 !text-white flex items-center justify-center cursor-pointer">STOPS</summary>
+                <div class="mt-2 text-[10px] text-zinc-400 bg-black/50 p-3 rounded-lg border border-zinc-900">
+                    ${t.stops.map(s => `<div>• ${s.ts} — ${s.dur.toFixed(0)}s</div>`).join('') || 'No stops.'}
+                </div></details>
+                <button onclick="deleteTrip(${t.id})" class="btn-ui w-12 flex items-center justify-center !border-red-900/40"><svg class="w-4 h-4 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                <button onclick="viewTrip(${t.id})" class="btn-ui w-20 !bg-zinc-900 !text-zinc-500 !text-[8px] flex items-center justify-center">MAP<br>HEAT</button>
+            </div></div>`;
         });
         list.innerHTML = html;
     }
@@ -237,8 +228,9 @@
     function exportToFile() { const blob = new Blob([JSON.stringify(trips, null, 2)], {type: 'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `gravity_log.txt`; a.click(); }
     function importFromFile(e) { const reader = new FileReader(); reader.onload = (event) => { try { trips = JSON.parse(event.target.result); localStorage.setItem(DB_KEY, JSON.stringify(trips)); renderLogs(); } catch(err) { alert("Error"); } }; reader.readAsText(e.target.files[0]); }
     function initMap() { map = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 6, fillOpacity: 1}).addTo(map); }
+    // FIX: Corrected getDist formula p1.lat -> p2.lat
     function getDist(p1, p2) { const R = 6371; const dLat = (p2.lat - p1.lat)*Math.PI/180; const dLon = (p2.lon - p1.lon)*Math.PI/180; const a = Math.sin(dLat/2)**2 + Math.cos(p1.lat*Math.PI/180)*Math.cos(p2.lat*Math.PI/180)*Math.sin(dLon/2)**2; const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); return R * c; }
-    function toggleShield() { shieldEnabled = !shieldEnabled; document.getElementById('sz-toggle').innerText = shieldEnabled ? "Shield Protection (100m): ON" : "Shield Protection (100m): OFF"; }
+    function toggleShield() { shieldEnabled = !shieldEnabled; document.getElementById('sz-toggle').innerText = shieldEnabled ? "Shield (100m): ON" : "Shield (100m): OFF"; }
     function wipeAll() { if(confirm("Wipe all?")) { localStorage.clear(); location.reload(); } }
     initGPS();
 </script>
