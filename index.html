@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V42.6</title>
+    <title>Gravity Intel V42.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -20,14 +20,12 @@
         .btn-ui { background: #111; border: 1px solid #444; padding: 12px; border-radius: 10px; font-size: 10px; font-weight: 800; text-transform: uppercase; transition: 0.2s; text-align: center; }
         .btn-active { background: #062e3d; border-color: var(--accent); color: var(--accent); }
         .log-card { background: #0a0a0a; border: 1px solid #222; border-radius: 15px; padding: 15px; margin-bottom: 15px; }
-        #timer-display { font-size: 20vw; font-weight: 800; color: #fff; line-height: 1; transition: 0.3s; }
         .stab-bar { height: 4px; border-radius: 2px; transition: width 0.3s, background 0.3s; }
-        #bg-indicator { position: fixed; top: 10px; left: 10px; font-size: 8px; font-weight: 800; padding: 2px 6px; border-radius: 4px; z-index: 10001; }
-        .bg-active { background: #00f2ff; color: #000; }
+        #bg-indicator { position: fixed; top: 10px; left: 10px; font-size: 8px; font-weight: 800; padding: 2px 6px; border-radius: 4px; z-index: 10001; background: #00f2ff; color: #000; }
     </style>
 </head>
 <body>
-<div id="bg-indicator" class="bg-active">ACTIVE</div>
+<div id="bg-indicator">ACTIVE</div>
 <div class="app-container">
     <div id="page-dash" class="page active-page !justify-center">
         <div id="dash-rating" class="text-center mb-2">
@@ -45,21 +43,14 @@
             </div>
             <div class="text-[10px] text-zinc-600 mt-2 tracking-widest">DIST: <span id="live-dist" class="text-white">0.00</span> KM</div>
         </div>
-        <div class="text-center bg-zinc-900/30 py-8 rounded-[40px] border border-zinc-800/50 mb-6">
-            <div id="timer-display">0.0</div>
-        </div>
         <button id="master-toggle" onclick="toggleEngine()" class="btn-ui w-full h-16 mb-3 text-lg text-white">Initiate Engine</button>
         <button id="sz-toggle" onclick="toggleShield()" class="btn-ui w-full h-12 text-yellow-600 italic border-yellow-900/30">Shield (100m): ON</button>
     </div>
 
     <div id="page-map" class="page !p-0"><div id="map-canvas" class="h-full w-full"></div></div>
-
     <div id="page-logs" class="page"><div id="log-list"></div></div>
-
     <div id="page-sys" class="page">
-        <div class="text-[10px] text-zinc-500 mb-4 text-center italic border border-zinc-800 p-2 rounded">
-            TOTAL TRIPS: <span id="db-count" class="text-white">0</span>
-        </div>
+        <div class="text-[10px] text-zinc-500 mb-4 text-center italic border border-zinc-800 p-2 rounded">TOTAL TRIPS: <span id="db-count" class="text-white">0</span></div>
         <button onclick="renderLogs()" class="btn-ui w-full bg-zinc-700 text-white mb-4">Refresh Logs</button>
         <button onclick="wipeAll()" class="btn-ui w-full border-red-900 text-red-700 mt-20">Full Reset</button>
     </div>
@@ -78,9 +69,8 @@
     const DB_KEY = 'GRAVITY_V41_MAIN';
     let trips = [], shieldEnabled = true, isArmed = false;
     let currentTrip = null, map, userMarker, lastPos = null, startPos = null;
-    let wakeLock = null, smoothedKmh = 0, isClocking = false, startT = 0;
+    let wakeLock = null, smoothedKmh = 0;
 
-    // --- PRIORITY 1: SAVE TRIPS ---
     function saveToStorage() {
         if (!isArmed || !currentTrip) return;
         currentTrip.end = Date.now();
@@ -91,16 +81,8 @@
         document.getElementById('db-count').innerText = all.length;
     }
 
-    // --- PRIORITY 3: BACKGROUND ---
     document.addEventListener("visibilitychange", () => {
-        const indicator = document.getElementById('bg-indicator');
-        if (document.hidden) {
-            indicator.innerText = "BACKGROUNDING...";
-            if (isArmed) saveToStorage();
-        } else {
-            indicator.innerText = "ACTIVE";
-            if (isArmed) syncData(); 
-        }
+        if (document.hidden && isArmed) saveToStorage();
     });
 
     async function toggleEngine() {
@@ -121,13 +103,11 @@
         }
     }
 
-    // --- PRIORITY 2: ACCURATE MAP PLOTTING ---
     function initGPS() {
         navigator.geolocation.watchPosition(p => {
             const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
             const currentCoords = {lat, lon};
             
-            // Stabilization UI
             const stabBar = document.getElementById('stab-bar');
             document.getElementById('stab-val').innerText = accuracy.toFixed(1) + "m";
             let pct = Math.max(5, 100 - (accuracy * 2));
@@ -141,21 +121,15 @@
             if (isArmed && currentTrip) {
                 if (!startPos) startPos = currentCoords;
                 const distFromStart = getDist(startPos, currentCoords);
-                
-                if (!lastPos) { lastPos = currentCoords; } 
-                else {
+                if (lastPos) {
                     const step = getDist(lastPos, currentCoords);
                     if (!shieldEnabled || distFromStart > 0.1) {
                         currentTrip.dist += step;
                         document.getElementById('live-dist').innerText = currentTrip.dist.toFixed(2);
                     }
                 }
-
-                // Add point to path for map plotting
                 currentTrip.path.push({lat, lon, speed: smoothedKmh});
-
-                // Periodic background save every 10 points
-                if (currentTrip.path.length % 10 === 0) saveToStorage();
+                if (currentTrip.path.length % 5 === 0) saveToStorage();
             }
             lastPos = currentCoords;
             if (userMarker) userMarker.setLatLng([lat, lon]);
@@ -167,19 +141,27 @@
         trips = raw ? JSON.parse(raw) : [];
         const list = document.getElementById('log-list');
         list.innerHTML = trips.length ? '' : '<div class="text-center mt-20 opacity-20">NO LOGS</div>';
+        
         [...trips].reverse().forEach(t => {
-            const flow = (((((t.end || Date.now()) - t.start) / 1000) - t.totalIdle) / (((t.end || Date.now()) - t.start) / 1000) * 10).toFixed(1);
+            const durationSec = ((t.end || Date.now()) - t.start) / 1000;
+            const flowScore = durationSec > 0 ? ((durationSec - t.totalIdle) / durationSec * 10).toFixed(1) : "0.0";
+            
+            // --- COLOR CODING LOGIC ---
+            let ratingColor = "text-red-600";
+            if (flowScore >= 8) ratingColor = "text-green-500";
+            else if (flowScore >= 4) ratingColor = "text-orange-500";
+
             const card = document.createElement('div');
             card.className = 'log-card';
             card.innerHTML = `
                 <div class="flex justify-between items-center">
                     <span class="text-[10px] text-zinc-500">${new Date(t.start).toLocaleDateString()}</span>
-                    <span class="text-xl font-black italic text-cyan-400">${flow}</span>
-                    <span class="text-xs font-bold">${t.dist.toFixed(2)} KM</span>
+                    <span class="text-xl font-black italic ${ratingColor}">${flowScore}</span>
+                    <span class="text-xs font-bold text-white">${t.dist.toFixed(2)} KM</span>
                 </div>
                 <div class="flex gap-2 mt-3">
                     <button onclick="viewTrip(${t.id})" class="btn-ui flex-1">View Map</button>
-                    <button onclick="deleteTrip(${t.id})" class="btn-ui text-red-700">DEL</button>
+                    <button onclick="deleteTrip(${t.id})" class="btn-ui text-red-900 border-red-900/30">DEL</button>
                 </div>`;
             list.appendChild(card);
         });
@@ -191,8 +173,11 @@
         setTimeout(() => {
             map.eachLayer(l => { if(l instanceof L.Polyline || (l instanceof L.CircleMarker && l !== userMarker)) map.removeLayer(l); });
             const pts = t.path.map(p => [p.lat, p.lon]);
-            L.polyline(pts, {color: '#00f2ff', weight: 5, opacity: 0.8}).addTo(map);
-            map.fitBounds(L.polyline(pts).getBounds());
+            if(pts.length > 1) {
+                // Priority 2: Accurate plotting with glow
+                L.polyline(pts, {color: '#00f2ff', weight: 6, opacity: 0.9}).addTo(map);
+                map.fitBounds(L.polyline(pts).getBounds());
+            }
         }, 300);
     }
 
@@ -213,8 +198,7 @@
     function initMap() { map = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 5, fillOpacity: 1}).addTo(map); }
     function toggleShield() { shieldEnabled = !shieldEnabled; document.getElementById('sz-toggle').innerText = shieldEnabled ? "Shield (100m): ON" : "Shield (100m): OFF"; }
     function wipeAll() { if(confirm("Wipe?")) { localStorage.clear(); location.reload(); } }
-    function syncData() { const raw = localStorage.getItem(DB_KEY); trips = raw ? JSON.parse(raw) : []; document.getElementById('db-count').innerText = trips.length; }
-    initGPS(); syncData();
+    initGPS(); renderLogs();
 </script>
 </body>
 </html>
