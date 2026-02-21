@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V43.8</title>
+    <title>Gravity Intel V43.9</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -14,21 +14,19 @@
         html, body { height: 100dvh; margin: 0; padding: 0; background: #000; color: #fff; font-family: 'JetBrains Mono', monospace; overflow: hidden; }
         .app-container { display: flex; flex-direction: column; height: 100dvh; width: 100vw; }
         
-        .page { display: none; flex: 1; overflow: hidden; height: calc(100dvh - 80px); }
+        /* Fixed Structure to prevent Map Collapse */
+        .page { display: none; flex: 1; width: 100%; height: calc(100dvh - 80px); overflow: hidden; }
         .active-page { display: flex !important; flex-direction: column; }
 
-        /* Dashboard */
-        #page-dash { padding: 20px; padding-top: 60px; justify-content: space-between; overflow-y: auto; }
+        #page-dash { padding: 20px; padding-top: 50px; justify-content: space-between; overflow-y: auto; }
         
-        /* THE MAP CONTAINER FIX */
-        #page-map { position: relative; height: 100%; width: 100%; }
-        #map-canvas { height: 100% !important; width: 100% !important; background: #111; z-index: 1; }
+        #map-canvas { flex: 1; width: 100% !important; height: 100% !important; background: #111; }
 
         .nav-bar { height: 80px; background: #111; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 2px solid #333; flex-shrink: 0; }
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.5; font-size: 12px; font-weight: 800; }
         .nav-btn-active { opacity: 1; color: var(--accent); background: #1a1a1a; border-top: 4px solid var(--accent); }
         
-        #master-toggle { background: var(--safety) !important; color: #000 !important; padding: 20px; border-radius: 15px; font-size: 20px; font-weight: 900; width: 100%; border: 4px solid #fff; text-transform: uppercase; }
+        #master-toggle { background: var(--safety); color: #000; padding: 22px; border-radius: 18px; font-size: 22px; font-weight: 900; width: 100%; border: 4px solid #fff; text-transform: uppercase; margin-bottom: 10px; cursor: pointer; }
         .btn-active { background: #ff4444 !important; color: #fff !important; }
     </style>
 </head>
@@ -36,13 +34,13 @@
 
 <div class="app-container">
     <div id="page-dash" class="page active-page">
-        <div id="shield-status-box" class="bg-purple-700 p-3 rounded-lg text-center font-bold">SHIELD ACTIVE</div>
+        <div id="shield-status-box" class="bg-purple-700 p-3 rounded-lg text-center font-bold text-xs">SHIELD ACTIVE</div>
         <div class="text-center"><div class="text-[10px] text-zinc-400 uppercase mb-1">Flow Rating</div><span id="live-rate-val" class="text-7xl font-black">0.0</span></div>
-        <div class="flex justify-around items-center bg-zinc-900/40 p-4 rounded-2xl">
+        <div class="flex justify-around items-center bg-zinc-900/60 p-5 rounded-2xl border border-zinc-800">
             <div class="text-center"><span id="speed-out" class="text-4xl font-black italic">0.0</span><div class="text-[9px] text-cyan-400 font-bold uppercase">KM/H</div></div>
             <div class="text-center"><span id="live-dist" class="text-4xl font-black">0.00</span><div class="text-[9px] text-zinc-500 font-bold uppercase">KM</div></div>
         </div>
-        <div class="text-center bg-zinc-900/80 py-4 rounded-3xl border border-zinc-700">
+        <div class="text-center bg-zinc-900 py-6 rounded-3xl border border-zinc-700">
             <div id="timer-display" class="text-6xl font-black text-cyan-400">0.0</div>
             <div class="text-[10px] text-zinc-400 uppercase font-black">Idle Timer</div>
         </div>
@@ -52,7 +50,7 @@
     <div id="page-map" class="page"><div id="map-canvas"></div></div>
     <div id="page-logs" class="page !overflow-y-auto p-5"><div id="log-list"></div></div>
     <div id="page-sys" class="page p-5">
-        <div class="bg-zinc-900 p-4 rounded-xl border border-zinc-800 mb-4 text-sm">Data Stabilization: <span class="text-green-500 font-bold">OPTIMAL</span></div>
+        <div class="bg-zinc-900 p-4 rounded-xl border border-zinc-800 mb-4 text-xs font-bold">Data Stabilization: <span class="text-green-500">ACTIVE</span></div>
         <button onclick="wipeAll()" class="w-full bg-red-950 text-red-500 p-4 rounded-xl font-black uppercase border border-red-900">Wipe Data</button>
     </div>
 
@@ -70,27 +68,30 @@
 <script>
     const DB_KEY = 'GRAVITY_V41_MAIN';
     let trips = [], isArmed = false, currentTrip = null, map, userMarker, startPos = null, lastPos = null;
-    let wakeLock = null, smoothedKmh = 0, isClocking = false, startT = 0, clockFrame = null;
-    let highPerfHeartbeat = null;
+    let wakeLock = null, smoothedKmh = 0, isClocking = false, startT = 0, clockFrame = null, mapRefreshInterval = null;
 
-    window.addEventListener('load', () => { initMap(); setTimeout(() => { toggleEngine(true); }, 1000); });
+    window.addEventListener('load', () => { initMap(); setTimeout(() => { toggleEngine(true); }, 800); });
 
     async function toggleEngine(forceStart = false) {
         if (forceStart) isArmed = true; else isArmed = !isArmed;
         const btn = document.getElementById('master-toggle');
         btn.classList.toggle('btn-active', isArmed);
         btn.innerText = isArmed ? "Finish Trip" : "Start Engine";
+        
         if (isArmed) {
             currentTrip = { id: Date.now(), start: Date.now(), monitorStart: null, path: [], stops: [], dist: 0, totalIdle: 0 };
             document.getElementById('silent-audio').play().catch(()=>{});
             document.getElementById('nosleep').play().catch(()=>{});
             if ('wakeLock' in navigator) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
-            highPerfHeartbeat = setInterval(() => { if (isArmed) saveToStorage(); }, 2000);
         } else {
+            // HARD STOP TIMER
+            isClocking = false;
+            if (clockFrame) cancelAnimationFrame(clockFrame);
+            document.getElementById('timer-display').innerText = "0.0";
+            
             document.getElementById('silent-audio').pause();
             document.getElementById('nosleep').pause();
             if (wakeLock) { try{wakeLock.release();}catch(e){} wakeLock = null; }
-            clearInterval(highPerfHeartbeat);
             saveToStorage();
             currentTrip = null; startPos = null;
         }
@@ -124,7 +125,11 @@
         }, null, { enableHighAccuracy: true });
     }
 
-    function tick() { if (!isClocking) return; document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1); clockFrame = requestAnimationFrame(tick); }
+    function tick() { 
+        if (!isClocking || !isArmed) return; 
+        document.getElementById('timer-display').innerText = ((Date.now() - startT) / 1000).toFixed(1); 
+        clockFrame = requestAnimationFrame(tick); 
+    }
 
     function updateLiveRating() {
         if (!currentTrip || !currentTrip.monitorStart) return;
@@ -168,7 +173,7 @@
             L.polyline(pts, {color: '#00f2ff', weight: 5}).addTo(map);
             t.stops.forEach(s => L.circle([s.lat, s.lon], {radius: Math.sqrt(s.dur)*2.5, color: '#ff0055', fillOpacity: 0.5}).addTo(map));
             if(pts.length) map.fitBounds(L.polyline(pts).getBounds());
-        }, 400);
+        }, 500);
     }
 
     function tab(name) {
@@ -176,11 +181,12 @@
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
         document.getElementById('page-' + name).classList.add('active-page');
         document.getElementById('tab-' + name).classList.add('nav-btn-active');
+        
+        clearInterval(mapRefreshInterval);
         if (name === 'map') { 
             if(!map) initMap(); 
-            // Dual-stage resize fix
-            setTimeout(() => { map.invalidateSize(); }, 100);
-            setTimeout(() => { map.invalidateSize(); }, 400);
+            // Persistent polling fix: Refresh every 500ms while on map tab
+            mapRefreshInterval = setInterval(() => { if(map) map.invalidateSize(); }, 500);
         }
         if (name === 'logs') renderLogs();
     }
@@ -193,9 +199,9 @@
     
     function initMap() { 
         if(map) return;
-        map = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2); 
+        map = L.map('map-canvas', { zoomControl: false, trackResize: true }).setView([0,0], 2); 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); 
-        userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 5, fillOpacity: 1, zIndexOffset: 1000}).addTo(map); 
+        userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 5, fillOpacity: 1}).addTo(map); 
     }
     
     function wipeAll() { if(confirm("Wipe all data?")) { localStorage.clear(); location.reload(); } }
