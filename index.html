@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V43.2</title>
+    <title>Gravity Intel V43.3</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -11,47 +11,73 @@
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;800&display=swap');
         :root { --accent: #00f2ff; --bg: #000000; }
         html, body { height: 100%; margin: 0; padding: 0; background: var(--bg); color: var(--accent); font-family: 'JetBrains Mono', monospace; overflow: hidden; }
-        .app-container { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
-        .page { display: none; flex: 1; overflow-y: auto; padding: 20px; padding-top: 8vh; padding-bottom: 12vh; }
+        .app-container { display: flex; flex-direction: column; height: 100vh; width: 100vw; position: relative; }
+        
+        .page { display: none; flex: 1; height: calc(100vh - 85px); overflow-y: auto; padding: 15px; z-index: 10; padding-top: 40px; }
         .active-page { display: flex !important; flex-direction: column; }
+
+        /* DASHBOARD - Force Fit */
+        #page-dash { justify-content: space-between; padding-bottom: 100px; }
+        
+        /* Fixed Nav */
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #111; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 2px solid #444; z-index: 9999; }
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.6; color: #fff; font-size: 14px; font-weight: 800; }
         .nav-btn-active { opacity: 1; color: var(--accent); background: #222; border-top: 4px solid var(--accent); }
-        #live-rate-val { font-size: 5rem; line-height: 1; color: #fff; font-weight: 900; }
-        #timer-display { font-size: 22vw; font-weight: 900; color: #00f2ff !important; line-height: 1; }
-        .btn-ui { background: #111; border: 1px solid #444; padding: 12px; border-radius: 10px; font-size: 12px; font-weight: 800; text-transform: uppercase; color: white; }
-        .shield-active { background: #7e22ce; color: white; border: 2px solid #a855f7; padding: 12px; border-radius: 10px; text-align: center; font-weight: 800; }
-        .shield-passed { background: #166534; color: #4ade80; border: 2px solid #14532d; padding: 12px; border-radius: 10px; text-align: center; font-weight: 800; }
-        .perf-mode { position: fixed; top: 10px; left: 10px; font-size: 8px; color: #00f2ff; font-weight: 800; background: rgba(0,0,0,0.5); padding: 2px 5px; border-radius: 3px; z-index: 10000; border: 1px solid #00f2ff; }
+        
+        /* High-Vis Elements */
+        #live-rate-val { font-size: 4.5rem; line-height: 1; color: #fff; font-weight: 900; }
+        #timer-display { font-size: 18vw; font-weight: 900; color: #00f2ff !important; line-height: 1; }
+        
+        /* THE BUTTON - Fixed Visibility */
+        #master-toggle { 
+            background: #111; 
+            border: 3px solid #00f2ff; 
+            padding: 15px; 
+            border-radius: 15px; 
+            font-size: 20px; 
+            font-weight: 900; 
+            color: white; 
+            width: 100%; 
+            margin-top: auto;
+            text-shadow: 0 0 10px rgba(0,242,255,0.5);
+        }
+        .btn-active { background: #003344 !important; border-color: #fff !important; }
+
+        .shield-active { background: #7e22ce; color: white; padding: 10px; border-radius: 8px; text-align: center; font-weight: 800; font-size: 12px; }
+        .shield-passed { background: #166534; color: #4ade80; padding: 10px; border-radius: 8px; text-align: center; font-weight: 800; font-size: 12px; }
     </style>
 </head>
 <body>
-<div class="perf-mode">BACKGROUND PERFORMANCE: MAX</div>
+
 <div class="app-container">
-    <div id="page-dash" class="page active-page !justify-start">
-        <div id="shield-status-box" class="shield-active mb-6">SHIELD ACTIVE</div>
-        <div class="text-center mb-8">
-            <div class="text-[10px] text-zinc-400 tracking-[0.3em] uppercase mb-2">Flow Rating</div>
+    <div id="page-dash" class="page active-page">
+        <div id="shield-status-box" class="shield-active">SHIELD ACTIVE</div>
+        
+        <div class="text-center">
+            <div class="text-[10px] text-zinc-500 tracking-[0.3em] uppercase mb-1">Flow Rating</div>
             <span id="live-rate-val">0.0</span>
         </div>
-        <div class="text-center mb-8">
+
+        <div class="text-center">
             <div id="speed-box" class="flex justify-center items-baseline gap-2">
                 <span id="speed-out" class="text-6xl font-black italic text-white">0.0</span>
                 <span class="text-xl font-bold text-cyan-500">KM/H</span>
             </div>
-            <div class="text-[12px] text-zinc-500 mt-1 font-bold">DIST: <span id="live-dist" class="text-white">0.00</span> KM</div>
+            <div class="text-[10px] text-zinc-500 font-bold uppercase">Dist: <span id="live-dist" class="text-white">0.00</span> KM</div>
         </div>
-        <div class="text-center bg-zinc-900/80 py-8 rounded-[30px] border-2 border-zinc-700 mb-6">
+
+        <div class="text-center bg-zinc-900/80 py-6 rounded-[30px] border-2 border-zinc-800">
             <div id="timer-display">0.0</div>
-            <div class="text-[12px] text-zinc-400 uppercase tracking-widest mt-2 font-black">Idle Timer</div>
+            <div class="text-[10px] text-zinc-500 uppercase tracking-widest font-black">Idle Seconds</div>
         </div>
-        <button id="master-toggle" onclick="toggleEngine()" class="btn-ui w-full h-20 text-xl">ENGINE STANDBY</button>
+
+        <button id="master-toggle" onclick="toggleEngine()">ENGINE STANDBY</button>
     </div>
 
     <div id="page-map" class="page !p-0"><div id="map-canvas" class="h-full w-full"></div></div>
     <div id="page-logs" class="page"><div id="log-list"></div></div>
     <div id="page-sys" class="page">
-        <button onclick="wipeAll()" class="btn-ui w-full border-red-900 text-red-700 mt-20">Full Factory Reset</button>
+        <button onclick="wipeAll()" class="btn-ui w-full border border-red-900 text-red-700 p-4 rounded mt-10">Wipe Data</button>
     </div>
 
     <nav class="nav-bar">
@@ -76,45 +102,27 @@
     async function toggleEngine(forceStart = false) {
         if (forceStart) isArmed = true; else isArmed = !isArmed;
         const btn = document.getElementById('master-toggle');
-        btn.classList.toggle('bg-zinc-800', isArmed);
+        btn.classList.toggle('btn-active', isArmed);
         btn.innerText = isArmed ? "ENGINE ACTIVE" : "ENGINE STANDBY";
-        
         if (isArmed) {
             currentTrip = { id: Date.now(), start: Date.now(), monitorStart: null, path: [], stops: [], dist: 0, totalIdle: 0 };
-            activateHighPerformance();
+            document.getElementById('silent-audio').play().catch(()=>{});
+            document.getElementById('nosleep').play().catch(()=>{});
+            if ('wakeLock' in navigator) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
+            highPerfHeartbeat = setInterval(() => { if (isArmed) saveToStorage(); }, 2000);
         } else {
-            deactivateHighPerformance();
+            document.getElementById('silent-audio').pause();
+            document.getElementById('nosleep').pause();
+            if (wakeLock) { wakeLock.release(); wakeLock = null; }
+            clearInterval(highPerfHeartbeat);
             saveToStorage();
             currentTrip = null; startPos = null;
         }
     }
 
-    async function activateHighPerformance() {
-        // Force Audio Hardware Active
-        const audio = document.getElementById('silent-audio');
-        audio.play().catch(()=>{});
-        // Force Video Hardware Active
-        document.getElementById('nosleep').play().catch(()=>{});
-        // Request System Stay-Awake
-        if ('wakeLock' in navigator) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
-        // The Aggressive Heartbeat: forces the browser to run code every 2 seconds
-        highPerfHeartbeat = setInterval(() => {
-            if (isArmed) {
-                saveToStorage(); // Write to disk frequently to prevent process suspension
-            }
-        }, 2000);
-    }
-
-    function deactivateHighPerformance() {
-        document.getElementById('silent-audio').pause();
-        document.getElementById('nosleep').pause();
-        if (wakeLock) { wakeLock.release(); wakeLock = null; }
-        clearInterval(highPerfHeartbeat);
-    }
-
     function initGPS() {
         navigator.geolocation.watchPosition(p => {
-            const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
+            const { latitude: lat, longitude: lon, speed } = p.coords;
             const currentCoords = {lat, lon};
             smoothedKmh = (speed || 0) * 3.6;
             document.getElementById('speed-out').innerText = smoothedKmh.toFixed(1);
@@ -126,12 +134,12 @@
 
                 if (dFromOrigin < 100 && !currentTrip.monitorStart) {
                     sb.innerText = "SHIELD ACTIVE: " + (100 - dFromOrigin).toFixed(0) + "m";
-                    sb.className = "shield-active mb-6";
+                    sb.className = "shield-active";
                 } else {
                     if (!currentTrip.monitorStart) {
                         currentTrip.monitorStart = Date.now();
                         sb.innerText = "MONITORING ACTIVE";
-                        sb.className = "shield-passed mb-6";
+                        sb.className = "shield-passed";
                     }
                     if (lastPos) {
                         currentTrip.dist += getDist(lastPos, currentCoords);
@@ -177,13 +185,13 @@
         const raw = localStorage.getItem(DB_KEY);
         trips = raw ? JSON.parse(raw) : [];
         const list = document.getElementById('log-list');
-        list.innerHTML = trips.length ? '' : '<div class="text-center mt-20 opacity-20 text-white">NO LOGS</div>';
+        list.innerHTML = trips.length ? '' : '<div class="text-center mt-20 opacity-20 text-white font-bold uppercase">No Trips Logged</div>';
         [...trips].reverse().forEach(t => {
             const sp = t.monitorStart || t.start;
             const flow = (((((t.end || Date.now()) - sp) / 1000) - t.totalIdle) / (((t.end || Date.now()) - sp) / 1000) * 10).toFixed(1);
             const card = document.createElement('div');
-            card.className = 'log-card mb-4';
-            card.innerHTML = `<div class="flex justify-between items-center"><span class="text-xs">${new Date(t.start).toLocaleDateString()}</span><span class="text-xl font-black ${flow >= 8 ? 'text-green-500' : 'text-red-500'}">${flow}</span><span class="text-xs font-bold">${t.dist.toFixed(2)}KM</span></div><button onclick="viewTrip(${t.id})" class="btn-ui w-full mt-2">Open Map</button>`;
+            card.className = 'bg-zinc-900 border border-zinc-800 p-4 rounded-xl mb-3';
+            card.innerHTML = `<div class="flex justify-between items-center mb-2"><span class="text-xs text-zinc-500">${new Date(t.start).toLocaleDateString()}</span><span class="text-xl font-black ${flow >= 8 ? 'text-green-500' : 'text-red-500'}">${flow}</span><span class="text-xs font-bold text-white">${t.dist.toFixed(2)}KM</span></div><button onclick="viewTrip(${t.id})" class="w-full bg-zinc-800 p-2 rounded font-bold text-[10px] uppercase">Map View</button>`;
             list.appendChild(card);
         });
     }
