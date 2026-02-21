@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Gravity Intel V43.0</title>
+    <title>Gravity Intel V43.2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -12,63 +12,45 @@
         :root { --accent: #00f2ff; --bg: #000000; }
         html, body { height: 100%; margin: 0; padding: 0; background: var(--bg); color: var(--accent); font-family: 'JetBrains Mono', monospace; overflow: hidden; }
         .app-container { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
-        .page { display: none; flex: 1; overflow-y: auto; padding: 20px; padding-top: 8vh; padding-bottom: 12vh; z-index: 10; }
+        .page { display: none; flex: 1; overflow-y: auto; padding: 20px; padding-top: 8vh; padding-bottom: 12vh; }
         .active-page { display: flex !important; flex-direction: column; }
-        
-        /* High-Visibility Nav */
         .nav-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: #111; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 2px solid #444; z-index: 9999; }
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.6; color: #fff; font-size: 14px; font-weight: 800; }
         .nav-btn-active { opacity: 1; color: var(--accent); background: #222; border-top: 4px solid var(--accent); }
-        
-        /* DASHBOARD FIXES */
-        #live-rate-val { font-size: 5rem; line-height: 1; color: #fff; font-weight: 900; display: block; }
-        #timer-display { font-size: 22vw; font-weight: 900; color: #00f2ff !important; line-height: 1; display: block; }
-        
+        #live-rate-val { font-size: 5rem; line-height: 1; color: #fff; font-weight: 900; }
+        #timer-display { font-size: 22vw; font-weight: 900; color: #00f2ff !important; line-height: 1; }
         .btn-ui { background: #111; border: 1px solid #444; padding: 12px; border-radius: 10px; font-size: 12px; font-weight: 800; text-transform: uppercase; color: white; }
-        .btn-active { background: #062e3d; border-color: var(--accent); color: var(--accent); }
-        .shield-active { background: #7e22ce; color: white; border: 2px solid #a855f7; padding: 12px; border-radius: 10px; text-align: center; font-weight: 800; font-size: 14px; margin-bottom: 20px; }
-        .shield-passed { background: #166534; color: #4ade80; border: 2px solid #14532d; padding: 12px; border-radius: 10px; text-align: center; font-weight: 800; font-size: 14px; margin-bottom: 20px; }
-        .stab-bar { height: 6px; border-radius: 3px; transition: width 0.3s; }
+        .shield-active { background: #7e22ce; color: white; border: 2px solid #a855f7; padding: 12px; border-radius: 10px; text-align: center; font-weight: 800; }
+        .shield-passed { background: #166534; color: #4ade80; border: 2px solid #14532d; padding: 12px; border-radius: 10px; text-align: center; font-weight: 800; }
+        .perf-mode { position: fixed; top: 10px; left: 10px; font-size: 8px; color: #00f2ff; font-weight: 800; background: rgba(0,0,0,0.5); padding: 2px 5px; border-radius: 3px; z-index: 10000; border: 1px solid #00f2ff; }
     </style>
 </head>
 <body>
+<div class="perf-mode">BACKGROUND PERFORMANCE: MAX</div>
 <div class="app-container">
     <div id="page-dash" class="page active-page !justify-start">
-        <div id="shield-status-box" class="shield-active">SHIELD: WAITING FOR 100m EXIT</div>
-        
+        <div id="shield-status-box" class="shield-active mb-6">SHIELD ACTIVE</div>
         <div class="text-center mb-8">
             <div class="text-[10px] text-zinc-400 tracking-[0.3em] uppercase mb-2">Flow Rating</div>
             <span id="live-rate-val">0.0</span>
         </div>
-
-        <div class="mb-8 px-4">
-            <div class="flex justify-between text-[10px] text-zinc-500 mb-2 font-bold"><span>SIGNAL STABILITY</span><span id="stab-val">--</span></div>
-            <div class="w-full bg-zinc-900 h-2 rounded-full"><div id="stab-bar" class="stab-bar w-0 bg-red-600"></div></div>
-        </div>
-
         <div class="text-center mb-8">
             <div id="speed-box" class="flex justify-center items-baseline gap-2">
                 <span id="speed-out" class="text-6xl font-black italic text-white">0.0</span>
                 <span class="text-xl font-bold text-cyan-500">KM/H</span>
             </div>
-            <div class="text-[12px] text-zinc-500 mt-1 font-bold">TOTAL DIST: <span id="live-dist" class="text-white">0.00</span> KM</div>
+            <div class="text-[12px] text-zinc-500 mt-1 font-bold">DIST: <span id="live-dist" class="text-white">0.00</span> KM</div>
         </div>
-
         <div class="text-center bg-zinc-900/80 py-8 rounded-[30px] border-2 border-zinc-700 mb-6">
             <div id="timer-display">0.0</div>
-            <div class="text-[12px] text-zinc-400 uppercase tracking-widest mt-2 font-black">Idle Seconds</div>
+            <div class="text-[12px] text-zinc-400 uppercase tracking-widest mt-2 font-black">Idle Timer</div>
         </div>
-
         <button id="master-toggle" onclick="toggleEngine()" class="btn-ui w-full h-20 text-xl">ENGINE STANDBY</button>
     </div>
 
     <div id="page-map" class="page !p-0"><div id="map-canvas" class="h-full w-full"></div></div>
     <div id="page-logs" class="page"><div id="log-list"></div></div>
     <div id="page-sys" class="page">
-        <div class="text-[12px] text-white p-4 border border-zinc-700 rounded bg-zinc-950">
-            <strong>ACTIVE PRIORITIES:</strong><br>
-            • Reliable Logging<br>• Accurate Map + Proportional Stops<br>• Background Persistence<br>• Auto-Start Engine<br>• 100m Safe Zone Shield<br>• Data Stabilization UI
-        </div>
         <button onclick="wipeAll()" class="btn-ui w-full border-red-900 text-red-700 mt-20">Full Factory Reset</button>
     </div>
 
@@ -81,58 +63,75 @@
 </div>
 
 <video id="nosleep" loop playsinline muted style="display:none;"><source src="data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAAZptb292AAAAbG12aGQAAAAA3u9fS97vX0sAAAPoAAAAKAABAAABAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAAAGWlvZHMBAf//B///BAAAAAAAZHRyYWsAAABcdGtoZAAAAADe719L3u9fSwAAAAEAAAAAAAACAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAABcbWRpYQAAACBtZGhkAAAAAN7vX0ve719LAAALuAAAVGMAAAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABOG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAxyZW0AAAAAAAAAAQAAALNzdGJsAAAAb3N0c2QAAAAAAAAAAQAAAF9hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAIAAgABIAAAASAAAAAAAAAAAOSAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABj//wAAADVhdmNDAWQAHv/hABhnZAAerjB9AQA9AQAW4AAKBAAAAwAKAAAALBIsmXmXvAAAAAAhYnRyYWs=" type="video/mp4"></video>
+<audio id="silent-audio" loop><source src="data:audio/wav;base64,UklGRiQAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=" type="audio/wav"></audio>
 
 <script>
     const DB_KEY = 'GRAVITY_V41_MAIN';
     let trips = [], isArmed = false, currentTrip = null, map, userMarker, startPos = null, lastPos = null;
     let wakeLock = null, smoothedKmh = 0, isClocking = false, startT = 0, clockFrame = null;
+    let highPerfHeartbeat = null;
 
     window.addEventListener('load', () => { setTimeout(() => { toggleEngine(true); }, 1000); });
 
     async function toggleEngine(forceStart = false) {
         if (forceStart) isArmed = true; else isArmed = !isArmed;
         const btn = document.getElementById('master-toggle');
-        btn.classList.toggle('btn-active', isArmed);
+        btn.classList.toggle('bg-zinc-800', isArmed);
         btn.innerText = isArmed ? "ENGINE ACTIVE" : "ENGINE STANDBY";
+        
         if (isArmed) {
             currentTrip = { id: Date.now(), start: Date.now(), monitorStart: null, path: [], stops: [], dist: 0, totalIdle: 0 };
-            document.getElementById('nosleep').play();
-            if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+            activateHighPerformance();
         } else {
+            deactivateHighPerformance();
             saveToStorage();
-            document.getElementById('nosleep').pause();
-            if (wakeLock) wakeLock.release();
             currentTrip = null; startPos = null;
         }
+    }
+
+    async function activateHighPerformance() {
+        // Force Audio Hardware Active
+        const audio = document.getElementById('silent-audio');
+        audio.play().catch(()=>{});
+        // Force Video Hardware Active
+        document.getElementById('nosleep').play().catch(()=>{});
+        // Request System Stay-Awake
+        if ('wakeLock' in navigator) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e){} }
+        // The Aggressive Heartbeat: forces the browser to run code every 2 seconds
+        highPerfHeartbeat = setInterval(() => {
+            if (isArmed) {
+                saveToStorage(); // Write to disk frequently to prevent process suspension
+            }
+        }, 2000);
+    }
+
+    function deactivateHighPerformance() {
+        document.getElementById('silent-audio').pause();
+        document.getElementById('nosleep').pause();
+        if (wakeLock) { wakeLock.release(); wakeLock = null; }
+        clearInterval(highPerfHeartbeat);
     }
 
     function initGPS() {
         navigator.geolocation.watchPosition(p => {
             const { latitude: lat, longitude: lon, speed, accuracy } = p.coords;
             const currentCoords = {lat, lon};
-            
-            const stabBar = document.getElementById('stab-bar');
-            document.getElementById('stab-val').innerText = accuracy.toFixed(1) + "m";
-            let pct = Math.max(5, 100 - (accuracy * 2));
-            stabBar.style.width = pct + '%';
-            stabBar.className = 'stab-bar ' + (accuracy < 10 ? 'bg-cyan-400' : accuracy < 30 ? 'bg-yellow-500' : 'bg-red-600');
-
             smoothedKmh = (speed || 0) * 3.6;
             document.getElementById('speed-out').innerText = smoothedKmh.toFixed(1);
 
             if (isArmed && currentTrip) {
                 if (!startPos) startPos = currentCoords;
-                const distFromOrigin = getDist(startPos, currentCoords) * 1000;
-                const shieldBox = document.getElementById('shield-status-box');
+                const dFromOrigin = getDist(startPos, currentCoords) * 1000;
+                const sb = document.getElementById('shield-status-box');
 
-                if (distFromOrigin < 100 && !currentTrip.monitorStart) {
-                    shieldBox.innerText = "SHIELD ACTIVE: " + (100 - distFromOrigin).toFixed(0) + "m REMAINING";
-                    shieldBox.className = "shield-active";
+                if (dFromOrigin < 100 && !currentTrip.monitorStart) {
+                    sb.innerText = "SHIELD ACTIVE: " + (100 - dFromOrigin).toFixed(0) + "m";
+                    sb.className = "shield-active mb-6";
                 } else {
                     if (!currentTrip.monitorStart) {
                         currentTrip.monitorStart = Date.now();
-                        shieldBox.innerText = "MONITORING ACTIVE";
-                        shieldBox.className = "shield-passed";
+                        sb.innerText = "MONITORING ACTIVE";
+                        sb.className = "shield-passed mb-6";
                     }
                     if (lastPos) {
                         currentTrip.dist += getDist(lastPos, currentCoords);
@@ -141,17 +140,13 @@
                     if (smoothedKmh < 2.5 && !isClocking) { isClocking = true; startT = Date.now(); tick(); }
                     if (smoothedKmh > 3.5 && isClocking) {
                         const dur = (Date.now() - startT) / 1000;
-                        if (dur > 5) {
-                            currentTrip.stops.push({lat, lon, dur, ts: new Date().toLocaleTimeString()});
-                            currentTrip.totalIdle += dur;
-                        }
+                        if (dur > 5) { currentTrip.stops.push({lat, lon, dur}); currentTrip.totalIdle += dur; }
                         isClocking = false; cancelAnimationFrame(clockFrame);
                         document.getElementById('timer-display').innerText = "0.0";
                     }
                     updateLiveRating();
                 }
-                currentTrip.path.push({lat, lon, speed: smoothedKmh});
-                if (currentTrip.path.length % 10 === 0) saveToStorage();
+                currentTrip.path.push({lat, lon, ts: Date.now()});
             }
             lastPos = currentCoords;
             if (userMarker) userMarker.setLatLng([lat, lon]);
@@ -182,14 +177,13 @@
         const raw = localStorage.getItem(DB_KEY);
         trips = raw ? JSON.parse(raw) : [];
         const list = document.getElementById('log-list');
-        list.innerHTML = trips.length ? '' : '<div class="text-center mt-20 opacity-20 text-white">NO RECORDS FOUND</div>';
+        list.innerHTML = trips.length ? '' : '<div class="text-center mt-20 opacity-20 text-white">NO LOGS</div>';
         [...trips].reverse().forEach(t => {
-            const startPoint = t.monitorStart || t.start;
-            const durationSec = ((t.end || Date.now()) - startPoint) / 1000;
-            const flow = durationSec > 0 ? ((durationSec - t.totalIdle) / durationSec * 10).toFixed(1) : "0.0";
+            const sp = t.monitorStart || t.start;
+            const flow = (((((t.end || Date.now()) - sp) / 1000) - t.totalIdle) / (((t.end || Date.now()) - sp) / 1000) * 10).toFixed(1);
             const card = document.createElement('div');
-            card.className = 'log-card';
-            card.innerHTML = `<div class="flex justify-between items-center"><span class="text-[10px] text-zinc-500">${new Date(t.start).toLocaleDateString()}</span><span class="text-xl font-black ${flow >= 8 ? 'text-green-500' : flow >= 4 ? 'text-orange-500' : 'text-red-600'}">${flow}</span><span class="text-xs font-bold text-white">${t.dist.toFixed(2)} KM</span></div><div class="flex gap-2 mt-3"><button onclick="viewTrip(${t.id})" class="btn-ui flex-1">Map View</button><button onclick="deleteTrip(${t.id})" class="btn-ui text-red-700">DEL</button></div>`;
+            card.className = 'log-card mb-4';
+            card.innerHTML = `<div class="flex justify-between items-center"><span class="text-xs">${new Date(t.start).toLocaleDateString()}</span><span class="text-xl font-black ${flow >= 8 ? 'text-green-500' : 'text-red-500'}">${flow}</span><span class="text-xs font-bold">${t.dist.toFixed(2)}KM</span></div><button onclick="viewTrip(${t.id})" class="btn-ui w-full mt-2">Open Map</button>`;
             list.appendChild(card);
         });
     }
@@ -198,17 +192,14 @@
         const t = trips.find(tr => tr.id === id); if(!t) return;
         tab('map');
         setTimeout(() => {
-            map.eachLayer(l => { if(l instanceof L.Polyline || l instanceof L.Circle || (l instanceof L.CircleMarker && l !== userMarker)) map.removeLayer(l); });
+            map.eachLayer(l => { if(l instanceof L.Polyline || l instanceof L.Circle || l.options.radius === 5) {} else if(l !== userMarker) map.removeLayer(l); });
             const pts = t.path.map(p => [p.lat, p.lon]);
             L.polyline(pts, {color: '#00f2ff', weight: 5}).addTo(map);
-            t.stops.forEach(s => {
-                L.circle([s.lat, s.lon], {radius: Math.sqrt(s.dur) * 2.5, color: '#ff0055', fillColor: '#ff0055', fillOpacity: 0.5}).addTo(map);
-            });
+            t.stops.forEach(s => L.circle([s.lat, s.lon], {radius: Math.sqrt(s.dur)*2.5, color: '#ff0055', fillOpacity: 0.5}).addTo(map));
             if(pts.length) map.fitBounds(L.polyline(pts).getBounds());
         }, 300);
     }
 
-    function deleteTrip(id) { trips = trips.filter(t => t.id !== id); localStorage.setItem(DB_KEY, JSON.stringify(trips)); renderLogs(); }
     function tab(name) {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-btn-active'));
@@ -223,7 +214,7 @@
         return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))); 
     }
     function initMap() { map = L.map('map-canvas', { zoomControl: false }).setView([0,0], 2); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); userMarker = L.circleMarker([0,0], {color: '#00f2ff', radius: 5, fillOpacity: 1}).addTo(map); }
-    function wipeAll() { if(confirm("Clear All Data?")) { localStorage.clear(); location.reload(); } }
+    function wipeAll() { if(confirm("Wipe?")) { localStorage.clear(); location.reload(); } }
     initGPS(); renderLogs();
 </script>
 </body>
