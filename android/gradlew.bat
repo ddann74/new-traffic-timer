@@ -1,0 +1,3 @@
+@echo off
+echo Using Gradle wrapper...
+gradle %*
