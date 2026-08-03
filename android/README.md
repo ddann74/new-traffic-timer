@@ -78,3 +78,21 @@ purpose - and does cost battery - when nothing is rendering it.
 
 The tracking notification has a "Finish Trip" action, so you can end and
 save a trip without reopening the app.
+
+## Diagnostic log (SYS tab)
+
+Below "Factory Wipe" on the SYS tab is a verbose, persistent event log:
+service lifecycle, every GPS provider check and location update, idle
+clock start/stop transitions, permission grant/denial results, trip
+save success/failure, and wake lock acquire/release. It's written to a
+file (`diagnostic.log` in app-private storage), not kept only in memory
+- deliberately, since the scenario most worth debugging (the process
+getting killed unexpectedly) is exactly the one an in-memory-only log
+would lose right when it's needed most.
+
+It's pulled fresh each time you open the SYS tab, not continuously
+pushed - the log is written regardless of whether the app is even open.
+Writes are cheap appends rather than a full rewrite each time (this
+logs on every location update, so that matters for a long trip), with
+the file trimmed back down to the last 5000 lines periodically rather
+than left fully unbounded. Tap "Clear" to wipe it.

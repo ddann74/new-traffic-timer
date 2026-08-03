@@ -66,11 +66,13 @@ public class TrackingService extends Service implements LocationListener {
         super.onCreate();
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         ensureChannel();
+        DiagnosticLog.log(this, "SERVICE", "onCreate");
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent != null ? intent.getAction() : null;
+        DiagnosticLog.log(this, "SERVICE", "onStartCommand action=" + action);
         if (ACTION_START_TRIP.equals(action)) {
             startTrip();
         } else if (ACTION_FINISH_TRIP.equals(action)) {
@@ -85,7 +87,10 @@ public class TrackingService extends Service implements LocationListener {
     }
 
     private void startTrip() {
-        if (TrackingState.armed) return;
+        if (TrackingState.armed) {
+            DiagnosticLog.log(this, "TRIP", "startTrip ignored - already armed");
+            return;
+        }
         TrackingState.reset();
         TrackingState.armed = true;
 
@@ -96,6 +101,7 @@ public class TrackingService extends Service implements LocationListener {
         totalIdleSeconds = 0;
         pathPoints = new org.json.JSONArray();
         stopPoints = new org.json.JSONArray();
+        DiagnosticLog.log(this, "TRIP", "startTrip id=" + tripId);
 
         startForeground(NOTIFICATION_ID, buildNotification());
         acquireWakeLock();
@@ -106,11 +112,22 @@ public class TrackingService extends Service implements LocationListener {
 
     private void finishTrip() {
         if (!TrackingState.armed) {
+            DiagnosticLog.log(this, "TRIP", "finishTrip ignored - no trip was armed");
             stopSelf();
             return;
         }
+        if (isClocking) {
+            // Fold in whatever idle stretch was still in progress when the trip
+            // ended - otherwise the final idle period never gets counted, since
+            // normally that only happens when speed resumes past the threshold.
+            totalIdleSeconds += (System.currentTimeMillis() - clockStartMillis) / 1000.0;
+        }
         stopClock();
         saveTrip();
+        DiagnosticLog.log(this, "TRIP", String.format(Locale.US,
+                "finishTrip id=%d distanceKm=%.2f totalIdleSeconds=%.1f pathPoints=%d flowRating=%.1f",
+                tripId, TrackingState.distanceKm, totalIdleSeconds,
+                pathPoints != null ? pathPoints.length() : 0, TrackingState.flowRating));
         TrackingState.armed = false;
         stopTicking();
         stopLocationUpdates();
@@ -123,14 +140,18 @@ public class TrackingService extends Service implements LocationListener {
     private void requestLocationUpdates() {
         boolean hasFine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED;
+        DiagnosticLog.log(this, "GPS", "ACCESS_FINE_LOCATION granted=" + hasFine);
         if (!hasFine) return;
         for (String provider : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
+            boolean enabled = locationManager.isProviderEnabled(provider);
+            DiagnosticLog.log(this, "GPS", provider + " enabled=" + enabled);
+            if (!enabled) continue;
             try {
-                if (locationManager.isProviderEnabled(provider)) {
-                    locationManager.requestLocationUpdates(provider, 1000L, 0f, this);
-                }
+                locationManager.requestLocationUpdates(provider, 1000L, 0f, this);
+                DiagnosticLog.log(this, "GPS", "requestLocationUpdates registered for " + provider);
             } catch (Exception e) {
-                // this provider isn't usable on this device - the other one may still work
+                DiagnosticLog.log(this, "GPS", "requestLocationUpdates failed for " + provider
+                        + ": " + e.getMessage());
             }
         }
     }
@@ -138,8 +159,9 @@ public class TrackingService extends Service implements LocationListener {
     private void stopLocationUpdates() {
         try {
             locationManager.removeUpdates(this);
+            DiagnosticLog.log(this, "GPS", "removeUpdates succeeded");
         } catch (Exception e) {
-            // already removed or never registered
+            DiagnosticLog.log(this, "GPS", "removeUpdates failed: " + e.getMessage());
         }
     }
 
@@ -150,8 +172,10 @@ public class TrackingService extends Service implements LocationListener {
         TrackingState.lat = location.getLatitude();
         TrackingState.lon = location.getLongitude();
 
+        double deltaKm = 0;
         if (lastLocation != null) {
-            TrackingState.distanceKm += distanceKm(lastLocation, location);
+            deltaKm = distanceKm(lastLocation, location);
+            TrackingState.distanceKm += deltaKm;
 
             if (kmh < IDLE_SPEED_THRESHOLD_KMH && !isClocking) {
                 startClock();
@@ -170,20 +194,39 @@ public class TrackingService extends Service implements LocationListener {
         updateFlowRating();
         broadcastState();
         updateNotification();
+
+        DiagnosticLog.log(this, "GPS", String.format(Locale.US,
+                "onLocationChanged lat=%.5f lon=%.5f speedKmh=%.1f deltaKm=%.4f totalKm=%.2f accuracy=%.0fm provider=%s",
+                location.getLatitude(), location.getLongitude(), kmh, deltaKm,
+                TrackingState.distanceKm, location.getAccuracy(), location.getProvider()));
     }
 
-    @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
-    @Override public void onProviderEnabled(String provider) {}
-    @Override public void onProviderDisabled(String provider) {}
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+        DiagnosticLog.log(this, "GPS", "onStatusChanged provider=" + provider + " status=" + status);
+    }
+
+    @Override
+    public void onProviderEnabled(String provider) {
+        DiagnosticLog.log(this, "GPS", "onProviderEnabled " + provider);
+    }
+
+    @Override
+    public void onProviderDisabled(String provider) {
+        DiagnosticLog.log(this, "GPS", "onProviderDisabled " + provider);
+    }
 
     private void startClock() {
         isClocking = true;
         clockStartMillis = System.currentTimeMillis();
+        DiagnosticLog.log(this, "IDLE", "idle clock started");
     }
 
     private void stopClock() {
         isClocking = false;
         TrackingState.idleSeconds = 0;
+        DiagnosticLog.log(this, "IDLE", "idle clock stopped, totalIdleSeconds="
+                + String.format(Locale.US, "%.1f", totalIdleSeconds));
     }
 
     private void startTicking() {
@@ -241,7 +284,10 @@ public class TrackingService extends Service implements LocationListener {
     }
 
     private void saveTrip() {
-        if (pathPoints == null || pathPoints.length() < 2) return;
+        if (pathPoints == null || pathPoints.length() < 2) {
+            DiagnosticLog.log(this, "TRIP", "saveTrip skipped - fewer than 2 path points recorded");
+            return;
+        }
         try {
             JSONObject trip = new JSONObject();
             trip.put("id", tripId);
@@ -253,8 +299,9 @@ public class TrackingService extends Service implements LocationListener {
             trip.put("path", pathPoints);
             trip.put("stops", stopPoints);
             TripStore.appendTrip(getApplicationContext(), trip);
+            DiagnosticLog.log(this, "TRIP", "saveTrip succeeded, " + pathPoints.length() + " path points");
         } catch (JSONException e) {
-            // trip couldn't be assembled - nothing to persist
+            DiagnosticLog.log(this, "TRIP", "saveTrip failed: " + e.getMessage());
         }
     }
 
@@ -313,14 +360,20 @@ public class TrackingService extends Service implements LocationListener {
 
     private void acquireWakeLock() {
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-        if (pm == null) return;
+        if (pm == null) {
+            DiagnosticLog.log(this, "WAKE_LOCK", "acquire skipped - PowerManager unavailable");
+            return;
+        }
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "GravityIntel:TrackingWakeLock");
         wakeLock.acquire(WAKE_LOCK_SAFETY_TIMEOUT_MS);
+        DiagnosticLog.log(this, "WAKE_LOCK", "acquired, safety timeout="
+                + (WAKE_LOCK_SAFETY_TIMEOUT_MS / 60000) + "min");
     }
 
     private void releaseWakeLock() {
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release();
+            DiagnosticLog.log(this, "WAKE_LOCK", "released");
         }
         wakeLock = null;
     }
@@ -328,6 +381,7 @@ public class TrackingService extends Service implements LocationListener {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        DiagnosticLog.log(this, "SERVICE", "onDestroy");
         stopTicking();
         stopLocationUpdates();
         releaseWakeLock();

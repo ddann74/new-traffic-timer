@@ -33,9 +33,12 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    private static final int PERMISSION_REQUEST_CODE = 100;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        DiagnosticLog.log(this, "ACTIVITY", "onCreate");
 
         webView = new WebView(this);
         setContentView(webView);
@@ -60,12 +63,24 @@ public class MainActivity extends AppCompatActivity {
         }
         List<String> toRequest = new ArrayList<>();
         for (String p : perms) {
-            if (ContextCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
+            boolean granted = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED;
+            DiagnosticLog.log(this, "PERMISSION", p + " alreadyGranted=" + granted);
+            if (!granted) {
                 toRequest.add(p);
             }
         }
         if (!toRequest.isEmpty()) {
-            ActivityCompat.requestPermissions(this, toRequest.toArray(new String[0]), 100);
+            ActivityCompat.requestPermissions(this, toRequest.toArray(new String[0]), PERMISSION_REQUEST_CODE);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != PERMISSION_REQUEST_CODE) return;
+        for (int i = 0; i < permissions.length; i++) {
+            boolean granted = i < grantResults.length && grantResults[i] == PackageManager.PERMISSION_GRANTED;
+            DiagnosticLog.log(this, "PERMISSION", permissions[i] + " result granted=" + granted);
         }
     }
 
@@ -82,6 +97,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        DiagnosticLog.log(this, "ACTIVITY", "onResume");
         LocalBroadcastManager.getInstance(this).registerReceiver(
                 stateReceiver, new IntentFilter(TrackingService.ACTION_STATE_UPDATED));
         pushStateToWebView();
@@ -90,6 +106,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        DiagnosticLog.log(this, "ACTIVITY", "onPause");
         LocalBroadcastManager.getInstance(this).unregisterReceiver(stateReceiver);
     }
 

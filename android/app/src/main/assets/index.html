@@ -47,12 +47,18 @@
 
     <div id="page-logs" class="page !overflow-y-auto p-5"><div id="log-list" class="pb-10"></div></div>
 
-    <div id="page-sys" class="page p-5">
+    <div id="page-sys" class="page !overflow-y-auto p-5">
         <div class="bg-zinc-900 p-4 rounded border border-zinc-800 mb-4 text-[10px] flex justify-between">
             <span>Data Stabilization:</span>
             <span class="text-green-500 font-bold uppercase">Active</span>
         </div>
-        <button onclick="wipeAll()" class="w-full bg-red-950 text-red-500 p-4 rounded font-black uppercase border border-red-900">Factory Wipe</button>
+        <button onclick="wipeAll()" class="w-full bg-red-950 text-red-500 p-4 rounded font-black uppercase border border-red-900 mb-4">Factory Wipe</button>
+
+        <div class="flex justify-between items-center mb-2">
+            <span class="text-[10px] text-zinc-500 uppercase font-bold">Diagnostic Log</span>
+            <button onclick="clearDiagnosticLog()" class="bg-zinc-800 text-zinc-300 text-[9px] font-black uppercase px-3 py-1 rounded">Clear</button>
+        </div>
+        <pre id="diag-log" class="bg-zinc-900 border border-zinc-800 rounded p-3 text-[9px] text-zinc-400 whitespace-pre-wrap break-words pb-10"></pre>
     </div>
 
     <nav class="nav-bar">
@@ -131,6 +137,7 @@
         document.getElementById('tab-' + name).classList.add('nav-btn-active');
         if (name === 'map') setTimeout(() => map.invalidateSize(), 50);
         if (name === 'logs') renderLogs();
+        if (name === 'sys') renderDiagnosticLog();
     }
 
     function viewTrip(id) {
@@ -165,6 +172,21 @@
             window.Native.wipeAll();
             renderLogs();
         }
+    }
+
+    /** Pulled fresh each time the SYS tab opens, not continuously pushed - the log
+      * is written natively by TrackingService regardless of whether this page is
+      * even open, so there's nothing to keep live-synced while you're looking at a
+      * different tab. */
+    function renderDiagnosticLog() {
+        const el = document.getElementById('diag-log');
+        const text = window.Native.getDiagnosticLogText();
+        el.textContent = text && text.trim() ? text : '(empty)';
+    }
+
+    function clearDiagnosticLog() {
+        window.Native.clearDiagnosticLog();
+        renderDiagnosticLog();
     }
 </script>
 </body>

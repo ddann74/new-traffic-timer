@@ -20,6 +20,7 @@ public class NativeBridge {
 
     @JavascriptInterface
     public void startTrip() {
+        DiagnosticLog.log(context, "BRIDGE", "startTrip() requested from WebView");
         Intent intent = new Intent(context, TrackingService.class);
         intent.setAction(TrackingService.ACTION_START_TRIP);
         ContextCompat.startForegroundService(context, intent);
@@ -27,6 +28,7 @@ public class NativeBridge {
 
     @JavascriptInterface
     public void finishTrip() {
+        DiagnosticLog.log(context, "BRIDGE", "finishTrip() requested from WebView");
         // Plain startService, not startForegroundService: the service is already
         // running in the foreground from startTrip(), so this is just delivering a
         // new command to it, not promoting it - no 5-second startForeground()
@@ -66,6 +68,18 @@ public class NativeBridge {
 
     @JavascriptInterface
     public void wipeAll() {
+        DiagnosticLog.log(context, "BRIDGE", "wipeAll() requested from WebView - trips cleared");
         TripStore.wipeAll(context);
+    }
+
+    @JavascriptInterface
+    public String getDiagnosticLogText() {
+        return DiagnosticLog.getAllText(context);
+    }
+
+    @JavascriptInterface
+    public void clearDiagnosticLog() {
+        DiagnosticLog.clear(context);
+        DiagnosticLog.log(context, "BRIDGE", "diagnostic log cleared from WebView");
     }
 }
