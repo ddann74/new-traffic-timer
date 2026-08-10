@@ -91,6 +91,10 @@ public class TrackingService extends Service implements LocationListener {
             DiagnosticLog.log(this, "TRIP", "startTrip ignored - already armed");
             return;
         }
+        // Stop the idle-watcher regardless of what triggered this trip (manual tap
+        // or MotionMonitorService's own auto-start) - exactly one of the two
+        // services runs, and therefore shows a notification, at a time.
+        stopService(new Intent(this, MotionMonitorService.class));
         TrackingState.reset();
         TrackingState.armed = true;
 
@@ -133,6 +137,9 @@ public class TrackingService extends Service implements LocationListener {
         stopLocationUpdates();
         releaseWakeLock();
         broadcastState();
+        // Resume idle-watching for the next trip - started before this service
+        // stops so there's no gap with neither service's notification showing.
+        ContextCompat.startForegroundService(this, new Intent(this, MotionMonitorService.class));
         stopForeground(true);
         stopSelf();
     }
@@ -267,7 +274,10 @@ public class TrackingService extends Service implements LocationListener {
             point.put("ts", System.currentTimeMillis());
             pathPoints.put(point);
         } catch (JSONException e) {
-            // skip this point rather than crash tracking over it
+            // Skip this point rather than crash tracking over it, but still record
+            // that it happened - silently dropping a path point used to leave no
+            // trace at all of a shorter-than-expected trip.
+            DiagnosticLog.log(this, "TRIP", "addPathPoint failed, point dropped: " + e.getMessage());
         }
     }
 
@@ -279,7 +289,7 @@ public class TrackingService extends Service implements LocationListener {
             stop.put("dur", durationSeconds);
             stopPoints.put(stop);
         } catch (JSONException e) {
-            // skip this stop rather than crash tracking over it
+            DiagnosticLog.log(this, "TRIP", "addStopPoint failed, stop dropped: " + e.getMessage());
         }
     }
 
@@ -298,8 +308,12 @@ public class TrackingService extends Service implements LocationListener {
             trip.put("rating", String.format(Locale.US, "%.1f", TrackingState.flowRating));
             trip.put("path", pathPoints);
             trip.put("stops", stopPoints);
-            TripStore.appendTrip(getApplicationContext(), trip);
-            DiagnosticLog.log(this, "TRIP", "saveTrip succeeded, " + pathPoints.length() + " path points");
+            // Previously logged "succeeded" unconditionally right here, based only
+            // on this JSON object having been built - not on whether TripStore
+            // actually wrote it to disk. Now reflects the real outcome.
+            boolean persisted = TripStore.appendTrip(getApplicationContext(), trip);
+            DiagnosticLog.log(this, "TRIP", "saveTrip " + (persisted ? "succeeded" : "FAILED - trip data NOT written to disk")
+                    + ", " + pathPoints.length() + " path points");
         } catch (JSONException e) {
             DiagnosticLog.log(this, "TRIP", "saveTrip failed: " + e.getMessage());
         }

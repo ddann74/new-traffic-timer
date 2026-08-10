@@ -52,6 +52,16 @@ public class MainActivity extends AppCompatActivity {
         webView.loadUrl("file:///android_asset/index.html");
 
         requestPermissions();
+        startMotionMonitor();
+    }
+
+    /** Starts the idle-watcher that auto-starts a trip on movement. Safe to call
+      * even before permission is granted or if a trip is already active -
+      * MotionMonitorService checks both itself and simply does nothing until
+      * they're true. Called again once permission is granted below, in case it
+      * wasn't yet at onCreate time. */
+    private void startMotionMonitor() {
+        ContextCompat.startForegroundService(this, new Intent(this, MotionMonitorService.class));
     }
 
     private void requestPermissions() {
@@ -82,6 +92,10 @@ public class MainActivity extends AppCompatActivity {
             boolean granted = i < grantResults.length && grantResults[i] == PackageManager.PERMISSION_GRANTED;
             DiagnosticLog.log(this, "PERMISSION", permissions[i] + " result granted=" + granted);
         }
+        // Retry: the first startMotionMonitor() call in onCreate ran before the
+        // user answered this prompt, so it had nothing to check permission against
+        // yet - MotionMonitorService itself no-ops if it's already watching.
+        startMotionMonitor();
     }
 
     /** Pushes TrackingService's current state into the page via evaluateJavascript.
@@ -108,6 +122,12 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
         DiagnosticLog.log(this, "ACTIVITY", "onPause");
         LocalBroadcastManager.getInstance(this).unregisterReceiver(stateReceiver);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        DiagnosticLog.log(this, "ACTIVITY", "onDestroy");
     }
 
     @Override

@@ -14,7 +14,8 @@
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.AppCompat.NoActionBar"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:name=".GravityApplication">
 
         <activity
             android:name=".MainActivity"
@@ -30,6 +31,13 @@
              Finish Trip action) ever starts this service. -->
         <service
             android:name=".TrackingService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <!-- Not exported: only MainActivity (on open) or TrackingService (when a
+             trip finishes) ever starts this service. -->
+        <service
+            android:name=".MotionMonitorService"
             android:exported="false"
             android:foregroundServiceType="location" />
 
