@@ -51,6 +51,7 @@ public class NativeBridge {
             state.put("lon", TrackingState.lon);
             return state.toString();
         } catch (JSONException e) {
+            DiagnosticLog.log(context, "BRIDGE", "getStateJson() failed: " + e.getMessage());
             return "{}";
         }
     }
@@ -68,7 +69,10 @@ public class NativeBridge {
 
     @JavascriptInterface
     public void wipeAll() {
-        DiagnosticLog.log(context, "BRIDGE", "wipeAll() requested from WebView - trips cleared");
+        DiagnosticLog.log(context, "BRIDGE", "wipeAll() requested from WebView");
+        // The outcome (succeeded/FAILED) is logged by TripStore.wipeAll() itself,
+        // not asserted here - this method used to say "trips cleared" unconditionally
+        // even if the underlying write failed.
         TripStore.wipeAll(context);
     }
 

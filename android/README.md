@@ -19,6 +19,9 @@ Instead, tracking itself is native:
   distance/idle-time/flow-rating itself, and saves finished trips to a JSON file
   in app-private storage. None of this depends on the WebView being visible,
   attached, or even created.
+- **`MotionMonitorService`** - the idle-time counterpart to `TrackingService`,
+  active only while no trip is running. Auto-starts a trip on real movement -
+  see "Auto-start on movement" below.
 - **`assets/index.html`** - the same page, visually unchanged, but its tracking
   logic is replaced with a thin bridge: button taps call `window.Native.startTrip()`
   / `.finishTrip()`, and the page renders whatever state
@@ -46,15 +49,40 @@ that persistent notification actually showing. `WAKE_LOCK` is held for the
 duration of an active trip only, released the moment it finishes, with a
 6-hour safety timeout regardless.
 
-## Deliberate behavior change from the original page
+## Auto-start on movement
 
-The web version auto-armed tracking 500ms after load. This version does
-**not** auto-start a trip on open - you have to tap "Start Engine" yourself.
-Auto-starting a background service with a wake lock and a persistent
-notification just because the app was opened (even to check something else)
-felt like the wrong default; the original ephemeral webpage didn't carry that
-same battery/notification cost, so the tradeoff that made auto-start harmless
-there doesn't carry over here.
+`MotionMonitorService` runs whenever no trip is active - a second, much
+lighter foreground service that checks `NETWORK_PROVIDER` location (never
+GPS) roughly every 25 seconds and auto-starts a trip once computed speed
+reaches 8 km/h. It shows its own low-priority "Watching for movement"
+notification while idle. `TrackingService` stops it the instant a trip is
+armed (by this trigger or a manual "Start Engine" tap) and restarts it the
+instant a trip finishes, so exactly one of the two services - and exactly
+one notification - is ever active at a time.
+
+This only fires on devices with a working network-based location provider;
+there's no fallback to GPS for idle-watching, since that would defeat the
+point of keeping idle battery cost low. "Start Engine" still works manually
+regardless.
+
+Auto-start only ends a trip the way it always did - you (or the
+notification's action) still have to tap Finish Trip; nothing currently
+auto-finishes a trip after a period of stillness.
+
+This only runs once the app has been opened at least once and stays running
+while backgrounded or minimized - it does not survive a phone reboot or a
+force-close on its own (no boot-completed receiver). Reopening the app once
+resumes it, same as everything else here already required.
+
+## Earlier design note (superseded above)
+
+The original web version auto-armed tracking 500ms after every page load,
+with no way to opt out short of not opening the page. The first native build
+deliberately dropped that - auto-starting a background service with a wake
+lock and a persistent notification just because the app was opened felt like
+the wrong default. Auto-start is back now, but scoped to an explicit signal
+(real movement) rather than merely opening the app, which is a meaningfully
+different tradeoff than what was rejected here originally.
 
 ## Also different from the web version
 
@@ -69,10 +97,12 @@ purpose - and does cost battery - when nothing is rendering it.
 2. Sync Gradle
 3. Run on a device (minSdk 21)
 4. Grant location + notification permissions when prompted
-5. Tap "Start Engine" - the persistent notification confirms tracking is
-   active; backgrounding the app, locking the screen, or switching apps
-   doesn't stop it. Tap "Finish Trip" in the app or the notification's
-   action button to end the trip and save it.
+5. Once granted, a "Watching for movement" notification appears - that's
+   `MotionMonitorService` idling. Start moving at 8 km/h or faster (or just
+   tap "Start Engine" yourself) and it hands off to "Tracking trip";
+   backgrounding the app, locking the screen, or switching apps doesn't stop
+   either. Tap "Finish Trip" in the app or the notification's action button
+   to end the trip, save it, and go back to watching for the next one.
 
 ## Ending a trip from the notification
 
@@ -84,7 +114,11 @@ save a trip without reopening the app.
 Below "Factory Wipe" on the SYS tab is a verbose, persistent event log:
 service lifecycle, every GPS provider check and location update, idle
 clock start/stop transitions, permission grant/denial results, trip
-save success/failure, and wake lock acquire/release. It's written to a
+save success/failure, and wake lock acquire/release - for both
+`TrackingService` ("TRIP"/"GPS"/"WAKE_LOCK" tags) and `MotionMonitorService`
+("MONITOR" tag, including every idle speed check and what triggered an
+auto-start), plus full `Activity` lifecycle ("ACTIVITY") and every
+`window.Native` bridge call from the WebView ("BRIDGE"). It's written to a
 file (`diagnostic.log` in app-private storage), not kept only in memory
 - deliberately, since the scenario most worth debugging (the process
 getting killed unexpectedly) is exactly the one an in-memory-only log
@@ -96,3 +130,50 @@ Writes are cheap appends rather than a full rewrite each time (this
 logs on every location update, so that matters for a long trip), with
 the file trimmed back down to the last 5000 lines periodically rather
 than left fully unbounded. Tap "Clear" to wipe it.
+
+### Gaps this used to have, now closed
+
+A prior version of this log had real blind spots for troubleshooting -
+these are all closed now (native-side only; nothing changed on the
+WebView/JS side):
+
+- **`TripStore` used to fail silently.** `loadTrips`/`saveTrips` swallowed
+  `IOException`/`JSONException` with no log entry at all, and
+  `TrackingService.saveTrip()` logged `"saveTrip succeeded"` right after
+  building the trip's JSON object - regardless of whether the write to
+  `trips.json` actually succeeded. Every read and write in `TripStore` now
+  logs its real outcome (`"TRIPSTORE"` tag), and `saveTrip()`'s own log line
+  reflects what `TripStore` actually reported, not just JSON construction.
+- **Two silent catches in `TrackingService`** (`addPathPoint`/`addStopPoint`
+  dropping a point on a `JSONException`) now log when it happens, so a
+  trip that came out shorter than expected leaves a trace of why.
+- **The diagnostic log could itself fail with zero trace.** `DiagnosticLog`'s
+  own file read/write failures were silently swallowed. They now fall back
+  to `Logcat` (`android.util.Log`) - the one deliberate use of Logcat in
+  this app, and only as a last resort when the primary file-backed log
+  itself can't be written to or read.
+- **No crash handler existed at all.** `GravityApplication` (declared as
+  the app's `android:name` in the manifest) installs a process-wide
+  `Thread.UncaughtExceptionHandler` before any `Activity` or `Service` runs
+  - deliberately an `Application` subclass rather than wired from
+  `MainActivity.onCreate()`, since `MotionMonitorService` is `START_STICKY`
+  and the OS can restart it directly in a fresh process without
+  `MainActivity` ever running first. It logs the thread name and full stack
+  trace under a `"CRASH"` tag, then always chains to whatever handler was
+  already installed (or force-kills the process itself if none was) - it
+  never swallows a crash Android or Play Console would otherwise see.
+- **`MainActivity` lifecycle was missing `onDestroy`** (onCreate/onResume/
+  onPause were already logged) - added for symmetry.
+- **Read-side bridge calls weren't logged.** `NativeBridge.getStateJson()`'s
+  `JSONException` catch (essentially unreachable in practice, but was
+  silent) now logs on failure. `wipeAll()` no longer asserts "trips
+  cleared" unconditionally - the real success/failure now comes from
+  `TripStore.wipeAll()` itself.
+
+What's still deliberately *not* logged, not because it was missed but
+because it isn't a native-app gap: JavaScript-side errors inside
+`assets/index.html` (a WebView console-error bridge would be new
+web-app-facing work, out of scope here), and routine successful reads that
+carry no diagnostic value on their own (e.g. `getDiagnosticLogText()`
+itself isn't logged - doing so would mean opening the SYS tab writes a new
+entry into the log you're currently reading).

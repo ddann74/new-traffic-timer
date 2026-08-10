@@ -36,7 +36,10 @@ public final class DiagnosticLog {
         try (FileOutputStream fos = new FileOutputStream(file, true)) {
             fos.write(entry.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
-            // best-effort logging - nothing further to do if the write fails
+            // The one deliberate use of Logcat in this app: if the file-backed log
+            // itself can't be written to, this is the only place left where a trace
+            // of that failure - and whatever event triggered this call - survives.
+            android.util.Log.e("DiagnosticLog", "Failed to write entry: " + entry, e);
         }
         appendsSinceCompact++;
         if (appendsSinceCompact >= COMPACT_INTERVAL) {
@@ -78,7 +81,9 @@ public final class DiagnosticLog {
                 if (!line.isEmpty()) lines.add(line);
             }
         } catch (IOException e) {
-            // unreadable log file - start fresh rather than crash over it
+            // Unreadable log file - start fresh rather than crash over it, but
+            // Logcat is the only place this failure itself is now visible.
+            android.util.Log.e("DiagnosticLog", "Failed to read log file, starting fresh", e);
         }
         return lines;
     }
@@ -90,7 +95,7 @@ public final class DiagnosticLog {
         try (FileOutputStream fos = new FileOutputStream(file, false)) {
             fos.write(sb.toString().getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
-            // best-effort persistence - nothing further to do if the write fails
+            android.util.Log.e("DiagnosticLog", "Failed to write log file (compact/clear)", e);
         }
     }
 }

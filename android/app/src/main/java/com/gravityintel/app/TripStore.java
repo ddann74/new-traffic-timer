@@ -23,20 +23,34 @@ public class TripStore {
         try {
             String text = readFile(file);
             if (text.trim().isEmpty()) return new JSONArray();
-            return new JSONArray(text);
+            JSONArray trips = new JSONArray(text);
+            DiagnosticLog.log(context, "TRIPSTORE", "loadTrips succeeded, " + trips.length() + " trip(s)");
+            return trips;
         } catch (IOException | JSONException e) {
+            DiagnosticLog.log(context, "TRIPSTORE", "loadTrips FAILED - " + e.getClass().getSimpleName()
+                    + ": " + e.getMessage() + " - trips.json may be corrupted, returning empty list");
             return new JSONArray();
         }
     }
 
-    public static synchronized void appendTrip(Context context, JSONObject trip) {
+    /** Returns whether the trip was actually persisted to disk - previously this
+      * was void, so a write failure here was invisible to every caller, including
+      * TrackingService.saveTrip() logging "succeeded" based only on the JSON object
+      * having been built, not on whether it was ever written. */
+    public static synchronized boolean appendTrip(Context context, JSONObject trip) {
         JSONArray trips = loadTrips(context);
         trips.put(trip);
-        saveTrips(context, trips);
+        boolean persisted = saveTrips(context, trips);
+        DiagnosticLog.log(context, "TRIPSTORE", "appendTrip " + (persisted ? "succeeded" : "FAILED")
+                + ", trips.json now has " + trips.length() + " entries"
+                + (persisted ? "" : " (this write was NOT persisted to disk)"));
+        return persisted;
     }
 
-    public static synchronized void wipeAll(Context context) {
-        saveTrips(context, new JSONArray());
+    public static synchronized boolean wipeAll(Context context) {
+        boolean persisted = saveTrips(context, new JSONArray());
+        DiagnosticLog.log(context, "TRIPSTORE", "wipeAll " + (persisted ? "succeeded" : "FAILED"));
+        return persisted;
     }
 
     public static synchronized JSONObject findTrip(Context context, long id) {
@@ -45,15 +59,19 @@ public class TripStore {
             JSONObject t = trips.optJSONObject(i);
             if (t != null && t.optLong("id") == id) return t;
         }
+        DiagnosticLog.log(context, "TRIPSTORE", "findTrip - no trip found for id=" + id);
         return null;
     }
 
-    private static void saveTrips(Context context, JSONArray trips) {
+    private static boolean saveTrips(Context context, JSONArray trips) {
         File file = new File(context.getFilesDir(), FILE_NAME);
         try (FileOutputStream fos = new FileOutputStream(file)) {
             fos.write(trips.toString().getBytes(StandardCharsets.UTF_8));
+            return true;
         } catch (IOException e) {
-            // best-effort persistence - nothing further to do if the write fails
+            DiagnosticLog.log(context, "TRIPSTORE", "saveTrips FAILED - " + e.getClass().getSimpleName()
+                    + ": " + e.getMessage() + " - " + trips.length() + " trip(s) NOT written to disk");
+            return false;
         }
     }
 
