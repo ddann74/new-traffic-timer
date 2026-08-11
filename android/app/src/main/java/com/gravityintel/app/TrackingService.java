@@ -40,6 +40,15 @@ public class TrackingService extends Service implements LocationListener {
     private static final int NOTIFICATION_ID = 5151;
     private static final double IDLE_SPEED_THRESHOLD_KMH = 2.5;
     private static final double RESUME_SPEED_THRESHOLD_KMH = 3.5;
+    // NETWORK_PROVIDER fixes are routinely 40-150m off (cell/wifi triangulation);
+    // GPS fixes on a moving vehicle are typically well under this even in
+    // moderate conditions. Folding a network fix into distance/idle math the
+    // same way as a 1-2m GPS fix is what caused phantom distance and false
+    // idle detection - see docs/PRD_gps_accuracy_fix.md. Unconfirmed against
+    // real-world degraded-GPS conditions (tree cover, urban canyon); tune from
+    // the diagnostic log's REJECTED lines if genuine GPS fixes start getting
+    // rejected too often.
+    private static final float MAX_ACCEPTABLE_ACCURACY_METERS = 30f;
     // The original web page ticked its idle-timer display every 100ms, which made
     // sense for a page you're actively looking at. A background service has no
     // audience most of the time, so this ticks once a second instead - still feels
@@ -55,6 +64,7 @@ public class TrackingService extends Service implements LocationListener {
     private long tripId;
     private long tripStartMillis;
     private Location lastLocation;
+    private long lastAcceptedFixMillis;
     private boolean isClocking;
     private long clockStartMillis;
     private double totalIdleSeconds;
@@ -101,6 +111,7 @@ public class TrackingService extends Service implements LocationListener {
         tripId = System.currentTimeMillis();
         tripStartMillis = tripId;
         lastLocation = null;
+        lastAcceptedFixMillis = 0;
         isClocking = false;
         totalIdleSeconds = 0;
         pathPoints = new org.json.JSONArray();
@@ -174,21 +185,30 @@ public class TrackingService extends Service implements LocationListener {
 
     @Override
     public void onLocationChanged(Location location) {
-        double kmh = location.hasSpeed() ? location.getSpeed() * 3.6 : 0.0;
+        if (!isAcceptableFix(location)) {
+            DiagnosticLog.log(this, "GPS", String.format(Locale.US,
+                    "onLocationChanged REJECTED accuracy=%s provider=%s (needs <=%.0fm accuracy)",
+                    location.hasAccuracy() ? String.format(Locale.US, "%.0fm", location.getAccuracy()) : "unknown",
+                    location.getProvider(), MAX_ACCEPTABLE_ACCURACY_METERS));
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        double deltaKm = lastLocation != null ? distanceKm(lastLocation, location) : 0;
+
+        double kmh = resolveSpeedKmh(location, deltaKm, now);
         TrackingState.speedKmh = kmh;
         TrackingState.lat = location.getLatitude();
         TrackingState.lon = location.getLongitude();
 
-        double deltaKm = 0;
         if (lastLocation != null) {
-            deltaKm = distanceKm(lastLocation, location);
             TrackingState.distanceKm += deltaKm;
 
             if (kmh < IDLE_SPEED_THRESHOLD_KMH && !isClocking) {
                 startClock();
             }
             if (kmh > RESUME_SPEED_THRESHOLD_KMH && isClocking) {
-                double dur = (System.currentTimeMillis() - clockStartMillis) / 1000.0;
+                double dur = (now - clockStartMillis) / 1000.0;
                 if (dur > 2) {
                     totalIdleSeconds += dur;
                     addStopPoint(location, dur);
@@ -198,6 +218,7 @@ public class TrackingService extends Service implements LocationListener {
         }
         addPathPoint(location);
         lastLocation = location;
+        lastAcceptedFixMillis = now;
         updateFlowRating();
         broadcastState();
         updateNotification();
@@ -206,6 +227,36 @@ public class TrackingService extends Service implements LocationListener {
                 "onLocationChanged lat=%.5f lon=%.5f speedKmh=%.1f deltaKm=%.4f totalKm=%.2f accuracy=%.0fm provider=%s",
                 location.getLatitude(), location.getLongitude(), kmh, deltaKm,
                 TrackingState.distanceKm, location.getAccuracy(), location.getProvider()));
+    }
+
+    /** A fix has to both report an accuracy figure and be within
+      * MAX_ACCEPTABLE_ACCURACY_METERS to be trusted for distance/speed/idle
+      * purposes. Fixes that fail this are still logged (see the REJECTED
+      * line above) but never touch TrackingState, lastLocation, or the idle
+      * clock - so one bad fix can't become the baseline the *next* fix's
+      * delta is measured against either. */
+    private boolean isAcceptableFix(Location location) {
+        return location.hasAccuracy() && location.getAccuracy() <= MAX_ACCEPTABLE_ACCURACY_METERS;
+    }
+
+    /** Prefers the fix's own reported speed when present. Falls back to
+      * distance-since-last-accepted-fix / time-since-last-accepted-fix when
+      * it's not (some fixes don't carry a speed value) rather than
+      * defaulting to 0 - a defaulted-to-zero speed is exactly what let
+      * stationary-looking fixes falsely trigger the idle clock at highway
+      * speed before this fix. Holds the last known speed rather than
+      * assuming 0 when there's nothing to derive from yet (the very first
+      * accepted fix of a trip, or two fixes landing in the same
+      * millisecond). */
+    private double resolveSpeedKmh(Location location, double deltaKm, long now) {
+        if (location.hasSpeed()) {
+            return location.getSpeed() * 3.6;
+        }
+        if (lastLocation != null && lastAcceptedFixMillis > 0 && now > lastAcceptedFixMillis) {
+            double hours = (now - lastAcceptedFixMillis) / 3600000.0;
+            return deltaKm / hours;
+        }
+        return TrackingState.speedKmh;
     }
 
     @Override

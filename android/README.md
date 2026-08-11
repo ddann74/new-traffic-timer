@@ -109,6 +109,25 @@ purpose - and does cost battery - when nothing is rendering it.
 The tracking notification has a "Finish Trip" action, so you can end and
 save a trip without reopening the app.
 
+## GPS accuracy filtering
+
+`TrackingService` listens to both `GPS_PROVIDER` and `NETWORK_PROVIDER` -
+the network provider is a useful fallback when GPS hasn't locked yet, but
+its fixes are typically 40-150m off (cell/wifi triangulation), against
+1-2m for a real GPS fix. A fix is only used for distance/speed/idle
+purposes if it reports an accuracy of 30m or better
+(`MAX_ACCEPTABLE_ACCURACY_METERS` in `TrackingService`); worse fixes are
+logged as `REJECTED` in the diagnostic log rather than silently corrupting
+the trip - mixing them in unfiltered previously caused both phantom
+distance (a network fix and the next GPS fix each measuring a delta
+against the other) and false idle-clock triggers (network fixes routinely
+carry no speed value at all, which read as "stopped"). See
+`docs/PRD_gps_accuracy_fix.md` for the full writeup and a traced example
+from a real trip log. This threshold is unconfirmed against genuinely
+degraded outdoor GPS (tree cover, urban canyon) - if real GPS fixes start
+getting rejected too often, that's visible in the diagnostic log and the
+constant is the one place to tune it.
+
 ## Diagnostic log (SYS tab)
 
 Below "Factory Wipe" on the SYS tab is a verbose, persistent event log:
