@@ -8,14 +8,20 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.webkit.ConsoleMessage;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import org.json.JSONObject;
 
 /** Hosts the WebView UI (assets/index.html, unchanged Tailwind/Leaflet page). All
@@ -46,6 +52,29 @@ public class MainActivity extends AppCompatActivity {
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
+
+        // Previously nothing from the WebView side reached the diagnostic log at
+        // all - a JS exception inside index.html (e.g. a bug in the trip-review
+        // map code) or a failed CDN load (Leaflet/Tailwind/tiles, all fetched
+        // over the network) failed completely silently. See
+        // docs/PRD_map_view_review.md.
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage message) {
+                DiagnosticLog.log(MainActivity.this, "WEBVIEW", String.format(Locale.US,
+                        "console %s: %s (%s:%d)", message.messageLevel(), message.message(),
+                        message.sourceId(), message.lineNumber()));
+                return false; // still let it reach Logcat too, same as the default behavior
+            }
+        });
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                DiagnosticLog.log(MainActivity.this, "WEBVIEW", "page load error: "
+                        + error.getDescription() + " url=" + request.getUrl());
+            }
+        });
 
         nativeBridge = new NativeBridge(this);
         webView.addJavascriptInterface(nativeBridge, "Native");

@@ -56,14 +56,17 @@
 
         <div class="flex justify-between items-center mb-2">
             <span class="text-[10px] text-zinc-500 uppercase font-bold">Diagnostic Log</span>
-            <button onclick="clearDiagnosticLog()" class="bg-zinc-800 text-zinc-300 text-[9px] font-black uppercase px-3 py-1 rounded">Clear</button>
+            <div class="flex gap-2">
+                <button onclick="shareDiagnosticLog()" class="bg-cyan-950 text-cyan-400 text-[9px] font-black uppercase px-3 py-1 rounded">Share</button>
+                <button onclick="clearDiagnosticLog()" class="bg-zinc-800 text-zinc-300 text-[9px] font-black uppercase px-3 py-1 rounded">Clear</button>
+            </div>
         </div>
         <pre id="diag-log" class="bg-zinc-900 border border-zinc-800 rounded p-3 text-[9px] text-zinc-400 whitespace-pre-wrap break-words pb-10"></pre>
     </div>
 
     <nav class="nav-bar">
         <div onclick="tab('dash')" id="tab-dash" class="nav-btn nav-btn-active">DASH</div>
-        <div onclick="tab('map')" id="tab-map" class="nav-btn">MAP</div>
+        <div onclick="showLiveMap()" id="tab-map" class="nav-btn">MAP</div>
         <div onclick="tab('logs')" id="tab-logs" class="nav-btn">LOGS</div>
         <div onclick="tab('sys')" id="tab-sys" class="nav-btn">SYS</div>
     </nav>
@@ -140,12 +143,35 @@
         if (name === 'sys') renderDiagnosticLog();
     }
 
+    /** Removes any drawn trip route/stop markers, leaving userMarker (the live
+      * position dot) untouched either way - callers decide separately whether
+      * that should be showing. Shared by showLiveMap() and viewTrip() so there's
+      * one place that knows how to tell "a reviewed trip's layers" apart from
+      * everything else on the map. */
+    function clearMapOverlays() {
+        map.eachLayer(l => { if (l instanceof L.Polyline || (l instanceof L.Circle && l !== userMarker)) map.removeLayer(l); });
+    }
+
+    /** The MAP nav tab's own entry point - clears any previously-reviewed trip's
+      * route and makes sure the live position dot is showing, as opposed to
+      * viewTrip()'s entry point below, which explicitly hides it. */
+    function showLiveMap() {
+        clearMapOverlays();
+        if (!map.hasLayer(userMarker)) userMarker.addTo(map);
+        tab('map');
+    }
+
     function viewTrip(id) {
         const trip = JSON.parse(window.Native.getTripJson(id));
         if (!trip) return;
         tab('map');
         setTimeout(() => {
-            map.eachLayer(l => { if (l instanceof L.Polyline || (l instanceof L.Circle && l !== userMarker)) map.removeLayer(l); });
+            clearMapOverlays();
+            // The live position dot has nothing to do with a trip being reviewed
+            // from history - showing it here previously left a stray marker
+            // sitting at [0,0] or your current location, easy to mistake for
+            // part of the reviewed route.
+            if (map.hasLayer(userMarker)) map.removeLayer(userMarker);
             const pts = trip.path.map(p => [p.lat, p.lon]);
             const poly = L.polyline(pts, { color: '#00f2ff', weight: 5 }).addTo(map);
             (trip.stops || []).forEach(s => L.circle([s.lat, s.lon], { radius: 15, color: '#ff4444' }).addTo(map));
@@ -187,6 +213,10 @@
     function clearDiagnosticLog() {
         window.Native.clearDiagnosticLog();
         renderDiagnosticLog();
+    }
+
+    function shareDiagnosticLog() {
+        window.Native.shareDiagnosticLog();
     }
 </script>
 </body>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Diagnostic-log snapshots for sharing live under cacheDir/shared_logs/ -
+         see NativeBridge.shareDiagnosticLog(). Deliberately not the live
+         diagnostic.log file itself (that's filesDir, and still being appended to
+         by TrackingService in the background) - each share writes a fresh,
+         self-contained snapshot instead. -->
+    <cache-path name="shared_logs" path="shared_logs/" />
+</paths>

@@ -2,7 +2,16 @@ package com.gravityintel.app;
 
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.webkit.JavascriptInterface;
+import androidx.core.content.FileProvider;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -89,5 +98,47 @@ public class NativeBridge {
     public void clearDiagnosticLog() {
         DiagnosticLog.clear(context);
         DiagnosticLog.log(context, "BRIDGE", "diagnostic log cleared from WebView");
+    }
+
+    /** Snapshots the current diagnostic log to its own file (not the live
+      * diagnostic.log TrackingService is still appending to) and hands it to
+      * Android's share sheet via a FileProvider content:// Uri - lets the log
+      * go straight into email/Drive/Slack/whatever without the user manually
+      * copying text out of the SYS tab. */
+    @JavascriptInterface
+    public void shareDiagnosticLog() {
+        DiagnosticLog.log(context, "BRIDGE", "shareDiagnosticLog() requested from WebView");
+        try {
+            String text = DiagnosticLog.getAllText(context);
+            File shareDir = new File(context.getCacheDir(), "shared_logs");
+            if (!shareDir.exists() && !shareDir.mkdirs()) {
+                DiagnosticLog.log(context, "BRIDGE", "shareDiagnosticLog failed - could not create shared_logs dir");
+                return;
+            }
+            String fileName = "gravity-intel-diagnostic-"
+                    + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date()) + ".log";
+            File shareFile = new File(shareDir, fileName);
+            try (FileOutputStream fos = new FileOutputStream(shareFile)) {
+                fos.write(text.getBytes(StandardCharsets.UTF_8));
+            }
+
+            Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".fileprovider", shareFile);
+            Intent shareIntent = new Intent(Intent.ACTION_SEND);
+            shareIntent.setType("text/plain");
+            shareIntent.putExtra(Intent.EXTRA_STREAM, uri);
+            shareIntent.putExtra(Intent.EXTRA_SUBJECT, "Gravity Intel diagnostic log");
+            shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+            Intent chooser = Intent.createChooser(shareIntent, "Share diagnostic log");
+            // NativeBridge only holds an application Context (not an Activity) -
+            // startActivity() from here requires this flag or it throws.
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(chooser);
+            DiagnosticLog.log(context, "BRIDGE", "shareDiagnosticLog succeeded, " + text.length() + " chars");
+        } catch (IOException e) {
+            DiagnosticLog.log(context, "BRIDGE", "shareDiagnosticLog failed writing snapshot: " + e.getMessage());
+        } catch (Exception e) {
+            DiagnosticLog.log(context, "BRIDGE", "shareDiagnosticLog failed: " + e.getMessage());
+        }
     }
 }

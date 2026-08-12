@@ -37,6 +37,20 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
+        <!-- Lets "Share Log" hand a diagnostic-log snapshot to another app (email,
+             Drive, etc.) as a content:// Uri instead of a raw file:// path, which
+             targetSdk 24+ requires. Not exported - only this app's own share
+             Intent ever references it. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
     </application>
 
 </manifest>

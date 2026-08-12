@@ -148,8 +148,10 @@ save success/failure, and wake lock acquire/release. `TrackingService`
 logs under different tags depending on its current mode - "TRIP"/"GPS"/
 "WAKE_LOCK" while tracking, "MONITOR" while watching (including every
 idle speed check and what triggered a switch into tracking) - plus full
-`Activity` lifecycle ("ACTIVITY") and every `window.Native` bridge call
-from the WebView ("BRIDGE"). It's written to a
+`Activity` lifecycle ("ACTIVITY"), every `window.Native` bridge call
+from the WebView ("BRIDGE"), and JS console errors/page load failures
+from inside the WebView itself ("WEBVIEW" - see `docs/PRD_map_view_review.md`
+for why that used to be a real blind spot). It's written to a
 file (`diagnostic.log` in app-private storage), not kept only in memory
 - deliberately, since the scenario most worth debugging (the process
 getting killed unexpectedly) is exactly the one an in-memory-only log
@@ -160,7 +162,23 @@ pushed - the log is written regardless of whether the app is even open.
 Writes are cheap appends rather than a full rewrite each time (this
 logs on every location update, so that matters for a long trip), with
 the file trimmed back down to the last 5000 lines periodically rather
-than left fully unbounded. Tap "Clear" to wipe it.
+than left fully unbounded. Tap "Clear" to wipe it, or "Share" to hand a
+snapshot to any app (email, Drive, Slack, ...) via Android's share
+sheet - the snapshot is a fresh file written at share time
+(`cacheDir/shared_logs/`), not the live file `TrackingService` is still
+appending to.
+
+### Trips recorded before the GPS-accuracy fix still show the old zigzag
+
+`docs/PRD_gps_accuracy_fix.md` fixed the *live* tracking math, but a
+trip's recorded route (`path` in `trips.json`) is written once, when the
+trip is saved, and nothing reprocesses it afterward. Any trip recorded
+before that fix landed has the pre-fix ping-pong permanently baked into
+its stored path and will keep showing it on the MAP tab's trip review -
+that's expected, not a new bug. A trip recorded after the fix should
+show a clean route. If an old trip's map still looks wrong in a way that
+doesn't match "zigzag between two points repeatedly," that's worth
+treating as a real, separate issue.
 
 ### Gaps this used to have, now closed
 
