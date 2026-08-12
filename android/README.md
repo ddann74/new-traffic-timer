@@ -14,14 +14,17 @@ so a foreground service alone doesn't reliably guarantee tracking continues.
 
 Instead, tracking itself is native:
 
-- **`TrackingService`** - a foreground service that owns GPS updates
+- **`TrackingService`** - a single foreground service with two internal
+  modes: **watching** (idle, low-power, waiting for movement) and
+  **tracking** (an active trip). It owns GPS updates
   (`android.location.LocationManager`, no Play Services dependency), computes
   distance/idle-time/flow-rating itself, and saves finished trips to a JSON file
   in app-private storage. None of this depends on the WebView being visible,
-  attached, or even created.
-- **`MotionMonitorService`** - the idle-time counterpart to `TrackingService`,
-  active only while no trip is running. Auto-starts a trip on real movement -
-  see "Auto-start on movement" below.
+  attached, or even created. Auto-starts a trip on real movement while
+  watching - see "Auto-start on movement" below. This used to be two
+  separate `Service` classes handing off to each other; see
+  `docs/PRD_unify_tracking_service.md` for why that broke and why it's one
+  service now.
 - **`assets/index.html`** - the same page, visually unchanged, but its tracking
   logic is replaced with a thin bridge: button taps call `window.Native.startTrip()`
   / `.finishTrip()`, and the page renders whatever state
@@ -51,14 +54,21 @@ duration of an active trip only, released the moment it finishes, with a
 
 ## Auto-start on movement
 
-`MotionMonitorService` runs whenever no trip is active - a second, much
-lighter foreground service that checks `NETWORK_PROVIDER` location (never
-GPS) roughly every 25 seconds and auto-starts a trip once computed speed
-reaches 8 km/h. It shows its own low-priority "Watching for movement"
-notification while idle. `TrackingService` stops it the instant a trip is
-armed (by this trigger or a manual "Start Engine" tap) and restarts it the
-instant a trip finishes, so exactly one of the two services - and exactly
-one notification - is ever active at a time.
+While `TrackingService` is in its **watching** mode (the default - no trip
+active), it checks `NETWORK_PROVIDER` location (never GPS) roughly every 25
+seconds and switches itself into **tracking** mode once computed speed
+reaches 8 km/h. It shows a low-priority "Watching for movement" notification
+while watching, switching to the tracking notification the instant a trip
+starts (by this trigger or a manual "Start Engine" tap) - one running
+service, one notification, its content just changes with the mode.
+
+Movement detection switches modes with a direct in-process method call, not
+by starting a second service - an earlier version tried the latter (a
+background location callback calling `startForegroundService()` to spin up
+a second, separate foreground service) and it crashed on every real
+auto-detected movement event on Android 12+, which blocks starting a *new*
+foreground service from a background trigger. See
+`docs/PRD_unify_tracking_service.md` for the full diagnosis.
 
 This only fires on devices with a working network-based location provider;
 there's no fallback to GPS for idle-watching, since that would defeat the
@@ -98,11 +108,12 @@ purpose - and does cost battery - when nothing is rendering it.
 3. Run on a device (minSdk 21)
 4. Grant location + notification permissions when prompted
 5. Once granted, a "Watching for movement" notification appears - that's
-   `MotionMonitorService` idling. Start moving at 8 km/h or faster (or just
-   tap "Start Engine" yourself) and it hands off to "Tracking trip";
-   backgrounding the app, locking the screen, or switching apps doesn't stop
-   either. Tap "Finish Trip" in the app or the notification's action button
-   to end the trip, save it, and go back to watching for the next one.
+   `TrackingService` idling in watching mode. Start moving at 8 km/h or
+   faster (or just tap "Start Engine" yourself) and it switches to "Tracking
+   trip" mode; backgrounding the app, locking the screen, or switching apps
+   doesn't stop either. Tap "Finish Trip" in the app or the notification's
+   action button to end the trip, save it, and go back to watching for the
+   next one.
 
 ## Ending a trip from the notification
 
@@ -133,11 +144,12 @@ constant is the one place to tune it.
 Below "Factory Wipe" on the SYS tab is a verbose, persistent event log:
 service lifecycle, every GPS provider check and location update, idle
 clock start/stop transitions, permission grant/denial results, trip
-save success/failure, and wake lock acquire/release - for both
-`TrackingService` ("TRIP"/"GPS"/"WAKE_LOCK" tags) and `MotionMonitorService`
-("MONITOR" tag, including every idle speed check and what triggered an
-auto-start), plus full `Activity` lifecycle ("ACTIVITY") and every
-`window.Native` bridge call from the WebView ("BRIDGE"). It's written to a
+save success/failure, and wake lock acquire/release. `TrackingService`
+logs under different tags depending on its current mode - "TRIP"/"GPS"/
+"WAKE_LOCK" while tracking, "MONITOR" while watching (including every
+idle speed check and what triggered a switch into tracking) - plus full
+`Activity` lifecycle ("ACTIVITY") and every `window.Native` bridge call
+from the WebView ("BRIDGE"). It's written to a
 file (`diagnostic.log` in app-private storage), not kept only in memory
 - deliberately, since the scenario most worth debugging (the process
 getting killed unexpectedly) is exactly the one an in-memory-only log
@@ -175,7 +187,7 @@ WebView/JS side):
   the app's `android:name` in the manifest) installs a process-wide
   `Thread.UncaughtExceptionHandler` before any `Activity` or `Service` runs
   - deliberately an `Application` subclass rather than wired from
-  `MainActivity.onCreate()`, since `MotionMonitorService` is `START_STICKY`
+  `MainActivity.onCreate()`, since `TrackingService` is `START_STICKY`
   and the OS can restart it directly in a fresh process without
   `MainActivity` ever running first. It logs the thread name and full stack
   trace under a `"CRASH"` tag, then always chains to whatever handler was

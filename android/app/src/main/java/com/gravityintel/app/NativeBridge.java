@@ -3,7 +3,6 @@ package com.gravityintel.app;
 import android.content.Context;
 import android.content.Intent;
 import android.webkit.JavascriptInterface;
-import androidx.core.content.ContextCompat;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -21,18 +20,23 @@ public class NativeBridge {
     @JavascriptInterface
     public void startTrip() {
         DiagnosticLog.log(context, "BRIDGE", "startTrip() requested from WebView");
+        // Plain startService, not startForegroundService: TrackingService is
+        // already running in the foreground (watching for movement) by the time
+        // a user can tap this - it was already started once from
+        // MainActivity.onCreate(). This only delivers a mode-switch action to
+        // it, not promotes a not-yet-running service.
         Intent intent = new Intent(context, TrackingService.class);
         intent.setAction(TrackingService.ACTION_START_TRIP);
-        ContextCompat.startForegroundService(context, intent);
+        context.startService(intent);
     }
 
     @JavascriptInterface
     public void finishTrip() {
         DiagnosticLog.log(context, "BRIDGE", "finishTrip() requested from WebView");
         // Plain startService, not startForegroundService: the service is already
-        // running in the foreground from startTrip(), so this is just delivering a
-        // new command to it, not promoting it - no 5-second startForeground()
-        // obligation applies to this call.
+        // running in the foreground, so this is just delivering a new command to
+        // it, not promoting it - no 5-second startForeground() obligation applies
+        // to this call.
         Intent intent = new Intent(context, TrackingService.class);
         intent.setAction(TrackingService.ACTION_FINISH_TRIP);
         context.startService(intent);

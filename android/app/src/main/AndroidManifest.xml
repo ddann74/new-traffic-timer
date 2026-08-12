@@ -27,17 +27,13 @@
             </intent-filter>
         </activity>
 
-        <!-- Not exported: only this app (via NativeBridge or the notification's
-             Finish Trip action) ever starts this service. -->
+        <!-- Not exported: only this app starts this service - MainActivity (on
+             open, to begin watching for movement), NativeBridge (Start Engine
+             tap), or the notification's Finish Trip action. Watching and active
+             tracking are two modes of this one service/notification, not two
+             separate services - see TrackingService's class doc. -->
         <service
             android:name=".TrackingService"
-            android:exported="false"
-            android:foregroundServiceType="location" />
-
-        <!-- Not exported: only MainActivity (on open) or TrackingService (when a
-             trip finishes) ever starts this service. -->
-        <service
-            android:name=".MotionMonitorService"
             android:exported="false"
             android:foregroundServiceType="location" />
 

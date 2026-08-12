@@ -5,7 +5,7 @@ import android.os.Process;
 
 /** Installs a process-wide uncaught-exception handler before any Activity or
   * Service runs. An Application subclass, not something wired from
-  * MainActivity.onCreate(), on purpose: MotionMonitorService is START_STICKY, so
+  * MainActivity.onCreate(), on purpose: TrackingService is START_STICKY, so
   * the OS can restart it directly in a fresh process without MainActivity ever
   * running first - installing the handler only from the Activity would leave
   * exactly that path uncovered. */

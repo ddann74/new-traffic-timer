@@ -55,13 +55,16 @@ public class MainActivity extends AppCompatActivity {
         startMotionMonitor();
     }
 
-    /** Starts the idle-watcher that auto-starts a trip on movement. Safe to call
-      * even before permission is granted or if a trip is already active -
-      * MotionMonitorService checks both itself and simply does nothing until
-      * they're true. Called again once permission is granted below, in case it
-      * wasn't yet at onCreate time. */
+    /** Starts TrackingService (which begins in watching mode, auto-starting a
+      * trip on movement) if it isn't already running. Safe to call even before
+      * permission is granted or if a trip is already active - the service
+      * checks both itself and simply no-ops until they're true. Called again
+      * once permission is granted below, in case it wasn't yet at onCreate
+      * time. */
     private void startMotionMonitor() {
-        ContextCompat.startForegroundService(this, new Intent(this, MotionMonitorService.class));
+        Intent intent = new Intent(this, TrackingService.class);
+        intent.setAction(TrackingService.ACTION_START_WATCHING);
+        ContextCompat.startForegroundService(this, intent);
     }
 
     private void requestPermissions() {
@@ -94,7 +97,7 @@ public class MainActivity extends AppCompatActivity {
         }
         // Retry: the first startMotionMonitor() call in onCreate ran before the
         // user answered this prompt, so it had nothing to check permission against
-        // yet - MotionMonitorService itself no-ops if it's already watching.
+        // yet - TrackingService itself no-ops if it's already watching.
         startMotionMonitor();
     }
 
