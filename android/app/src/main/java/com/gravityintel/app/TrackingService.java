@@ -116,6 +116,24 @@ public class TrackingService extends Service implements LocationListener {
         DiagnosticLog.log(this, "SERVICE", "onStartCommand action=" + action);
 
         if (!serviceStarted) {
+            // A location-type foreground service's startForeground() call itself
+            // requires at least one location permission already granted - a real
+            // device log caught this crashing with SecurityException when
+            // MainActivity started this service before the permission dialog had
+            // been answered. MainActivity's own startMotionMonitor() now checks
+            // this first and won't even call startForegroundService() without
+            // permission, but this check stays here too as a second line of
+            // defense - e.g. if a "Start Engine" tap ever became this service's
+            // very first start before permission was granted, that path doesn't
+            // go through MainActivity's guard at all.
+            boolean hasLocationPermission =
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                            || ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+            if (!hasLocationPermission) {
+                DiagnosticLog.log(this, "SERVICE", "onStartCommand: no location permission yet, cannot start foreground - stopping self");
+                stopSelf();
+                return START_NOT_STICKY;
+            }
             serviceStarted = true;
             // The one and only startForeground() call this service instance ever
             // makes - see the class doc for why every later mode switch

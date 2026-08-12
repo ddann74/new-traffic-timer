@@ -85,12 +85,27 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /** Starts TrackingService (which begins in watching mode, auto-starting a
-      * trip on movement) if it isn't already running. Safe to call even before
-      * permission is granted or if a trip is already active - the service
-      * checks both itself and simply no-ops until they're true. Called again
-      * once permission is granted below, in case it wasn't yet at onCreate
-      * time. */
+      * trip on movement) if it isn't already running. Safe to call if a trip is
+      * already active - the service no-ops on that. Called again once
+      * permission is granted below, in case it wasn't yet at onCreate time.
+      *
+      * Deliberately does NOT call startForegroundService() before location
+      * permission is actually granted - a location-type foreground service's
+      * own startForeground() call requires at least one location permission
+      * already granted, not just requested. A real device log caught this:
+      * on a completely fresh install, this used to fire from onCreate() before
+      * the permission dialog had been answered, crashing with SecurityException
+      * every time. Skipping the call here and relying on the
+      * onRequestPermissionsResult() retry below means it only actually starts
+      * once permission is confirmed - never before. */
     private void startMotionMonitor() {
+        boolean hasLocationPermission =
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                        || ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+        if (!hasLocationPermission) {
+            DiagnosticLog.log(this, "SERVICE", "startMotionMonitor skipped - no location permission yet");
+            return;
+        }
         Intent intent = new Intent(this, TrackingService.class);
         intent.setAction(TrackingService.ACTION_START_WATCHING);
         ContextCompat.startForegroundService(this, intent);
