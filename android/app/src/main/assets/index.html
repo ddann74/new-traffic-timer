@@ -16,7 +16,7 @@
         .active-page { display: flex !important; flex-direction: column; }
         #page-dash { padding: 20px; padding-top: 60px; justify-content: space-between; overflow-y: auto; }
         #map-canvas { position: absolute !important; top: 0; left: 0; width: 100% !important; height: 100% !important; background: #111; z-index: 10; }
-        .nav-bar { height: 80px; background: #111; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 2px solid #333; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom); }
+        .nav-bar { height: 80px; background: #111; display: grid; grid-template-columns: repeat(5, 1fr); border-top: 2px solid #333; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom); }
         .nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; font-size: 11px; font-weight: 800; }
         .nav-btn-active { opacity: 1; color: var(--accent); background: #1a1a1a; border-top: 4px solid var(--accent); }
         #master-toggle { background: var(--safety); color: #000; padding: 20px; border-radius: 15px; font-size: 22px; font-weight: 900; width: 100%; border: 4px solid #fff; text-transform: uppercase; margin-bottom: 5px; }
@@ -47,6 +47,8 @@
 
     <div id="page-logs" class="page !overflow-y-auto p-5"><div id="log-list" class="pb-10"></div></div>
 
+    <div id="page-stops" class="page !overflow-y-auto p-5"><div id="stops-list" class="pb-10"></div></div>
+
     <div id="page-sys" class="page !overflow-y-auto p-5">
         <div class="bg-zinc-900 p-4 rounded border border-zinc-800 mb-4 text-[10px] flex justify-between">
             <span>Data Stabilization:</span>
@@ -68,6 +70,7 @@
         <div onclick="tab('dash')" id="tab-dash" class="nav-btn nav-btn-active">DASH</div>
         <div onclick="showLiveMap()" id="tab-map" class="nav-btn">MAP</div>
         <div onclick="tab('logs')" id="tab-logs" class="nav-btn">LOGS</div>
+        <div onclick="tab('stops')" id="tab-stops" class="nav-btn">STOPS</div>
         <div onclick="tab('sys')" id="tab-sys" class="nav-btn">SYS</div>
     </nav>
 </div>
@@ -78,6 +81,16 @@
     // This script only renders whatever state window.onNativeUpdate() is handed, and
     // forwards button taps to window.Native (see NativeBridge.java).
     let isArmed = false, map = null, userMarker = null;
+
+    // "Similar trips" = same rough start point AND same rough end point (e.g. a
+    // repeated commute), not just any two trips - see groupTripsByRoute below.
+    // Kept here as named constants (not buried in the functions) since they're
+    // the two knobs most likely to need retuning once this is used against real
+    // recorded trips instead of reasoned about in the abstract.
+    const ROUTE_ENDPOINT_MATCH_METERS = 400; // how close two trips' start/end points must be to count as "the same route"
+    const STOP_CLUSTER_RADIUS_METERS = 75;   // how close two stops must be to count as "the same spot"
+    const MIN_TRIPS_PER_ROUTE_GROUP = 2;     // a route needs at least this many trips before there's anything to compare
+    let lastRouteGroups = []; // recomputed each time the STOPS tab opens - see renderStopStats
 
     window.addEventListener('load', () => {
         initMap();
@@ -140,6 +153,7 @@
         document.getElementById('tab-' + name).classList.add('nav-btn-active');
         if (name === 'map') setTimeout(() => map.invalidateSize(), 50);
         if (name === 'logs') renderLogs();
+        if (name === 'stops') renderStopStats();
         if (name === 'sys') renderDiagnosticLog();
     }
 
@@ -191,6 +205,131 @@
             card.innerHTML = `<div class="flex justify-between items-center mb-1"><span class="text-[10px] text-zinc-500">${new Date(t.start).toLocaleTimeString()}</span><span class="text-xs font-black ${color}">FLOW: ${score}</span></div><div class="flex justify-between items-center mb-3"><span class="text-[10px] text-zinc-400 uppercase">Distance</span><span class="text-sm font-bold">${t.dist.toFixed(2)} KM</span></div><button onclick="viewTrip(${t.id})" class="w-full bg-zinc-800 p-2 rounded text-[10px] font-black uppercase">Review Trip</button>`;
             list.appendChild(card);
         });
+    }
+
+    /** Groups trips into "similar trips" for comparison - defined here as sharing
+      * roughly the same start point AND roughly the same end point (e.g. a
+      * repeated commute), not just any two trips that happen to overlap
+      * somewhere. Each trip joins the first group whose ANCHOR trip (the first
+      * trip that started that group, chronologically) is within
+      * ROUTE_ENDPOINT_MATCH_METERS at both ends - a single pass, not full
+      * clustering, which is enough for "the same regular route" without pulling
+      * in a real clustering library for what's normally a handful of route
+      * groups. Trips with fewer than 2 path points (nothing to compare) and
+      * groups that never reach MIN_TRIPS_PER_ROUTE_GROUP (nothing to actually
+      * call "similar" yet) are both dropped before returning. */
+    function groupTripsByRoute(trips) {
+        const withEndpoints = trips.filter(t => t.path && t.path.length >= 2);
+        const groups = [];
+        withEndpoints.forEach(trip => {
+            const start = trip.path[0], end = trip.path[trip.path.length - 1];
+            const group = groups.find(g =>
+                L.latLng(g.anchorStart.lat, g.anchorStart.lon).distanceTo([start.lat, start.lon]) <= ROUTE_ENDPOINT_MATCH_METERS
+                && L.latLng(g.anchorEnd.lat, g.anchorEnd.lon).distanceTo([end.lat, end.lon]) <= ROUTE_ENDPOINT_MATCH_METERS);
+            if (group) {
+                group.trips.push(trip);
+            } else {
+                groups.push({ anchorStart: start, anchorEnd: end, trips: [trip] });
+            }
+        });
+        return groups.filter(g => g.trips.length >= MIN_TRIPS_PER_ROUTE_GROUP);
+    }
+
+    /** Within one route group, clusters every recorded stop from every trip in
+      * that group by proximity (STOP_CLUSTER_RADIUS_METERS) into named hotspots,
+      * then ranks them by total time lost there across the whole group. Each
+      * cluster tracks which distinct trips contributed to it (tripCount) as well
+      * as total/average duration - a single trip that idled somewhere unusually
+      * long for 20 minutes shouldn't outrank a spot that every other trip in the
+      * group also got stuck at for a couple minutes each. */
+    function clusterStops(group) {
+        const clusters = [];
+        group.trips.forEach(trip => {
+            (trip.stops || []).forEach(stop => {
+                let cluster = clusters.find(c =>
+                    L.latLng(c.lat, c.lon).distanceTo([stop.lat, stop.lon]) <= STOP_CLUSTER_RADIUS_METERS);
+                if (!cluster) {
+                    cluster = { lat: stop.lat, lon: stop.lon, totalDur: 0, occurrences: [] };
+                    clusters.push(cluster);
+                }
+                cluster.totalDur += stop.dur;
+                cluster.occurrences.push({ tripId: trip.id, dur: stop.dur });
+            });
+        });
+        clusters.forEach(c => {
+            c.tripCount = new Set(c.occurrences.map(o => o.tripId)).size;
+            c.avgDur = c.totalDur / c.occurrences.length;
+        });
+        return clusters.sort((a, b) => b.totalDur - a.totalDur);
+    }
+
+    function formatDuration(seconds) {
+        const m = Math.floor(seconds / 60), s = Math.round(seconds % 60);
+        return m > 0 ? `${m}m ${s}s` : `${s}s`;
+    }
+
+    /** STOPS tab's entry point - pulled fresh each time the tab opens, same
+      * pattern as renderLogs()/renderDiagnosticLog(), since trips only change
+      * when a new one finishes, not continuously. */
+    function renderStopStats() {
+        const trips = JSON.parse(window.Native.getTripsJson() || '[]');
+        const groups = groupTripsByRoute(trips);
+        lastRouteGroups = groups;
+        const container = document.getElementById('stops-list');
+
+        if (!groups.length) {
+            container.innerHTML = '<div class="text-center mt-16 opacity-30 font-black uppercase text-xs px-6 leading-relaxed">No repeated routes yet<br><span class="opacity-70 normal-case font-normal text-[10px]">Drive the same start and end at least twice to compare stop times</span></div>';
+            return;
+        }
+
+        container.innerHTML = '';
+        groups.forEach((group, gi) => {
+            const clusters = clusterStops(group).slice(0, 5); // top 5 hotspots per route
+            const avgDist = group.trips.reduce((s, t) => s + t.dist, 0) / group.trips.length;
+            const hotspotsHtml = clusters.length
+                ? clusters.map((c, ci) => `
+                    <div class="flex justify-between items-center py-2 border-t border-zinc-800">
+                        <div>
+                            <div class="text-[11px] font-bold">${formatDuration(c.totalDur)} total</div>
+                            <div class="text-[9px] text-zinc-500 uppercase">${c.tripCount} of ${group.trips.length} trips &middot; avg ${formatDuration(c.avgDur)}</div>
+                        </div>
+                        <button onclick="viewHotspot(${gi}, ${ci})" class="bg-zinc-800 text-[9px] font-black uppercase px-3 py-1 rounded">View</button>
+                    </div>`).join('')
+                : '<div class="text-[10px] text-zinc-600 uppercase pt-2">No repeated stops on this route yet</div>';
+
+            const card = document.createElement('div');
+            card.className = 'bg-zinc-900 border border-zinc-800 p-4 rounded-xl mb-4';
+            card.innerHTML = `
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-[10px] text-zinc-500 uppercase">Route &middot; ${group.trips.length} trips</span>
+                    <span class="text-[10px] text-zinc-400">${avgDist.toFixed(2)} km avg</span>
+                </div>
+                <div class="text-[10px] text-zinc-600 uppercase font-bold mb-1">Most time stopped</div>
+                ${hotspotsHtml}
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    /** Jumps to the MAP tab and highlights one hotspot in place, reusing the
+      * same "clear old layers, drop the live marker" pattern as viewTrip() - a
+      * hotspot being reviewed has the same "this isn't the live position"
+      * problem the map-review bug fix already solved for a single trip's route. */
+    function viewHotspot(groupIndex, clusterIndex) {
+        const group = lastRouteGroups[groupIndex];
+        if (!group) return;
+        const cluster = clusterStops(group)[clusterIndex];
+        if (!cluster) return;
+        tab('map');
+        setTimeout(() => {
+            clearMapOverlays();
+            if (map.hasLayer(userMarker)) map.removeLayer(userMarker);
+            const highlight = L.circle([cluster.lat, cluster.lon], {
+                radius: STOP_CLUSTER_RADIUS_METERS, color: '#facc15', weight: 3, fillOpacity: 0.15
+            }).addTo(map);
+            highlight.bindPopup(`${cluster.tripCount} of ${group.trips.length} trips &middot; ${formatDuration(cluster.totalDur)} total`).openPopup();
+            map.setView([cluster.lat, cluster.lon], 17);
+        }, 100);
     }
 
     function wipeAll() {

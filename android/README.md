@@ -180,6 +180,37 @@ show a clean route. If an old trip's map still looks wrong in a way that
 doesn't match "zigzag between two points repeatedly," that's worth
 treating as a real, separate issue.
 
+## Comparing stops across similar trips (STOPS tab)
+
+Every trip already records where it stopped (`stops`: lat/lon/duration)
+and its full route (`path`). The STOPS tab uses that to answer "where do
+I usually get stuck" - but only across trips that are actually
+comparable, not by lumping every trip you've ever taken together.
+
+"Similar trips" here means trips sharing roughly the same start point
+**and** roughly the same end point - a repeated commute, not a one-off
+errand that happened to pass near somewhere familiar. A trip only counts
+once at least one other trip matches both endpoints (within ~400m); a
+route with just one trip so far has nothing to compare it against yet
+and won't show up.
+
+Within each such route group, every recorded stop from every trip in
+the group gets clustered by location (~75m) into hotspots, ranked by
+total time lost there across the group - not by a single trip's worst
+stop, so one unusually long red light doesn't outrank a spot every trip
+on that route gets stuck at for a couple minutes each. Each hotspot
+shows how many of the group's trips it appeared in (e.g. "6 of 7
+trips"), and tapping it jumps to the MAP tab with that spot highlighted.
+
+This runs entirely in the WebView against data `getTripsJson()` already
+exposes - no new native code, no change to what gets recorded per trip.
+Matching thresholds (`ROUTE_ENDPOINT_MATCH_METERS`,
+`STOP_CLUSTER_RADIUS_METERS`, `MIN_TRIPS_PER_ROUTE_GROUP` in
+`assets/index.html`) are reasoned defaults, not yet tuned against real
+recorded trips - if two runs of what's obviously the same commute aren't
+grouping together, or a red light 100m up the road is getting counted as
+a separate spot, that's the first place to adjust.
+
 ### Gaps this used to have, now closed
 
 A prior version of this log had real blind spots for troubleshooting -
