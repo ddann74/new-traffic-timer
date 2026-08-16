@@ -74,6 +74,13 @@ public class TrackingService extends Service implements LocationListener {
     // audience most of the time, so this ticks once a second instead - still feels
     // live when the app is open, and doesn't wake the CPU 10x as often for no reason.
     private static final long TICK_INTERVAL_MS = 1000;
+    // If the idle clock (see startClock/stopClock) runs continuously this long
+    // without speed climbing back over RESUME_SPEED_THRESHOLD_KMH, treat the trip
+    // as over on its own - e.g. the driver parked and walked away with tracking
+    // still armed, rather than tapping Finish Trip. See finishTrip's
+    // trimTrailingIdle param for why the resulting trip doesn't count this window
+    // itself as part of the drive.
+    private static final long NO_MOVEMENT_AUTO_FINISH_MS = 10 * 60 * 1000L;
     private static final long WAKE_LOCK_SAFETY_TIMEOUT_MS = 6 * 60 * 60 * 1000L;
     // Low-power idle-watching cadence - deliberately much coarser than tracking's
     // 1s/0m updates, since this can sit running for hours between drives.
@@ -199,18 +206,48 @@ public class TrackingService extends Service implements LocationListener {
     }
 
     private void finishTrip() {
+        finishTrip(false);
+    }
+
+    /** @param trimTrailingIdle true when this finish is the NO_MOVEMENT_AUTO_FINISH_MS
+      * watchdog firing (see startTicking), false for a manual Finish Trip tap/action.
+      * A manual finish takes "now" at face value - the user chose this moment, so
+      * whatever idle stretch was in progress gets folded into totalIdleSeconds like
+      * always. The watchdog is different: by the time it fires, up to
+      * NO_MOVEMENT_AUTO_FINISH_MS has passed since the vehicle actually stopped
+      * moving - that whole window only exists to confirm the trip is really over,
+      * it was never really part of the drive. Counting it as tracked idle time (or
+      * as trip duration at all) would make a completed trip look like it ended
+      * exactly when the auto-finish happened to fire rather than when the vehicle
+      * actually stopped - so this backdates the trip's end to clockStartMillis
+      * (when the idle clock started) and leaves totalIdleSeconds untouched instead
+      * of adding the confirmation window to it. */
+    private void finishTrip(boolean trimTrailingIdle) {
         if (mode != Mode.TRACKING) {
             DiagnosticLog.log(this, "TRIP", "finishTrip ignored - no trip was armed");
             return;
         }
+
+        long endMillis = System.currentTimeMillis();
         if (isClocking) {
-            // Fold in whatever idle stretch was still in progress when the trip
-            // ended - otherwise the final idle period never gets counted, since
-            // normally that only happens when speed resumes past the threshold.
-            totalIdleSeconds += (System.currentTimeMillis() - clockStartMillis) / 1000.0;
+            double idleDur = (System.currentTimeMillis() - clockStartMillis) / 1000.0;
+            if (trimTrailingIdle) {
+                endMillis = clockStartMillis;
+                int pointsBeforeTrim = pathPoints != null ? pathPoints.length() : 0;
+                pathPoints = trimPathPointsAfter(pathPoints, endMillis);
+                updateFlowRating(endMillis, false);
+                DiagnosticLog.log(this, "TRIP", String.format(Locale.US,
+                        "trimming trailing idle: dropping %.1fs (the no-movement confirmation window) and %d stationary path points from the logged trip, end backdated to last movement",
+                        idleDur, pointsBeforeTrim - pathPoints.length()));
+            } else {
+                // Fold in whatever idle stretch was still in progress when the trip
+                // ended - otherwise the final idle period never gets counted, since
+                // normally that only happens when speed resumes past the threshold.
+                totalIdleSeconds += idleDur;
+            }
         }
         stopClock();
-        saveTrip();
+        saveTrip(endMillis);
         DiagnosticLog.log(this, "TRIP", String.format(Locale.US,
                 "finishTrip id=%d distanceKm=%.2f totalIdleSeconds=%.1f pathPoints=%d flowRating=%.1f",
                 tripId, TrackingState.distanceKm, totalIdleSeconds,
@@ -421,9 +458,17 @@ public class TrackingService extends Service implements LocationListener {
             public void run() {
                 if (mode != Mode.TRACKING) return;
                 if (isClocking) {
-                    TrackingState.idleSeconds = (System.currentTimeMillis() - clockStartMillis) / 1000.0;
+                    long idleMillis = System.currentTimeMillis() - clockStartMillis;
+                    TrackingState.idleSeconds = idleMillis / 1000.0;
                     updateFlowRating();
                     broadcastState();
+                    if (idleMillis >= NO_MOVEMENT_AUTO_FINISH_MS) {
+                        DiagnosticLog.log(TrackingService.this, "TRIP", String.format(Locale.US,
+                                "no GPS movement for %.0f min - auto-finishing trip",
+                                NO_MOVEMENT_AUTO_FINISH_MS / 60000.0));
+                        finishTrip(true);
+                        return; // finishTrip already stopped ticking - don't reschedule
+                    }
                 }
                 tickHandler.postDelayed(this, TICK_INTERVAL_MS);
             }
@@ -438,8 +483,16 @@ public class TrackingService extends Service implements LocationListener {
     }
 
     private void updateFlowRating() {
-        double elapsed = (System.currentTimeMillis() - tripStartMillis) / 1000.0;
-        double idle = totalIdleSeconds + (isClocking ? (System.currentTimeMillis() - clockStartMillis) / 1000.0 : 0);
+        updateFlowRating(System.currentTimeMillis(), true);
+    }
+
+    /** @param includeOngoingIdle false is used only when trimming the trailing idle
+      * stretch out of an auto-finished trip (see finishTrip) - [asOfMillis] is
+      * already backdated to when that idle stretch started, so there's nothing of
+      * it left to add. */
+    private void updateFlowRating(long asOfMillis, boolean includeOngoingIdle) {
+        double elapsed = (asOfMillis - tripStartMillis) / 1000.0;
+        double idle = totalIdleSeconds + (includeOngoingIdle && isClocking ? (asOfMillis - clockStartMillis) / 1000.0 : 0);
         double score = elapsed > 2 ? Math.max(0, ((elapsed - idle) / elapsed) * 10) : 10.0;
         TrackingState.flowRating = Math.round(score * 10.0) / 10.0;
     }
@@ -456,6 +509,30 @@ public class TrackingService extends Service implements LocationListener {
         }
     }
 
+    /** Drops any path point recorded after [cutoffMillis] - used only when
+      * trimming an auto-finished trip's trailing idle stretch (see finishTrip),
+      * so the saved path doesn't keep plotting the vehicle sitting still for up
+      * to NO_MOVEMENT_AUTO_FINISH_MS past the point the trip's own "end"
+      * timestamp claims it stopped. Every accepted fix gets a path point
+      * regardless of speed (see addPathPoint), so without this the trailing
+      * idle window's near-stationary fixes would still be baked into the saved
+      * route even though the headline stats no longer count that time. */
+    private org.json.JSONArray trimPathPointsAfter(org.json.JSONArray points, long cutoffMillis) {
+        org.json.JSONArray trimmed = new org.json.JSONArray();
+        if (points == null) return trimmed;
+        for (int i = 0; i < points.length(); i++) {
+            try {
+                JSONObject point = points.getJSONObject(i);
+                if (point.getLong("ts") <= cutoffMillis) {
+                    trimmed.put(point);
+                }
+            } catch (JSONException e) {
+                // malformed point - drop it rather than propagate a bad entry
+            }
+        }
+        return trimmed;
+    }
+
     private void addStopPoint(Location location, double durationSeconds) {
         try {
             JSONObject stop = new JSONObject();
@@ -468,7 +545,7 @@ public class TrackingService extends Service implements LocationListener {
         }
     }
 
-    private void saveTrip() {
+    private void saveTrip(long endMillis) {
         if (pathPoints == null || pathPoints.length() < 2) {
             DiagnosticLog.log(this, "TRIP", "saveTrip skipped - fewer than 2 path points recorded");
             return;
@@ -477,7 +554,7 @@ public class TrackingService extends Service implements LocationListener {
             JSONObject trip = new JSONObject();
             trip.put("id", tripId);
             trip.put("start", tripStartMillis);
-            trip.put("end", System.currentTimeMillis());
+            trip.put("end", endMillis);
             trip.put("dist", TrackingState.distanceKm);
             trip.put("totalIdle", totalIdleSeconds);
             trip.put("rating", String.format(Locale.US, "%.1f", TrackingState.flowRating));
